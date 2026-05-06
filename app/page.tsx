@@ -44,15 +44,15 @@ const quickActions = [
 ];
 
 const modules = [
-  { href: '/patients',   label: 'מטופלות',            desc: 'ניהול רשימת המטופלות' },
-  { href: '/staff',      label: 'אנשי צוות',           desc: 'רכזות, מדריכות ומטפלות' },
-  { href: '/sessions',   label: 'יומן פגישות',         desc: 'תיאום ומעקב פגישות' },
-  { href: '/summaries',  label: 'סיכומי פגישות',       desc: 'תיעוד מפגשים' },
-  { href: '/recordings', label: 'הקלטות ותמלולים',     desc: 'ניהול הקלטות קוליות' },
-  { href: '/quarterly',  label: 'סיכום רבעון',         desc: 'סקירות תקופתיות' },
-  { href: '/payments',   label: 'תשלומי שיראל',        desc: 'מעקב תשלומים חודשיים' },
-  { href: '/expenses',   label: 'הוצאות פרטיות',       desc: 'הוצאות לפי מטופלת' },
-  { href: '/petty-cash', label: 'מעשר געלט',           desc: 'הוצאות קטנות שוטפות' },
+  { href: '/patients',   label: 'מטופלות',         desc: 'ניהול רשימת המטופלות' },
+  { href: '/staff',      label: 'אנשי צוות',        desc: 'רכזות, מדריכות ומטפלות' },
+  { href: '/sessions',   label: 'יומן פגישות',      desc: 'תיאום ומעקב פגישות' },
+  { href: '/summaries',  label: 'סיכומי פגישות',    desc: 'תיעוד מפגשים' },
+  { href: '/recordings', label: 'הקלטות ותמלולים',  desc: 'ניהול הקלטות קוליות' },
+  { href: '/quarterly',  label: 'סיכום רבעון',      desc: 'סקירות תקופתיות' },
+  { href: '/payments',   label: 'תשלומי שיראל',     desc: 'מעקב תשלומים חודשיים' },
+  { href: '/expenses',   label: 'הוצאות פרטיות',    desc: 'הוצאות לפי מטופלת' },
+  { href: '/petty-cash', label: 'מעשר געלט',        desc: 'הוצאות קטנות שוטפות' },
 ];
 
 export default function DashboardPage() {
@@ -96,38 +96,30 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="max-w-screen-xl mx-auto px-6 py-8">
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
 
-      {/* ── Hero header ── */}
-      <div
-        className="rounded-2xl p-7 mb-8 overflow-hidden relative"
-        style={{
-          background: 'linear-gradient(135deg, #1f623e 0%, #2d7a52 60%, #3d9068 100%)',
-          boxShadow: '0 4px 20px rgba(31,98,62,0.25)',
-        }}
-      >
-        <div className="relative z-10">
-          <p className="text-sm font-medium mb-1" style={{ color: '#a9d5ba' }}>
-            {getGreeting()} · {formatDate()}
-          </p>
-          <h1 className="text-2xl font-bold text-white mb-1">מחר אחר – שדה חמד</h1>
-          <p className="text-sm" style={{ color: '#c4e8d4' }}>
-            מערכת ניהול טיפולית · מבט כולל על מצב המערכת
-          </p>
-        </div>
-        {/* Decorative circle */}
-        <div
-          className="absolute -left-8 -top-8 w-40 h-40 rounded-full opacity-10"
-          style={{ backgroundColor: '#ffffff' }}
-        />
-        <div
-          className="absolute left-24 -bottom-10 w-28 h-28 rounded-full opacity-10"
-          style={{ backgroundColor: '#c49438' }}
-        />
+      {/* ── Page header ── */}
+      <div style={{ marginBottom: 32 }}>
+        <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 4px' }}>
+          {getGreeting()} · {formatDate()}
+        </p>
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0F172A', margin: 0 }}>
+          מחר אחר – שדה חמד
+        </h1>
+        <p style={{ fontSize: 14, color: '#64748B', margin: '4px 0 0' }}>
+          מערכת ניהול טיפולית · מבט כולל על מצב המערכת
+        </p>
       </div>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+          gap: 16,
+          marginBottom: 28,
+        }}
+      >
         {statCards.map((stat) => (
           <StatCard key={stat.title} {...stat} />
         ))}
@@ -135,37 +127,57 @@ export default function DashboardPage() {
 
       {/* ── Quick actions ── */}
       <div
-        className="bg-white rounded-xl p-6 mb-6"
-        style={{ border: '1px solid #e5ddd4', boxShadow: '0 1px 4px rgba(26,38,32,0.06)' }}
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 12,
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          padding: '20px 22px',
+          marginBottom: 20,
+        }}
       >
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-0.5 h-5 rounded-full" style={{ backgroundColor: '#c49438' }} />
-          <h2 className="text-sm font-bold" style={{ color: '#1a2620' }}>פעולות מהירות</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <div style={{ width: 3, height: 16, borderRadius: 2, backgroundColor: '#0F766E' }} />
+          <h2 style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', margin: 0 }}>פעולות מהירות</h2>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+            gap: 10,
+          }}
+        >
           {quickActions.map((action) => (
             <Link
               key={action.href}
               href={action.href}
-              className="block rounded-xl p-4 text-center transition-all duration-150 group"
-              style={{ backgroundColor: '#faf7f2', border: '1px solid #e5ddd4' }}
+              style={{
+                display: 'block',
+                borderRadius: 10,
+                padding: '14px 12px',
+                textAlign: 'center',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                textDecoration: 'none',
+                transition: 'all 0.12s',
+              }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#eef6f1';
-                e.currentTarget.style.borderColor = '#a9d5ba';
+                e.currentTarget.style.backgroundColor = '#F0FDFA';
+                e.currentTarget.style.borderColor = '#99F6E4';
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(31,98,62,0.12)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(15,118,110,0.10)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#faf7f2';
-                e.currentTarget.style.borderColor = '#e5ddd4';
+                e.currentTarget.style.backgroundColor = '#F8FAFC';
+                e.currentTarget.style.borderColor = '#E2E8F0';
                 e.currentTarget.style.transform = '';
                 e.currentTarget.style.boxShadow = '';
               }}
             >
-              <p className="text-sm font-semibold mb-0.5" style={{ color: '#1f623e' }}>
+              <p style={{ fontSize: 13, fontWeight: 600, margin: '0 0 2px', color: '#0F766E' }}>
                 {action.label}
               </p>
-              <p className="text-xs" style={{ color: '#8fa49a' }}>{action.desc}</p>
+              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{action.desc}</p>
             </Link>
           ))}
         </div>
@@ -173,33 +185,50 @@ export default function DashboardPage() {
 
       {/* ── Module grid ── */}
       <div
-        className="bg-white rounded-xl p-6"
-        style={{ border: '1px solid #e5ddd4', boxShadow: '0 1px 4px rgba(26,38,32,0.06)' }}
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 12,
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          padding: '20px 22px',
+        }}
       >
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-0.5 h-5 rounded-full" style={{ backgroundColor: '#c49438' }} />
-          <h2 className="text-sm font-bold" style={{ color: '#1a2620' }}>מודולים</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <div style={{ width: 3, height: 16, borderRadius: 2, backgroundColor: '#0F766E' }} />
+          <h2 style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', margin: 0 }}>מודולים</h2>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: 10,
+          }}
+        >
           {modules.map((mod) => (
             <Link
               key={mod.href}
               href={mod.href}
-              className="block p-4 rounded-xl transition-all duration-150"
-              style={{ border: '1px solid #e5ddd4' }}
+              style={{
+                display: 'block',
+                padding: '14px 16px',
+                borderRadius: 10,
+                border: '1px solid #E2E8F0',
+                textDecoration: 'none',
+                transition: 'all 0.12s',
+              }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#eef6f1';
-                e.currentTarget.style.borderColor = '#a9d5ba';
+                e.currentTarget.style.backgroundColor = '#F0FDFA';
+                e.currentTarget.style.borderColor = '#99F6E4';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = '';
-                e.currentTarget.style.borderColor = '#e5ddd4';
+                e.currentTarget.style.borderColor = '#E2E8F0';
               }}
             >
-              <p className="font-semibold text-sm mb-0.5" style={{ color: '#1a2620' }}>
+              <p style={{ fontWeight: 600, fontSize: 13, margin: '0 0 2px', color: '#0F172A' }}>
                 {mod.label}
               </p>
-              <p className="text-xs" style={{ color: '#8fa49a' }}>{mod.desc}</p>
+              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{mod.desc}</p>
             </Link>
           ))}
         </div>

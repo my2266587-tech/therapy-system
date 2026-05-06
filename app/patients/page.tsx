@@ -11,16 +11,16 @@ import { patientStatusLabels, housingTypeLabels } from '@/lib/labels';
 import type { Patient } from '@/types';
 
 const thStyle: React.CSSProperties = {
-  padding: '0.75rem 1rem',
+  padding: '10px 16px',
   textAlign: 'right',
   fontWeight: 600,
-  fontSize: '0.6875rem',
+  fontSize: 11,
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
-  color: '#6b7b6e',
+  color: '#64748B',
   whiteSpace: 'nowrap',
-  backgroundColor: '#faf7f2',
-  borderBottom: '1px solid #e5ddd4',
+  backgroundColor: '#F8FAFC',
+  borderBottom: '1px solid #E2E8F0',
 };
 
 export default function PatientsPage() {
@@ -73,21 +73,21 @@ export default function PatientsPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{
-            border: '1px solid #e5ddd4',
-            borderRadius: '0.5rem',
-            padding: '0.5rem 0.875rem',
-            fontSize: '0.875rem',
-            backgroundColor: '#ffffff',
-            color: '#1a2620',
-            width: '280px',
+            border: '1px solid #E2E8F0',
+            borderRadius: 8,
+            padding: '8px 14px',
+            fontSize: 14,
+            backgroundColor: '#FFFFFF',
+            color: '#0F172A',
+            width: 280,
             outline: 'none',
           }}
           onFocus={e => {
-            e.target.style.borderColor = '#1f623e';
-            e.target.style.boxShadow = '0 0 0 3px rgba(31,98,62,0.12)';
+            e.target.style.borderColor = '#0F766E';
+            e.target.style.boxShadow = '0 0 0 3px rgba(15,118,110,0.10)';
           }}
           onBlur={e => {
-            e.target.style.borderColor = '#e5ddd4';
+            e.target.style.borderColor = '#E2E8F0';
             e.target.style.boxShadow = '';
           }}
         />
@@ -100,7 +100,7 @@ export default function PatientsPage() {
       ) : (
         <div
           className="bg-white rounded-xl overflow-x-auto"
-          style={{ border: '1px solid #e5ddd4', boxShadow: '0 1px 4px rgba(26,38,32,0.06)' }}
+          style={{ border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
         >
           <table className="w-full text-sm">
             <thead>
@@ -114,64 +114,45 @@ export default function PatientsPage() {
               {filtered.map((r, i) => (
                 <tr
                   key={r.id}
-                  style={{
-                    borderBottom: i < filtered.length - 1 ? '1px solid #f0ece5' : 'none',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#faf7f2')}
+                  style={{ borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
                 >
                   <td className="px-4 py-3.5">
                     <Link
                       href={`/patients/${r.id}`}
                       className="font-semibold hover:underline"
-                      style={{ color: '#1f623e' }}
+                      style={{ color: '#0F766E' }}
                     >
                       {r.full_name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3.5" style={{ color: '#4a5e52' }}>
+                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>
                     {r.phone ?? '—'}
                   </td>
                   <td className="px-4 py-3.5">
                     <Badge value={r.status} labels={patientStatusLabels} />
                   </td>
-                  <td className="px-4 py-3.5" style={{ color: '#4a5e52' }}>
+                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>
                     {(r.coordinator as any)?.full_name ?? '—'}
                   </td>
-                  <td className="px-4 py-3.5" style={{ color: '#4a5e52' }}>
+                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>
                     {r.housing_type ? (housingTypeLabels[r.housing_type] ?? r.housing_type) : '—'}
                   </td>
                   <td className="px-4 py-3.5">
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => openEdit(r)}
-                        className="text-xs font-medium transition-colors"
-                        style={{ color: '#1f623e' }}
-                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                        onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}
-                      >
-                        ערוך
-                      </button>
-                      <button
-                        onClick={() => handleDelete(r.id)}
-                        className="text-xs font-medium transition-colors"
-                        style={{ color: '#b91c1c' }}
-                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                        onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}
-                      >
-                        מחק
-                      </button>
-                    </div>
+                    <ActionButtons
+                      onEdit={() => openEdit(r)}
+                      onDelete={() => handleDelete(r.id)}
+                    />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          {/* Footer count */}
           <div
             className="px-4 py-3 text-xs"
-            style={{ color: '#8fa49a', borderTop: '1px solid #f0ece5', backgroundColor: '#faf7f2' }}
+            style={{ color: '#94A3B8', borderTop: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}
           >
             {filtered.length} מטופלות{search && ` · תוצאות עבור "${search}"`}
           </div>
@@ -198,14 +179,14 @@ function LoadingState() {
   return (
     <div
       className="bg-white rounded-xl flex items-center justify-center py-20"
-      style={{ border: '1px solid #e5ddd4' }}
+      style={{ border: '1px solid #E2E8F0' }}
     >
       <div className="text-center">
         <div
           className="w-8 h-8 rounded-full border-2 border-t-transparent mx-auto mb-3 animate-spin"
-          style={{ borderColor: '#1f623e', borderTopColor: 'transparent' }}
+          style={{ borderColor: '#0F766E', borderTopColor: 'transparent' }}
         />
-        <p className="text-sm" style={{ color: '#8fa49a' }}>טוען נתונים...</p>
+        <p className="text-sm" style={{ color: '#94A3B8' }}>טוען נתונים...</p>
       </div>
     </div>
   );
@@ -215,29 +196,54 @@ function EmptyState({ onAdd, hasSearch }: { onAdd: () => void; hasSearch: boolea
   return (
     <div
       className="bg-white rounded-xl p-16 text-center"
-      style={{ border: '1px solid #e5ddd4' }}
+      style={{ border: '1px solid #E2E8F0' }}
     >
       <div
         className="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4"
-        style={{ backgroundColor: '#f2ebe0', color: '#c49438' }}
+        style={{ backgroundColor: '#F1F5F9', color: '#94A3B8' }}
       >
-        {hasSearch ? '🔍' : '👤'}
+        {hasSearch ? '○' : '○'}
       </div>
       {hasSearch ? (
-        <p className="text-sm" style={{ color: '#6b7b6e' }}>לא נמצאו תוצאות לחיפוש</p>
+        <p className="text-sm" style={{ color: '#64748B' }}>לא נמצאו תוצאות לחיפוש</p>
       ) : (
         <>
-          <p className="font-semibold mb-1" style={{ color: '#1a2620' }}>אין מטופלות עדיין</p>
-          <p className="text-sm mb-4" style={{ color: '#8fa49a' }}>התחילי בהוספת המטופלת הראשונה</p>
+          <p className="font-semibold mb-1" style={{ color: '#0F172A' }}>אין מטופלות עדיין</p>
+          <p className="text-sm mb-4" style={{ color: '#94A3B8' }}>התחילי בהוספת המטופלת הראשונה</p>
           <button
             onClick={onAdd}
             className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-            style={{ backgroundColor: '#1f623e' }}
+            style={{ backgroundColor: '#0F766E' }}
           >
             + הוסף מטופלת
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+function ActionButtons({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="flex gap-3">
+      <button
+        onClick={onEdit}
+        className="text-xs font-medium"
+        style={{ color: '#0F766E' }}
+        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+        onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}
+      >
+        ערוך
+      </button>
+      <button
+        onClick={onDelete}
+        className="text-xs font-medium"
+        style={{ color: '#DC2626' }}
+        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+        onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}
+      >
+        מחק
+      </button>
     </div>
   );
 }

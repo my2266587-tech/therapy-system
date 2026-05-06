@@ -22,14 +22,13 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     }
-    // On success Supabase redirects the browser — no further action needed
   }
 
   return (
     <div
       style={{
         minHeight: '100vh',
-        backgroundColor: '#f6f2ec',
+        backgroundColor: '#F8FAFC',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -39,50 +38,52 @@ export default function LoginPage() {
     >
       <div
         style={{
-          backgroundColor: '#ffffff',
+          backgroundColor: '#FFFFFF',
           borderRadius: 16,
-          boxShadow: '0 4px 24px rgba(26,38,32,0.10)',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+          border: '1px solid #E2E8F0',
           padding: '48px 40px',
           width: '100%',
           maxWidth: 420,
           textAlign: 'center',
         }}
       >
-        {/* Logo */}
+        {/* Logo mark */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
           <div
             style={{
               width: 52,
               height: 52,
               borderRadius: 14,
-              backgroundColor: '#1f623e',
+              backgroundColor: '#0F766E',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#fff',
               fontSize: 22,
               fontWeight: 700,
+              boxShadow: '0 4px 12px rgba(15,118,110,0.30)',
             }}
           >
             מ
           </div>
         </div>
 
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a2620', marginBottom: 4 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
           מחר אחר – שדה חמד
         </h1>
-        <p style={{ color: '#6b7b6e', fontSize: 14, marginBottom: 36 }}>
+        <p style={{ color: '#64748B', fontSize: 14, marginBottom: 36 }}>
           מערכת ניהול טיפולי
         </p>
 
         {error && (
           <div
             style={{
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fca5a5',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FCA5A5',
               borderRadius: 8,
               padding: '10px 14px',
-              color: '#dc2626',
+              color: '#DC2626',
               fontSize: 13,
               marginBottom: 20,
             }}
@@ -102,20 +103,26 @@ export default function LoginPage() {
             gap: 10,
             padding: '12px 20px',
             borderRadius: 10,
-            border: '1.5px solid #e5ddd4',
-            backgroundColor: loading ? '#f6f2ec' : '#ffffff',
-            color: '#1a2620',
+            border: '1.5px solid #E2E8F0',
+            backgroundColor: loading ? '#F8FAFC' : '#FFFFFF',
+            color: '#0F172A',
             fontSize: 15,
             fontWeight: 600,
             cursor: loading ? 'not-allowed' : 'pointer',
             transition: 'all 0.15s',
-            boxShadow: '0 1px 4px rgba(26,38,32,0.07)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
           }}
           onMouseEnter={(e) => {
-            if (!loading) e.currentTarget.style.backgroundColor = '#f6f2ec';
+            if (!loading) {
+              e.currentTarget.style.backgroundColor = '#F8FAFC';
+              e.currentTarget.style.borderColor = '#CBD5E1';
+            }
           }}
           onMouseLeave={(e) => {
-            if (!loading) e.currentTarget.style.backgroundColor = '#ffffff';
+            if (!loading) {
+              e.currentTarget.style.backgroundColor = '#FFFFFF';
+              e.currentTarget.style.borderColor = '#E2E8F0';
+            }
           }}
         >
           {/* Google G icon */}
@@ -140,7 +147,7 @@ export default function LoginPage() {
           {loading ? 'מתחבר...' : 'כניסה עם Google'}
         </button>
 
-        <p style={{ color: '#9aaa9d', fontSize: 12, marginTop: 24 }}>
+        <p style={{ color: '#94A3B8', fontSize: 12, marginTop: 24 }}>
           גישה מורשית בלבד
         </p>
       </div>

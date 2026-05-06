@@ -14,38 +14,50 @@ export default function PageHeader({
   showButton = true,
 }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between mb-7">
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
       <div>
-        <h1
-          className="text-2xl font-bold leading-tight"
-          style={{ color: '#1a2620' }}
-        >
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', margin: 0, lineHeight: 1.2 }}>
           {title}
         </h1>
         {description && (
-          <p className="text-sm mt-1" style={{ color: '#6b7b6e' }}>
+          <p style={{ fontSize: 14, color: '#64748B', marginTop: 4, margin: '4px 0 0' }}>
             {description}
           </p>
         )}
       </div>
+
       {showButton && (
         <button
           onClick={onAdd}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold text-white whitespace-nowrap transition-all duration-150"
           style={{
-            backgroundColor: '#1f623e',
-            boxShadow: '0 1px 4px rgba(31,98,62,0.3)',
+            display:         'flex',
+            alignItems:      'center',
+            gap:             6,
+            padding:         '9px 18px',
+            borderRadius:    9,
+            border:          'none',
+            backgroundColor: '#0F766E',
+            color:           '#FFFFFF',
+            fontSize:        14,
+            fontWeight:      600,
+            cursor:          'pointer',
+            whiteSpace:      'nowrap',
+            flexShrink:      0,
+            transition:      'all 0.12s',
+            boxShadow:       '0 1px 3px rgba(15,118,110,0.3)',
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#184f31';
-            e.currentTarget.style.boxShadow = '0 2px 8px rgba(31,98,62,0.35)';
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = '#0D6E67';
+            e.currentTarget.style.boxShadow = '0 3px 10px rgba(15,118,110,0.35)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
           }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#1f623e';
-            e.currentTarget.style.boxShadow = '0 1px 4px rgba(31,98,62,0.3)';
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = '#0F766E';
+            e.currentTarget.style.boxShadow = '0 1px 3px rgba(15,118,110,0.3)';
+            e.currentTarget.style.transform = '';
           }}
         >
-          <span className="text-base leading-none">+</span>
+          <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
           {buttonLabel}
         </button>
       )}

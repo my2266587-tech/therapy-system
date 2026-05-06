@@ -1,38 +1,39 @@
-interface Column {
-  key: string;
-  label: string;
-  width?: string;
-}
+interface Column { key: string; label: string; width?: string; }
 
 interface EmptyTableProps {
   columns: Column[];
   emptyMessage?: string;
 }
 
-export default function EmptyTable({
-  columns,
-  emptyMessage = 'אין נתונים להצגה עדיין',
-}: EmptyTableProps) {
+const TH: React.CSSProperties = {
+  padding:       '10px 16px',
+  textAlign:     'right',
+  fontSize:      11,
+  fontWeight:    600,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color:         '#64748B',
+  backgroundColor: '#F8FAFC',
+  borderBottom:  '1px solid #E2E8F0',
+  whiteSpace:    'nowrap',
+};
+
+export default function EmptyTable({ columns, emptyMessage = 'אין נתונים להצגה עדיין' }: EmptyTableProps) {
   return (
     <div
-      className="bg-white rounded-xl overflow-hidden"
-      style={{ border: '1px solid #e5ddd4', boxShadow: '0 1px 4px 0 rgba(26,38,32,0.06)' }}
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius:    12,
+        border:          '1px solid #E2E8F0',
+        overflow:        'hidden',
+        boxShadow:       '0 1px 3px rgba(0,0,0,0.05)',
+      }}
     >
-      <table className="w-full text-sm">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ backgroundColor: '#faf7f2', borderBottom: '1px solid #e5ddd4' }}>
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                className="px-4 py-3 text-right font-semibold whitespace-nowrap"
-                style={{
-                  color: '#6b7b6e',
-                  fontSize: '0.6875rem',
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  ...(col.width ? { width: col.width } : {}),
-                }}
-              >
+          <tr>
+            {columns.map(col => (
+              <th key={col.key} style={{ ...TH, ...(col.width ? { width: col.width } : {}) }}>
                 {col.label}
               </th>
             ))}
@@ -40,20 +41,24 @@ export default function EmptyTable({
         </thead>
         <tbody>
           <tr>
-            <td
-              colSpan={columns.length}
-              className="px-4 py-16 text-center"
-              style={{ color: '#8fa49a' }}
-            >
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-lg"
-                  style={{ backgroundColor: '#f2ebe0', color: '#c49438' }}
-                >
-                  ◌
-                </div>
-                <span className="text-sm">{emptyMessage}</span>
+            <td colSpan={columns.length} style={{ padding: '64px 24px', textAlign: 'center' }}>
+              <div
+                style={{
+                  width:           40,
+                  height:          40,
+                  borderRadius:    '50%',
+                  backgroundColor: '#F1F5F9',
+                  display:         'flex',
+                  alignItems:      'center',
+                  justifyContent:  'center',
+                  margin:          '0 auto 10px',
+                  fontSize:        18,
+                  color:           '#94A3B8',
+                }}
+              >
+                ○
               </div>
+              <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>{emptyMessage}</p>
             </td>
           </tr>
         </tbody>

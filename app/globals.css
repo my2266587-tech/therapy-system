@@ -1,68 +1,105 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Sage green (replaces teal) ── */
-  --color-teal-50:  #eef6f1;
-  --color-teal-100: #d5eadd;
-  --color-teal-200: #a9d5ba;
-  --color-teal-300: #79bb96;
-  --color-teal-400: #4ea07a;
-  --color-teal-500: #348762;
-  --color-teal-600: #28764f;
-  --color-teal-700: #1f623e;
-  --color-teal-800: #184f31;
-  --color-teal-900: #123e25;
+  --color-slate-50:  #F8FAFC;
+  --color-slate-100: #F1F5F9;
+  --color-slate-200: #E2E8F0;
+  --color-slate-300: #CBD5E1;
+  --color-slate-400: #94A3B8;
+  --color-slate-500: #64748B;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1E293B;
+  --color-slate-900: #0F172A;
 
-  /* ── Warm cream backgrounds ── */
-  --color-cream-50:  #faf7f2;
-  --color-cream-100: #f2ebe0;
-  --color-cream-200: #e8ddd0;
-  --color-cream-300: #d9cbba;
+  --color-teal-50:  #F0FDFA;
+  --color-teal-100: #CCFBF1;
+  --color-teal-200: #99F6E4;
+  --color-teal-300: #5EEAD4;
+  --color-teal-400: #2DD4BF;
+  --color-teal-500: #14B8A6;
+  --color-teal-600: #0D9488;
+  --color-teal-700: #0F766E;
+  --color-teal-800: #115E59;
+  --color-teal-900: #134E4A;
+}
 
-  /* ── Gold accent ── */
-  --color-gold-300: #e8ca7a;
-  --color-gold-400: #d4aa50;
-  --color-gold-500: #c49438;
-  --color-gold-600: #a87c2a;
-
-  /* ── Legacy compat ── */
-  --color-primary:       #1f623e;
-  --color-primary-hover: #184f31;
-  --color-surface:       #faf7f2;
+:root {
+  --sidebar-width:           240px;
+  --sidebar-collapsed-width: 64px;
+  --accent:                  #0F766E;
+  --accent-hover:            #0D6E67;
+  --accent-light:            #F0FDFA;
+  --accent-border:           #CCFBF1;
+  --page-bg:                 #F8FAFC;
+  --card-bg:                 #FFFFFF;
+  --border:                  #E2E8F0;
+  --border-light:            #F1F5F9;
+  --text-primary:            #0F172A;
+  --text-secondary:          #475569;
+  --text-muted:              #94A3B8;
+  --shadow-card:             0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-hover:            0 4px 16px rgba(0,0,0,0.08);
+  --shadow-modal:            0 24px 64px rgba(0,0,0,0.18);
 }
 
 html {
   direction: rtl;
+  scroll-behavior: smooth;
 }
 
 body {
-  background-color: #f6f2ec;
-  color: #1a2620;
-  font-family: 'Heebo', Arial, Helvetica, sans-serif;
+  background-color: var(--page-bg);
+  color: var(--text-primary);
+  font-family: 'Heebo', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Premium card shadow ── */
-.card-shadow {
-  box-shadow: 0 1px 4px 0 rgba(26, 38, 32, 0.06), 0 1px 2px -1px rgba(26, 38, 32, 0.04);
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── Table header uppercase label ── */
-.th-label {
-  font-size: 0.6875rem;
+/* ── Enterprise table header ── */
+.th-enterprise {
+  padding: 10px 16px;
+  text-align: right;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #6b7b6e;
+  color: #64748B;
+  background: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
-/* ── Gold accent line (right border since RTL) ── */
-.accent-border-r {
-  border-right: 3px solid #c49438;
+/* ── Smooth sidebar transition ── */
+.sidebar-transition {
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Smooth scroll ── */
-html {
-  scroll-behavior: smooth;
+/* ── Input focus ring ── */
+.input-focus:focus {
+  outline: none;
+  border-color: #0F766E;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
+/* ── Spin animation ── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 0.75s linear infinite;
+}
+
+/* ── Fade in ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeIn 0.15s ease-out;
 }

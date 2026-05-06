@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Navbar from '@/components/layout/Navbar';
+import SidebarLayout from '@/components/layout/SidebarLayout';
 
 export const metadata: Metadata = {
   title: 'מחר אחר – שדה חמד',
@@ -19,10 +19,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <Navbar />
-        <main className="min-h-screen" style={{ backgroundColor: '#f6f2ec' }}>
+        <SidebarLayout>
           {children}
-        </main>
+        </SidebarLayout>
       </body>
     </html>
   );

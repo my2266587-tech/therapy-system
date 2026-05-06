@@ -5,13 +5,22 @@ interface FormGroupProps {
 
 export default function FormGroup({ title, children }: FormGroupProps) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="w-0.5 h-4 rounded-full" style={{ backgroundColor: '#c49438' }} />
-        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6b7b6e', letterSpacing: '0.07em' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3
+          style={{
+            fontSize:      11,
+            fontWeight:    700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color:         '#64748B',
+            margin:        0,
+            whiteSpace:    'nowrap',
+          }}
+        >
           {title}
         </h3>
-        <div className="flex-1 h-px" style={{ backgroundColor: '#f0ece5' }} />
+        <div style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
       </div>
       {children}
     </div>

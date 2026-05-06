@@ -3,43 +3,65 @@ interface StatCardProps {
   value: string | number;
   description?: string;
   accent?: boolean;
-  href?: string;
 }
 
 export default function StatCard({ title, value, description, accent }: StatCardProps) {
   return (
     <div
-      className="bg-white rounded-xl overflow-hidden"
       style={{
-        border: '1px solid #e5ddd4',
-        boxShadow: '0 1px 4px 0 rgba(26,38,32,0.06)',
-        borderRight: accent ? '3px solid #c49438' : '1px solid #e5ddd4',
+        backgroundColor: '#FFFFFF',
+        borderRadius:    12,
+        border:          `1px solid ${accent ? '#99F6E4' : '#E2E8F0'}`,
+        boxShadow:       accent
+          ? '0 1px 4px rgba(15,118,110,0.08)'
+          : '0 1px 3px rgba(0,0,0,0.05)',
+        padding:         '20px 22px',
+        position:        'relative',
+        overflow:        'hidden',
       }}
     >
-      <div className="p-5">
-        <p
-          className="text-xs font-semibold uppercase tracking-wider mb-3"
-          style={{ color: '#6b7b6e', letterSpacing: '0.06em' }}
-        >
-          {title}
-        </p>
-        <p
-          className="text-3xl font-bold leading-none mb-2"
-          style={{ color: accent ? '#1f623e' : '#1a2620' }}
-        >
-          {value}
-        </p>
-        {description && (
-          <p className="text-xs" style={{ color: '#8fa49a' }}>
-            {description}
-          </p>
-        )}
-      </div>
+      {/* Accent top bar */}
       {accent && (
         <div
-          className="h-0.5 w-full"
-          style={{ background: 'linear-gradient(90deg, #c49438, transparent)' }}
+          style={{
+            position:        'absolute',
+            top:             0,
+            right:           0,
+            left:            0,
+            height:          3,
+            backgroundColor: '#0F766E',
+            borderRadius:    '12px 12px 0 0',
+          }}
         />
+      )}
+
+      <p
+        style={{
+          fontSize:      11,
+          fontWeight:    600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.07em',
+          color:         '#64748B',
+          margin:        '0 0 10px',
+        }}
+      >
+        {title}
+      </p>
+      <p
+        style={{
+          fontSize:   30,
+          fontWeight: 700,
+          color:      accent ? '#0F766E' : '#0F172A',
+          lineHeight: 1,
+          margin:     '0 0 6px',
+        }}
+      >
+        {value}
+      </p>
+      {description && (
+        <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>
+          {description}
+        </p>
       )}
     </div>
   );

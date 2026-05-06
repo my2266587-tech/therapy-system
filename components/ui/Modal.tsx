@@ -8,49 +8,80 @@ interface ModalProps {
   size?: 'md' | 'lg' | 'xl';
 }
 
+const maxWidths = { md: 480, lg: 640, xl: 860 };
+
 export default function Modal({ open, onClose, title, children, size = 'lg' }: ModalProps) {
   if (!open) return null;
 
-  const sizeClass = { md: 'max-w-md', lg: 'max-w-2xl', xl: 'max-w-4xl' }[size];
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(15, 23, 18, 0.45)', backdropFilter: 'blur(2px)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position:        'fixed',
+        inset:           0,
+        zIndex:          50,
+        display:         'flex',
+        alignItems:      'center',
+        justifyContent:  'center',
+        padding:         16,
+        backgroundColor: 'rgba(15,23,42,0.5)',
+        backdropFilter:  'blur(3px)',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className={`bg-white rounded-2xl w-full ${sizeClass} max-h-[92vh] overflow-y-auto`}
         style={{
-          border: '1px solid #e5ddd4',
-          boxShadow: '0 20px 60px -10px rgba(26,38,32,0.25), 0 4px 16px -4px rgba(26,38,32,0.12)',
+          backgroundColor: '#FFFFFF',
+          borderRadius:    16,
+          width:           '100%',
+          maxWidth:        maxWidths[size],
+          maxHeight:       '92vh',
+          overflowY:       'auto',
+          boxShadow:       '0 24px 64px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.08)',
+          border:          '1px solid #E2E8F0',
+          animation:       'fadeIn 0.15s ease-out',
         }}
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-6 py-4 sticky top-0 bg-white rounded-t-2xl z-10"
-          style={{ borderBottom: '1px solid #f0ece5' }}
+          style={{
+            display:         'flex',
+            alignItems:      'center',
+            justifyContent:  'space-between',
+            padding:         '20px 24px 16px',
+            borderBottom:    '1px solid #F1F5F9',
+            position:        'sticky',
+            top:             0,
+            backgroundColor: '#FFFFFF',
+            zIndex:          10,
+            borderRadius:    '16px 16px 0 0',
+          }}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className="w-1 h-5 rounded-full"
-              style={{ backgroundColor: '#c49438' }}
-            />
-            <h2 className="text-base font-bold" style={{ color: '#1a2620' }}>
-              {title}
-            </h2>
-          </div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0 }}>
+            {title}
+          </h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-            style={{ color: '#8fa49a' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#f6f2ec';
-              e.currentTarget.style.color = '#1a2620';
+            style={{
+              width:           32,
+              height:          32,
+              display:         'flex',
+              alignItems:      'center',
+              justifyContent:  'center',
+              border:          'none',
+              borderRadius:    8,
+              backgroundColor: 'transparent',
+              color:           '#94A3B8',
+              cursor:          'pointer',
+              fontSize:        18,
+              transition:      'all 0.12s',
             }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '';
-              e.currentTarget.style.color = '#8fa49a';
+            onMouseEnter={e => {
+              e.currentTarget.style.backgroundColor = '#F1F5F9';
+              e.currentTarget.style.color = '#0F172A';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#94A3B8';
             }}
           >
             ✕
@@ -58,7 +89,9 @@ export default function Modal({ open, onClose, title, children, size = 'lg' }: M
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5">{children}</div>
+        <div style={{ padding: '24px' }}>
+          {children}
+        </div>
       </div>
     </div>
   );
