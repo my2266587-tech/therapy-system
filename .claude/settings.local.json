@@ -43,10 +43,14 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p.get\\('name'\\), '->', p.get\\('alias', [{}]\\)[0].get\\('domain',''\\) if p.get\\('alias'\\) else ''\\) for p in d.get\\('projects',[]\\)]\")",
       "Bash(git commit *)",
       "Bash(cd \"/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system\" && ls components/ui/)",
-      "Read(//c/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system/components/**)"
+      "Read(//c/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system/components/**)",
+      "Bash(cd \"/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system\" && cat package.json | head -30 && echo \"---\" && ls node_modules/next/dist/docs/ 2>/dev/null | head -20)",
+      "Read(//c/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system/**)",
+      "Bash(cd \"/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system\" && rm components/layout/Navbar.tsx && echo deleted)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\user1\\AppData\\Roaming\\com.vercel.cli\\Data"
+      "C:\\Users\\user1\\AppData\\Roaming\\com.vercel.cli\\Data",
+      "c:\\c\\Users\\user1\\Desktop\\אוטומציה\\מחר אחר - יהודית\\therapy-system\\components\\layout"
     ]
   }
 }

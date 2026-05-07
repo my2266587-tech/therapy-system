@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Logo from '@/components/ui/Logo';
 
 /* ── Icon paths (24×24 viewBox, stroke) ── */
 const iconPaths: Record<string, string> = {
@@ -156,22 +157,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
             flexShrink:   0,
           }}
         >
-          <div
-            style={{
-              width:           32,
-              height:          32,
-              borderRadius:    8,
-              backgroundColor: SB.logoMark,
-              display:         'flex',
-              alignItems:      'center',
-              justifyContent:  'center',
-              flexShrink:      0,
-              fontSize:        16,
-              fontWeight:      700,
-              color:           '#FFFFFF',
-            }}
-          >
-            מ
+          <div style={{ flexShrink: 0, lineHeight: 0 }}>
+            <Logo size={32} />
           </div>
           {!collapsed && (
             <div>
@@ -302,7 +289,9 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: '#0F766E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700 }}>מ</div>
+            <div style={{ lineHeight: 0 }}>
+              <Logo size={28} />
+            </div>
             <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>מחר אחר</span>
           </div>
           <button

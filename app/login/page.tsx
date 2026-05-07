@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import Logo from '@/components/ui/Logo';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -49,24 +50,11 @@ export default function LoginPage() {
         }}
       >
         {/* Logo mark */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 14,
-              backgroundColor: '#0F766E',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              fontSize: 22,
-              fontWeight: 700,
-              boxShadow: '0 4px 12px rgba(15,118,110,0.30)',
-            }}
-          >
-            מ
-          </div>
+        <div style={{
+          display: 'flex', justifyContent: 'center', marginBottom: 24,
+          filter: 'drop-shadow(0 4px 12px rgba(13,148,136,0.30))',
+        }}>
+          <Logo size={56} />
         </div>
 
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
