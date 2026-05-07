@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import SummaryForm from '@/components/summaries/SummaryForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
-import type { SessionSummary } from '@/types';
+import type { SessionSummary, Recording } from '@/types';
 
 const C = {
   bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
@@ -14,6 +14,10 @@ const C = {
   shadow: '0 1px 4px rgba(0,0,0,0.05)',
 };
 
+interface SummaryWithRel extends SessionSummary {
+  patient: { full_name: string } | null;
+}
+
 /* ── Recording widget ── */
 type RecState = 'idle' | 'recording' | 'done';
 
@@ -21,9 +25,9 @@ function RecordingWidget() {
   const [state,    setState]    = useState<RecState>('idle');
   const [seconds,  setSeconds]  = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const mrRef      = useRef<MediaRecorder | null>(null);
-  const chunksRef  = useRef<Blob[]>([]);
-  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mrRef     = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -34,7 +38,7 @@ function RecordingWidget() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream);
-      mrRef.current   = mr;
+      mrRef.current = mr;
       chunksRef.current = [];
       mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
@@ -192,18 +196,25 @@ function StopIcon() {
 /* ── Main page ── */
 
 export default function SummariesPage() {
-  const [records, setRecords] = useState<SessionSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [open,    setOpen]    = useState(false);
-  const [editing, setEditing] = useState<SessionSummary | null>(null);
+  const [records, setRecords] = useState<SummaryWithRel[]>([]);
+  const [recordingsById, setRecordingsById] = useState<Map<string, Recording>>(new Map());
+  const [loading,    setLoading]    = useState(true);
+  const [open,       setOpen]       = useState(false);
+  const [editing,    setEditing]    = useState<SessionSummary | null>(null);
+  const [openDetail, setOpenDetail] = useState<SummaryWithRel | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('session_summaries')
-      .select('*, patient:patient_id(full_name)')
-      .order('date', { ascending: false });
-    setRecords((data ?? []) as SessionSummary[]);
+    const [s, r] = await Promise.all([
+      supabase.from('session_summaries')
+        .select('*, patient:patient_id(full_name)')
+        .order('date', { ascending: false }),
+      supabase.from('recordings').select('id, recorded_at, status, audio_url, transcript'),
+    ]);
+    setRecords((s.data ?? []) as unknown as SummaryWithRel[]);
+    const m = new Map<string, Recording>();
+    for (const rec of (r.data ?? []) as Recording[]) m.set(rec.id, rec);
+    setRecordingsById(m);
     setLoading(false);
   }, []);
 
@@ -217,7 +228,7 @@ export default function SummariesPage() {
 
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
-      <div style={{ maxWidth: 980, margin: '0 auto' }}>
+      <div style={{ maxWidth: 920, margin: '0 auto' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -247,137 +258,308 @@ export default function SummariesPage() {
         {/* Recording widget */}
         <RecordingWidget />
 
-        {/* Summaries */}
+        {/* Summaries list */}
         {loading ? (
           <ListSkeleton />
         ) : records.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {records.map(r => (
-              <div
-                key={r.id}
-                onClick={() => { setEditing(r); setOpen(true); }}
-                style={{
-                  backgroundColor: C.card, borderRadius: 12,
-                  border: `1px solid ${C.border}`, boxShadow: C.shadow,
-                  padding: '18px 20px', cursor: 'pointer',
-                  transition: 'all 0.12s',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = C.accentRim;
-                  e.currentTarget.style.boxShadow = `0 4px 12px rgba(13,148,136,0.08)`;
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = C.border;
-                  e.currentTarget.style.boxShadow = C.shadow;
-                }}
-              >
-                {/* Header row */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0 }}>
-                      {(r.patient as any)?.full_name ?? '—'}
-                    </p>
-                    <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0' }}>
-                      {r.date}
-                      {r.start_time && ` · ${r.start_time} – ${r.end_time}`}
-                      {r.duration_minutes && ` · ${r.duration_minutes} דק'`}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    <IconBtn onClick={() => { setEditing(r); setOpen(true); }} icon={<PencilIcon />} hoverColor={C.accent} title="ערוך" />
-                    <IconBtn onClick={() => handleDelete(r.id)} icon={<TrashIcon />} hoverColor="#DC2626" title="מחק" />
-                  </div>
-                </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {records.map(r => {
+              const fromRecording = r.session_id ? recordingsById.has(r.session_id) : false;
+              const preview = r.main_topics ?? r.treatment_actions ?? r.progress ?? r.notes ?? '';
+              return (
+                <div
+                  key={r.id}
+                  onClick={() => setOpenDetail(r)}
+                  style={{
+                    backgroundColor: C.card, borderRadius: 12,
+                    border: `1px solid ${C.border}`, boxShadow: C.shadow,
+                    borderRight: `3px solid ${C.accent}`,
+                    padding: '14px 18px', cursor: 'pointer',
+                    transition: 'all 0.12s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = C.accentRim;
+                    e.currentTarget.style.borderRightColor = C.accent;
+                    e.currentTarget.style.boxShadow = `0 4px 12px rgba(13,148,136,0.08)`;
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = C.border;
+                    e.currentTarget.style.borderRightColor = C.accent;
+                    e.currentTarget.style.boxShadow = C.shadow;
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    {/* Patient + meta */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                        <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
+                          {r.patient?.full_name ?? '—'}
+                        </p>
+                        {fromRecording && <SourceBadge label="מהקלטה" />}
+                      </div>
+                      <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>
+                        {r.date}
+                        {r.start_time && ` · ${r.start_time}${r.end_time ? ` – ${r.end_time}` : ''}`}
+                        {r.duration_minutes ? ` · ${r.duration_minutes} דק'` : ''}
+                      </p>
+                      {preview && (
+                        <p style={{
+                          fontSize: 13, color: C.sub, margin: '8px 0 0', lineHeight: 1.5,
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}>
+                          {preview}
+                        </p>
+                      )}
+                    </div>
 
-                {/* Content sections */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  {r.main_topics && (
-                    <div style={{
-                      borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
-                      border: `1px solid ${C.border}`,
+                    {/* Open hint */}
+                    <span style={{
+                      fontSize: 11, fontWeight: 500, color: C.accent,
+                      padding: '2px 8px', borderRadius: 12,
+                      backgroundColor: C.accentSub, border: `1px solid ${C.accentRim}`,
+                      flexShrink: 0, alignSelf: 'flex-start', marginTop: 2,
                     }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-                        נושאים
-                      </div>
-                      <p style={{ fontSize: 13, color: C.sub, margin: 0, lineHeight: 1.5 }}>
-                        {r.main_topics.slice(0, 80)}{r.main_topics.length > 80 ? '…' : ''}
-                      </p>
+                      פתח →
+                    </span>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 5, flexShrink: 0, alignSelf: 'flex-start' }} onClick={e => e.stopPropagation()}>
+                      <IconBtn onClick={() => { setEditing(r); setOpen(true); }} icon={<PencilIcon />} hoverColor={C.accent} title="ערוך" />
+                      <IconBtn onClick={() => handleDelete(r.id)} icon={<TrashIcon />} hoverColor="#DC2626" title="מחק" />
                     </div>
-                  )}
-                  {r.treatment_actions && (
-                    <div style={{
-                      borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
-                      border: `1px solid ${C.border}`,
-                    }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-                        מה עשינו
-                      </div>
-                      <p style={{ fontSize: 13, color: C.sub, margin: 0, lineHeight: 1.5 }}>
-                        {r.treatment_actions.slice(0, 80)}{r.treatment_actions.length > 80 ? '…' : ''}
-                      </p>
-                    </div>
-                  )}
-                  {r.progress && (
-                    <div style={{
-                      borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
-                      border: `1px solid ${C.border}`,
-                    }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-                        התקדמות
-                      </div>
-                      <p style={{ fontSize: 13, color: C.sub, margin: 0, lineHeight: 1.5 }}>
-                        {r.progress.slice(0, 80)}{r.progress.length > 80 ? '…' : ''}
-                      </p>
-                    </div>
-                  )}
-                  {r.next_steps && (
-                    <div style={{
-                      borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
-                      border: `1px solid ${C.border}`,
-                    }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-                        צעדים הבאים
-                      </div>
-                      <p style={{ fontSize: 13, color: C.sub, margin: 0, lineHeight: 1.5 }}>
-                        {r.next_steps.slice(0, 80)}{r.next_steps.length > 80 ? '…' : ''}
-                      </p>
-                    </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'עריכת סיכום' : 'הוספת סיכום'} size="xl">
+      {/* Create/Edit modal */}
+      <Modal open={open} onClose={() => setOpen(false)} title={editing?.id ? 'עריכת סיכום' : 'הוספת סיכום'} size="xl">
         <SummaryForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} />
+      </Modal>
+
+      {/* Detail modal */}
+      <Modal
+        open={openDetail !== null}
+        onClose={() => setOpenDetail(null)}
+        title="סיכום פגישה"
+        size="xl"
+      >
+        {openDetail && (
+          <SummaryDetail
+            summary={openDetail}
+            recording={openDetail.session_id ? recordingsById.get(openDetail.session_id) : undefined}
+            onEdit={() => {
+              const s = openDetail;
+              setOpenDetail(null);
+              setEditing(s);
+              setOpen(true);
+            }}
+          />
+        )}
       </Modal>
     </div>
   );
 }
 
+/* ── Detail view ── */
+function SummaryDetail({ summary, recording, onEdit }: {
+  summary: SummaryWithRel;
+  recording: Recording | undefined;
+  onEdit: () => void;
+}) {
+  const fromRecording = !!recording;
+
+  const sections: { label: string; value: string | null | undefined; tone?: 'accent' }[] = [
+    { label: 'נושאים עיקריים',  value: summary.main_topics },
+    { label: 'מה עשינו בפגישה', value: summary.treatment_actions },
+    { label: 'מצב נוכחי',        value: summary.current_state },
+    { label: 'התקדמות',          value: summary.progress, tone: 'accent' },
+    { label: 'צעדים הבאים',      value: summary.next_steps },
+    { label: 'משימות שניתנו',    value: summary.tasks_given },
+    { label: 'קשיים',            value: summary.difficulties },
+    { label: 'הערות',            value: summary.notes },
+  ];
+  const visible = sections.filter(s => s.value && s.value.trim());
+
+  return (
+    <div style={{ direction: 'rtl' }}>
+      {/* Header */}
+      <div style={{
+        padding: '14px 16px', marginBottom: 18,
+        backgroundColor: '#F8FAFC', borderRadius: 10, border: `1px solid ${C.border}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: C.text, margin: 0 }}>
+            {summary.patient?.full_name ?? '—'}
+          </h3>
+          <button
+            onClick={onEdit}
+            style={{
+              padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+              border: `1px solid ${C.border}`, color: C.sub, backgroundColor: C.card,
+              cursor: 'pointer', transition: 'all 0.12s',
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget as HTMLElement;
+              el.style.borderColor = C.accentRim; el.style.color = C.accent;
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLElement;
+              el.style.borderColor = C.border; el.style.color = C.sub;
+            }}
+          >
+            ערוך סיכום
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center' }}>
+          <MetaItem label="תאריך" value={summary.date} />
+          {summary.start_time && (
+            <MetaItem label="שעות" value={`${summary.start_time}${summary.end_time ? ` – ${summary.end_time}` : ''}`} />
+          )}
+          {summary.duration_minutes && (
+            <MetaItem label="משך" value={`${summary.duration_minutes} דק'`} />
+          )}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              מקור
+            </div>
+            <div style={{ marginTop: 3 }}>
+              {fromRecording ? <SourceBadge label="🎙 נוצר מהקלטה" /> : <SourceBadge label="הוזן ידנית" muted />}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sections */}
+      {visible.length === 0 ? (
+        <p style={{ fontSize: 13, color: C.muted, textAlign: 'center', padding: '20px 0' }}>
+          אין תוכן בסיכום זה
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {visible.map(s => (
+            <Section key={s.label} label={s.label} value={s.value!} accent={s.tone === 'accent'} />
+          ))}
+        </div>
+      )}
+
+      {/* Recording attachment */}
+      {recording && (
+        <div style={{
+          marginTop: 16, padding: '14px 16px',
+          borderRadius: 10, backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE',
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 700, color: '#4F46E5',
+            letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8,
+          }}>
+            הקלטה מקורית
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: C.text }}>
+              {new Date(recording.recorded_at).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+            {recording.audio_url && (
+              <audio controls src={recording.audio_url} style={{ height: 32, flex: 1, minWidth: 200 }} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {summary.attachment_url && (
+        <div style={{
+          marginTop: 12, padding: '12px 14px',
+          borderRadius: 10, backgroundColor: '#F8FAFC', border: `1px solid ${C.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+        }}>
+          <div>
+            <div style={{
+              fontSize: 11, fontWeight: 700, color: C.muted,
+              letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 4,
+            }}>
+              קובץ מצורף
+            </div>
+            <a href={summary.attachment_url} target="_blank" rel="noreferrer" style={{
+              fontSize: 13, color: C.accent, textDecoration: 'none', fontWeight: 500,
+            }}>
+              פתח קובץ ←
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Section({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div style={{
+      borderRadius: 10, padding: '14px 16px',
+      backgroundColor: accent ? '#F0FDF9' : C.card,
+      border: `1px solid ${accent ? '#99F6E4' : C.border}`,
+    }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: accent ? '#0D9488' : '#94A3B8',
+        letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8,
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 14, color: '#1A2332', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+      }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function MetaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginTop: 3 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SourceBadge({ label, muted }: { label: string; muted?: boolean }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center',
+      padding: '3px 10px', borderRadius: 16, fontSize: 11, fontWeight: 500,
+      backgroundColor: muted ? '#F8FAFC' : '#EEF2FF',
+      color:           muted ? '#64748B' : '#4F46E5',
+      border: `1px solid ${muted ? '#E2E8F0' : '#C7D2FE'}`,
+    }}>
+      {label}
+    </span>
+  );
+}
+
 function ListSkeleton() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {[1,2,3,4].map(i => (
         <div key={i} style={{
           backgroundColor: C.card, borderRadius: 12,
-          border: `1px solid ${C.border}`, padding: '18px 20px',
+          border: `1px solid ${C.border}`, padding: '14px 18px',
+          borderRight: `3px solid #F1F5F9`,
         }}>
-          <div style={{ height: 14, backgroundColor: '#F1F5F9', borderRadius: 6, width: '30%', marginBottom: 12 }} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {[1,2,3,4].map(j => (
-              <div key={j} style={{
-                borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
-              }}>
-                <div style={{ height: 10, backgroundColor: '#E8ECF0', borderRadius: 4, width: '40%', marginBottom: 6 }} />
-                <div style={{ height: 30, backgroundColor: '#F1F5F9', borderRadius: 4 }} />
-              </div>
-            ))}
-          </div>
+          <div style={{ height: 14, backgroundColor: '#F1F5F9', borderRadius: 6, width: '25%', marginBottom: 8 }} />
+          <div style={{ height: 11, backgroundColor: '#F8FAFC', borderRadius: 6, width: '35%', marginBottom: 10 }} />
+          <div style={{ height: 11, backgroundColor: '#F1F5F9', borderRadius: 6, width: '90%', marginBottom: 4 }} />
+          <div style={{ height: 11, backgroundColor: '#F1F5F9', borderRadius: 6, width: '70%' }} />
         </div>
       ))}
     </div>
