@@ -2,25 +2,25 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import PageHeader from '@/components/ui/PageHeader';
 import Modal from '@/components/ui/Modal';
-import Badge from '@/components/ui/Badge';
 import SessionForm from '@/components/sessions/SessionForm';
-import { sessionStatusLabels } from '@/lib/labels';
+import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import type { Session } from '@/types';
 
-const thStyle: React.CSSProperties = {
-  padding: '10px 16px',
-  textAlign: 'right',
-  fontWeight: 600,
-  fontSize: 11,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  color: '#64748B',
-  whiteSpace: 'nowrap',
-  backgroundColor: '#F8FAFC',
-  borderBottom: '1px solid #E2E8F0',
+const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+  planned:   { label: 'מתוכננת',  bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4', dot: '#0D9488' },
+  completed: { label: 'הושלמה',   bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0', dot: '#16A34A' },
+  cancelled: { label: 'בוטלה',    bg: '#FEF2F2', text: '#DC2626', border: '#FECACA', dot: '#DC2626' },
+  no_show:   { label: 'לא הגיעה', bg: '#FFFBEB', text: '#92400E', border: '#FDE68A', dot: '#F59E0B' },
 };
+
+function formatDate(dateStr: string) {
+  const today = new Date().toISOString().slice(0, 10);
+  const tom   = new Date(); tom.setDate(tom.getDate() + 1);
+  if (dateStr === today)                      return 'היום';
+  if (dateStr === tom.toISOString().slice(0, 10)) return 'מחר';
+  return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
+}
 
 export default function SessionsPage() {
   const [records, setRecords] = useState<Session[]>([]);
@@ -47,68 +47,102 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="max-w-screen-xl mx-auto px-6 py-8">
-      <PageHeader
-        title="יומן פגישות"
-        description="תיאום ומעקב פגישות"
-        buttonLabel="הוסף פגישה"
-        onAdd={() => { setEditing(null); setOpen(true); }}
-      />
+    <div style={{ backgroundColor: '#F6F8FB', minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
+      <div style={{ maxWidth: 920, margin: '0 auto' }}>
 
-      {loading ? (
-        <LoadingState />
-      ) : records.length === 0 ? (
-        <EmptyState label="פגישות" onAdd={() => { setEditing(null); setOpen(true); }} />
-      ) : (
-        <div
-          className="bg-white rounded-xl overflow-x-auto"
-          style={{ border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
-        >
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                {['מטופלת', 'תאריך', 'שעות', 'משך', 'סטטוס', 'הערות', 'פעולות'].map(h => (
-                  <th key={h} style={thStyle}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r, i) => (
-                <tr
-                  key={r.id}
-                  style={{ borderBottom: i < records.length - 1 ? '1px solid #F1F5F9' : 'none' }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-                >
-                  <td className="px-4 py-3.5 font-semibold" style={{ color: '#0F172A' }}>
-                    {(r.patient as any)?.full_name ?? '—'}
-                  </td>
-                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>{r.date}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap" style={{ color: '#475569' }}>
-                    {r.start_time} – {r.end_time}
-                  </td>
-                  <td className="px-4 py-3.5" style={{ color: '#64748B' }}>
-                    {r.duration_minutes ? `${r.duration_minutes} דק'` : '—'}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <Badge value={r.status} labels={sessionStatusLabels} />
-                  </td>
-                  <td className="px-4 py-3.5 max-w-xs truncate" style={{ color: '#94A3B8' }}>
-                    {r.notes ?? '—'}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <ActionButtons
-                      onEdit={() => { setEditing(r); setOpen(true); }}
-                      onDelete={() => handleDelete(r.id)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <TableFooter count={records.length} label="פגישות" />
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A2332', margin: '0 0 3px', letterSpacing: '-0.3px' }}>
+              יומן פגישות
+            </h1>
+            <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+              {loading ? '' : `${records.length} פגישות`}
+            </p>
+          </div>
+          <AddBtn onClick={() => { setEditing(null); setOpen(true); }} label="+ הוסף פגישה" />
         </div>
-      )}
+
+        {loading ? <ListSkeleton /> : records.length === 0 ? (
+          <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
+        ) : (
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: 16,
+            border: '1px solid #E8ECF0', boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
+            overflow: 'hidden',
+          }}>
+            {records.map((r, i) => {
+              const st = SESSION_STATUS[r.status] ?? SESSION_STATUS.planned;
+              return (
+                <div
+                  key={r.id}
+                  onClick={() => { setEditing(r); setOpen(true); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 16,
+                    padding: '14px 24px', cursor: 'pointer',
+                    borderBottom: i < records.length - 1 ? '1px solid #F1F5F9' : 'none',
+                    transition: 'background-color 0.1s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
+                >
+                  {/* Date badge */}
+                  <div style={{
+                    minWidth: 54, textAlign: 'center', flexShrink: 0,
+                    backgroundColor: '#F6F8FB', border: '1px solid #E8ECF0',
+                    borderRadius: 10, padding: '7px 6px',
+                  }}>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: '#1A2332', margin: 0, lineHeight: 1 }}>
+                      {new Date(r.date).getDate()}
+                    </p>
+                    <p style={{ fontSize: 10, color: '#94A3B8', margin: '2px 0 0', textTransform: 'uppercase' }}>
+                      {new Date(r.date).toLocaleDateString('he-IL', { month: 'short' })}
+                    </p>
+                  </div>
+
+                  {/* Patient + time */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2332', margin: 0, lineHeight: 1.3 }}>
+                      {(r.patient as any)?.full_name ?? '—'}
+                    </p>
+                    <p style={{ fontSize: 12, color: '#94A3B8', margin: '3px 0 0' }}>
+                      {r.start_time} – {r.end_time}
+                      {r.duration_minutes ? ` · ${r.duration_minutes} דק'` : ''}
+                    </p>
+                  </div>
+
+                  {/* Day label */}
+                  <span style={{ fontSize: 12, color: '#64748B', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {formatDate(r.date)}
+                  </span>
+
+                  {/* Status */}
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                    padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+                    backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
+                  }}>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: st.dot, display: 'inline-block' }} />
+                    {st.label}
+                  </span>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 5 }} onClick={e => e.stopPropagation()}>
+                    <IconBtn onClick={() => { setEditing(r); setOpen(true); }} icon={<PencilIcon />} hoverColor="#0D9488" title="ערוך" />
+                    <IconBtn onClick={() => handleDelete(r.id)} icon={<TrashIcon />} hoverColor="#DC2626" title="מחק" />
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{
+              padding: '10px 24px', fontSize: 12, color: '#94A3B8',
+              backgroundColor: '#F8FAFC', borderTop: '1px solid #F1F5F9',
+            }}>
+              {records.length} פגישות
+            </div>
+          </div>
+        )}
+      </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'עריכת פגישה' : 'הוספת פגישה'}>
         <SessionForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} />
@@ -117,41 +151,44 @@ export default function SessionsPage() {
   );
 }
 
-function LoadingState() {
+function AddBtn({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <div className="bg-white rounded-xl flex items-center justify-center py-20" style={{ border: '1px solid #E2E8F0' }}>
-      <div className="text-center">
-        <div className="w-8 h-8 rounded-full border-2 mx-auto mb-3 animate-spin" style={{ borderColor: '#0F766E', borderTopColor: 'transparent' }} />
-        <p className="text-sm" style={{ color: '#94A3B8' }}>טוען נתונים...</p>
-      </div>
+    <button onClick={onClick} style={{
+      backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+      borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 600,
+      cursor: 'pointer', boxShadow: '0 2px 8px rgba(13,148,136,0.22)', transition: 'opacity 0.15s',
+    }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+    >{label}</button>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div style={{ backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #E8ECF0', overflow: 'hidden' }}>
+      {[1,2,3,4,5].map((i,idx) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 24px', borderBottom: idx < 4 ? '1px solid #F1F5F9' : 'none' }}>
+          <div style={{ width: 54, height: 46, borderRadius: 10, backgroundColor: '#F1F5F9', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ height: 13, backgroundColor: '#F1F5F9', borderRadius: 6, width: '35%', marginBottom: 7 }} />
+            <div style={{ height: 10, backgroundColor: '#F8FAFC', borderRadius: 6, width: '22%' }} />
+          </div>
+          <div style={{ height: 22, width: 65, backgroundColor: '#F1F5F9', borderRadius: 20 }} />
+        </div>
+      ))}
     </div>
   );
 }
 
-function EmptyState({ label, onAdd }: { label: string; onAdd: () => void }) {
+function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="bg-white rounded-xl p-16 text-center" style={{ border: '1px solid #E2E8F0' }}>
-      <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4" style={{ backgroundColor: '#F1F5F9', color: '#94A3B8' }}>○</div>
-      <p className="font-semibold mb-1" style={{ color: '#0F172A' }}>אין {label} עדיין</p>
-      <p className="text-sm mb-4" style={{ color: '#94A3B8' }}>לחצי להוספת הרשומה הראשונה</p>
-      <button onClick={onAdd} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#0F766E' }}>+ הוסף</button>
-    </div>
-  );
-}
-
-function ActionButtons({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
-  return (
-    <div className="flex gap-3">
-      <button onClick={onEdit} className="text-xs font-medium" style={{ color: '#0F766E' }} onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')} onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}>ערוך</button>
-      <button onClick={onDelete} className="text-xs font-medium" style={{ color: '#DC2626' }} onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')} onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}>מחק</button>
-    </div>
-  );
-}
-
-function TableFooter({ count, label }: { count: number; label: string }) {
-  return (
-    <div className="px-4 py-3 text-xs" style={{ color: '#94A3B8', borderTop: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
-      {count} {label}
+    <div style={{ backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #E8ECF0', padding: '52px 24px', textAlign: 'center' }}>
+      <p style={{ fontSize: 16, fontWeight: 600, color: '#1A2332', margin: '0 0 6px' }}>אין פגישות עדיין</p>
+      <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px' }}>התחילי בהוספת הפגישה הראשונה</p>
+      <button onClick={onAdd} style={{ backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none', borderRadius: 9, padding: '10px 22px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+        + הוסף פגישה
+      </button>
     </div>
   );
 }

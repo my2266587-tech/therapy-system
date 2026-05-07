@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import PatientForm from '@/components/patients/PatientForm';
+import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import type { Patient } from '@/types';
 
 const AVATAR_COLORS = [
@@ -213,44 +214,14 @@ function PatientRow({ patient, divider, onEdit, onDelete }: {
       </span>
 
       {/* Actions */}
-      <div
-        style={{ display: 'flex', gap: 6, flexShrink: 0 }}
-        onClick={e => e.stopPropagation()}
-      >
-        <RowBtn onClick={onEdit}   label="ערוך" hoverColor="#0D9488" />
-        <RowBtn onClick={onDelete} label="מחק"  hoverColor="#DC2626" />
+      <div style={{ display: 'flex', gap: 5 }} onClick={e => e.stopPropagation()}>
+        <IconBtn onClick={onEdit}   icon={<PencilIcon />} hoverColor="#0D9488" title="ערוך" />
+        <IconBtn onClick={onDelete} icon={<TrashIcon />}  hoverColor="#DC2626" title="מחק" />
       </div>
     </div>
   );
 }
 
-function RowBtn({ onClick, label, hoverColor }: { onClick: () => void; label: string; hoverColor: string }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: '5px 13px', borderRadius: 7,
-        border: '1px solid #E8ECF0', backgroundColor: '#F8FAFC',
-        color: '#64748B', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-        transition: 'all 0.12s',
-      }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = hoverColor + '55';
-        el.style.backgroundColor = hoverColor + '0A';
-        el.style.color = hoverColor;
-      }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = '#E8ECF0';
-        el.style.backgroundColor = '#F8FAFC';
-        el.style.color = '#64748B';
-      }}
-    >
-      {label}
-    </button>
-  );
-}
 
 function ListSkeleton() {
   return (
