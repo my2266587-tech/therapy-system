@@ -1,6 +1,14 @@
 /**
  * Centralized date formatting for Gregorian + Hebrew calendar display.
- * Hebrew dates use Intl with the 'he-IL-u-ca-hebrew' locale (full ICU).
+ *
+ * Hebrew dates use Intl with the 'he-IL-u-ca-hebrew' locale to get the right
+ * calendar (Hebrew month names + correct year). However, Node and some browsers
+ * ship an ICU build that does NOT support the `nu-hebr` numbering system, so the
+ * year and day come out as Latin digits ("אייר 5786" instead of "אייר תשפ״ו").
+ *
+ * Fix: format with `formatToParts`, then post-replace the numeric `day` and
+ * `year` parts with Hebrew gematria letters. The month name from ICU is correct
+ * and stays untouched.
  *
  * All YYYY-MM-DD strings are parsed via parseYMD to avoid the
  * "new Date('2026-05-07')" UTC midnight off-by-one bug.
@@ -25,7 +33,6 @@ export function parseYMD(s: string): Date {
 
 export function toDate(d: Date | string): Date {
   if (d instanceof Date) return d;
-  // YMD = exactly 10 chars "YYYY-MM-DD"
   if (typeof d === 'string' && d.length === 10 && d[4] === '-' && d[7] === '-') {
     return parseYMD(d);
   }
@@ -39,6 +46,53 @@ function fmt(locale: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFor
   let f = cache.get(key);
   if (!f) { f = new Intl.DateTimeFormat(locale, opts); cache.set(key, f); }
   return f;
+}
+
+/* ── Gematria — convert integer to Hebrew letters (e.g. 786 → תשפ״ו, 27 → כ״ז) ──
+ * For Hebrew years > 1000, the thousands digit is conventionally dropped
+ * (5786 → 786 → תשפ״ו). Days 1–30 fit in two letters at most.
+ * Special-cased: 15 → ט״ו, 16 → ט״ז (avoid spelling parts of God's name).
+ */
+function toGematria(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '';
+  let v = n >= 1000 ? n % 1000 : n;
+  if (v === 0) return '';
+
+  let out = '';
+
+  // Hundreds (100 – 900)
+  while (v >= 400) { out += 'ת'; v -= 400; }
+  if      (v >= 300) { out += 'ש'; v -= 300; }
+  else if (v >= 200) { out += 'ר'; v -= 200; }
+  else if (v >= 100) { out += 'ק'; v -= 100; }
+
+  // Tens & ones with 15/16 special case
+  if (v === 15) out += 'טו';
+  else if (v === 16) out += 'טז';
+  else {
+    if      (v >= 90) { out += 'צ'; v -= 90; }
+    else if (v >= 80) { out += 'פ'; v -= 80; }
+    else if (v >= 70) { out += 'ע'; v -= 70; }
+    else if (v >= 60) { out += 'ס'; v -= 60; }
+    else if (v >= 50) { out += 'נ'; v -= 50; }
+    else if (v >= 40) { out += 'מ'; v -= 40; }
+    else if (v >= 30) { out += 'ל'; v -= 30; }
+    else if (v >= 20) { out += 'כ'; v -= 20; }
+    else if (v >= 10) { out += 'י'; v -= 10; }
+    if      (v === 9) out += 'ט';
+    else if (v === 8) out += 'ח';
+    else if (v === 7) out += 'ז';
+    else if (v === 6) out += 'ו';
+    else if (v === 5) out += 'ה';
+    else if (v === 4) out += 'ד';
+    else if (v === 3) out += 'ג';
+    else if (v === 2) out += 'ב';
+    else if (v === 1) out += 'א';
+  }
+
+  // Add gershayim (״) before last letter, or geresh (׳) if single letter.
+  if (out.length === 1) return out + '׳';
+  return out.slice(0, -1) + '״' + out.slice(-1);
 }
 
 /* ── Gregorian ── */
@@ -56,7 +110,18 @@ export function formatHebrew(
   opts: Intl.DateTimeFormatOptions = PRESETS.long,
 ): string {
   if (!d) return '';
-  return fmt('he-IL-u-ca-hebrew', opts).format(toDate(d));
+  const date  = toDate(d);
+  const parts = fmt('he-IL-u-ca-hebrew', opts).formatToParts(date);
+  return parts
+    .map(p => {
+      if (p.type === 'day' || p.type === 'year') {
+        const n = parseInt(p.value, 10);
+        const g = toGematria(n);
+        return g || p.value;
+      }
+      return p.value;
+    })
+    .join('');
 }
 
 /* ── Convenience presets ── */

@@ -46,7 +46,10 @@
       "Read(//c/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system/components/**)",
       "Bash(cd \"/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system\" && cat package.json | head -30 && echo \"---\" && ls node_modules/next/dist/docs/ 2>/dev/null | head -20)",
       "Read(//c/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system/**)",
-      "Bash(cd \"/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system\" && rm components/layout/Navbar.tsx && echo deleted)"
+      "Bash(cd \"/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system\" && rm components/layout/Navbar.tsx && echo deleted)",
+      "Bash(node -e \"console.log\\(new Intl.DateTimeFormat\\('he-IL-u-ca-hebrew-nu-hebr',{month:'long',year:'numeric'}\\).format\\(new Date\\(2026,4,7\\)\\)\\); console.log\\(new Intl.DateTimeFormat\\('he-IL-u-ca-hebrew-nu-hebr',{day:'numeric',month:'long',year:'numeric'}\\).format\\(new Date\\(2026,4,7\\)\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(node --experimental-strip-types -e ' *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\user1\\AppData\\Roaming\\com.vercel.cli\\Data",
