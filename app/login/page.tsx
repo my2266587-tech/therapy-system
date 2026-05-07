@@ -49,19 +49,16 @@ export default function LoginPage() {
           textAlign: 'center',
         }}
       >
-        {/* Logo mark */}
+        {/* Brand */}
         <div style={{
-          display: 'flex', justifyContent: 'center', marginBottom: 24,
-          filter: 'drop-shadow(0 4px 12px rgba(13,148,136,0.30))',
+          display: 'flex', justifyContent: 'center', marginBottom: 14,
+          filter: 'drop-shadow(0 4px 12px rgba(44,122,114,0.18))',
         }}>
-          <Logo size={56} />
+          <Logo size={88} variant="full" />
         </div>
 
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
-          מחר אחר – שדה חמד
-        </h1>
-        <p style={{ color: '#64748B', fontSize: 14, marginBottom: 36 }}>
-          מערכת ניהול טיפולי
+        <p style={{ color: '#64748B', fontSize: 13, marginBottom: 32 }}>
+          מערכת ניהול טיפולי · שדה חמד
         </p>
 
         {error && (

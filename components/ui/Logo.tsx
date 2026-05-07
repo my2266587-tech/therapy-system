@@ -1,49 +1,71 @@
 interface LogoProps {
   size?: number;
-  variant?: 'square' | 'mark';
+  variant?: 'mark' | 'full';
 }
+
+const COLORS = {
+  cream: '#EDE8E2',
+  sun:   '#F5C200',
+  teal:  '#2C7A72',
+  tealLight: '#5C9690',
+};
 
 /**
- * App logo: minimal abstract sprout — two leaves on a stem.
- * Symbolizes growth, healing, care. Pure teal, no text.
+ * "מחר אחר" logo — sun and wave on cream background.
+ * - variant="mark"  → just the icon (for sidebar, favicon)
+ * - variant="full"  → icon + Hebrew brand text (for login)
  */
-export default function Logo({ size = 32, variant = 'square' }: LogoProps) {
-  if (variant === 'mark') {
+export default function Logo({ size = 32, variant = 'mark' }: LogoProps) {
+  if (variant === 'full') {
     return (
-      <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-        <Sprout color="#0D9488" />
-      </svg>
+      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+        <Mark size={size} />
+        <div style={{ textAlign: 'center', lineHeight: 1.15, direction: 'rtl' }}>
+          <div style={{
+            fontSize: Math.round(size * 0.34),
+            fontWeight: 800,
+            color: COLORS.teal,
+            letterSpacing: '0.02em',
+          }}>
+            מחר אחר
+          </div>
+          <div style={{
+            fontSize: Math.round(size * 0.16),
+            fontWeight: 500,
+            color: COLORS.tealLight,
+            marginTop: 4,
+            letterSpacing: '0.06em',
+          }}>
+            כדאי להגשים
+          </div>
+        </div>
+      </div>
     );
   }
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect width="32" height="32" rx={size >= 40 ? 10 : 8} fill="#0D9488" />
-      <Sprout color="#FFFFFF" />
-    </svg>
-  );
+  return <Mark size={size} />;
 }
 
-function Sprout({ color }: { color: string }) {
+function Mark({ size }: { size: number }) {
+  const radius = size >= 40 ? 12 : 8;
   return (
-    <g>
-      {/* Stem */}
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <rect width="64" height="64" rx={radius} fill={COLORS.cream} />
+      {/* Sun */}
+      <circle cx="42" cy="22" r="6" fill={COLORS.sun} />
+      {/* Wave */}
       <path
-        d="M16 24 L16 13"
-        stroke={color}
-        strokeWidth="1.8"
+        d="M8 34 Q18 26 28 32 T 48 30 T 58 26"
+        stroke={COLORS.teal}
+        strokeWidth="2.6"
+        fill="none"
         strokeLinecap="round"
       />
-      {/* Left leaf */}
-      <path
-        d="M16 16 C12.5 14.5 10.5 11.5 11 8.5 C14 9.5 15.8 12.5 16 16 Z"
-        fill={color}
-      />
-      {/* Right leaf */}
-      <path
-        d="M16 13.5 C19.5 12 21.5 9.2 21 6.5 C18 7.5 16.2 10.2 16 13.5 Z"
-        fill={color}
-        opacity="0.88"
-      />
-    </g>
+    </svg>
   );
 }
