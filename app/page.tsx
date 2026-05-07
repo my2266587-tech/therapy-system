@@ -104,10 +104,10 @@ export default function DashboardPage() {
   }, []);
 
   const kpis = [
-    { label: 'פגישות היום',      value: data.todaySessions,     accent: true  },
-    { label: 'מטופלות פעילות',   value: data.activePatients,    accent: false },
-    { label: 'פגישות השבוע',     value: data.weekSessions,      accent: false },
-    { label: 'הקלטות ממתינות',   value: data.pendingRecordings, accent: false },
+    { label: 'פגישות היום',    value: data.todaySessions,     accent: true,  href: '/sessions?filter=today'   },
+    { label: 'מטופלות פעילות', value: data.activePatients,    accent: false, href: '/patients?status=active'  },
+    { label: 'פגישות השבוע',   value: data.weekSessions,      accent: false, href: '/sessions?filter=week'    },
+    { label: 'הקלטות ממתינות', value: data.pendingRecordings, accent: false, href: '/recordings?status=pending' },
   ];
 
   return (
@@ -127,26 +127,54 @@ export default function DashboardPage() {
         {/* ── KPI row ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
           {kpis.map(k => (
-            <div key={k.label} style={{
+            <Link key={k.label} href={k.href} style={{
+              display: 'block', textDecoration: 'none',
               backgroundColor: C.card, borderRadius: 14,
               border: `1px solid ${k.accent ? C.accentRim : C.border}`,
               boxShadow: k.accent ? '0 2px 10px rgba(13,148,136,0.08)' : C.shadow,
               padding: '20px 22px',
               borderTop: `2px solid ${k.accent ? C.accent : 'transparent'}`,
-            }}>
-              <p style={{
-                fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 10px',
-                textTransform: 'uppercase', letterSpacing: '0.07em',
-              }}>
-                {k.label}
-              </p>
+              cursor: 'pointer', transition: 'all 0.15s',
+              position: 'relative',
+            }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLElement;
+                el.style.borderColor = C.accentRim;
+                el.style.boxShadow = '0 6px 20px rgba(13,148,136,0.12)';
+                el.style.transform = 'translateY(-2px)';
+                const arrow = el.querySelector('[data-arrow]') as HTMLElement | null;
+                if (arrow) { arrow.style.opacity = '1'; arrow.style.transform = 'translateX(-4px)'; }
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLElement;
+                el.style.borderColor = k.accent ? C.accentRim : C.border;
+                el.style.boxShadow = k.accent ? '0 2px 10px rgba(13,148,136,0.08)' : C.shadow;
+                el.style.transform = 'translateY(0)';
+                const arrow = el.querySelector('[data-arrow]') as HTMLElement | null;
+                if (arrow) { arrow.style.opacity = '0'; arrow.style.transform = 'translateX(0)'; }
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                <p style={{
+                  fontSize: 11, fontWeight: 600, color: C.muted, margin: 0,
+                  textTransform: 'uppercase', letterSpacing: '0.07em',
+                }}>
+                  {k.label}
+                </p>
+                <span data-arrow style={{
+                  fontSize: 14, color: C.accent, opacity: 0,
+                  transition: 'all 0.15s', lineHeight: 1,
+                }}>
+                  ←
+                </span>
+              </div>
               <p style={{
                 fontSize: 36, fontWeight: 700, margin: 0, lineHeight: 1,
                 color: k.accent ? C.accent : C.text,
               }}>
                 {loading ? '—' : k.value}
               </p>
-            </div>
+            </Link>
           ))}
         </div>
 
@@ -221,18 +249,26 @@ export default function DashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
             {shortcuts.map(s => (
               <Link key={s.href} href={s.href} style={{
-                display: 'block', padding: '12px 8px', borderRadius: 9,
-                border: `1px solid ${C.border}`, textAlign: 'center',
+                display: 'block', padding: '14px 10px', borderRadius: 10,
+                border: `1px solid ${C.border}`, backgroundColor: C.card, textAlign: 'center',
                 fontSize: 13, fontWeight: 500, color: C.sub, textDecoration: 'none',
-                transition: 'all 0.12s',
+                transition: 'all 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
               }}
                 onMouseEnter={e => {
                   const el = e.currentTarget as HTMLElement;
-                  el.style.backgroundColor = C.accentSub; el.style.borderColor = C.accentRim; el.style.color = C.accent;
+                  el.style.backgroundColor = C.accentSub;
+                  el.style.borderColor = C.accentRim;
+                  el.style.color = C.accent;
+                  el.style.boxShadow = '0 4px 12px rgba(13,148,136,0.10)';
+                  el.style.transform = 'translateY(-1px)';
                 }}
                 onMouseLeave={e => {
                   const el = e.currentTarget as HTMLElement;
-                  el.style.backgroundColor = ''; el.style.borderColor = C.border; el.style.color = C.sub;
+                  el.style.backgroundColor = C.card;
+                  el.style.borderColor = C.border;
+                  el.style.color = C.sub;
+                  el.style.boxShadow = '0 1px 2px rgba(0,0,0,0.02)';
+                  el.style.transform = 'translateY(0)';
                 }}
               >
                 {s.label}

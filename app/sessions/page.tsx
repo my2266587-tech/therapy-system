@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
@@ -23,6 +24,18 @@ function formatDate(dateStr: string) {
 }
 
 export default function SessionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SessionsInner />
+    </Suspense>
+  );
+}
+
+function SessionsInner() {
+  const router = useRouter();
+  const sp     = useSearchParams();
+  const filter = sp.get('filter') ?? 'all';
+
   const [records, setRecords] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [open,    setOpen]    = useState(false);
@@ -46,32 +59,55 @@ export default function SessionsPage() {
     load();
   }
 
+  const filtered = useMemo(() => {
+    if (filter === 'all') return records;
+    const today = new Date().toISOString().slice(0, 10);
+    if (filter === 'today') return records.filter(r => r.date === today);
+    if (filter === 'week') {
+      const sun = new Date(); sun.setDate(sun.getDate() - sun.getDay());
+      const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
+      const a = sun.toISOString().slice(0, 10);
+      const b = sat.toISOString().slice(0, 10);
+      return records.filter(r => r.date >= a && r.date <= b);
+    }
+    return records;
+  }, [records, filter]);
+
+  const filterLabel = filter === 'today' ? 'היום' : filter === 'week' ? 'השבוע' : null;
+
   return (
     <div style={{ backgroundColor: '#F6F8FB', minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
       <div style={{ maxWidth: 920, margin: '0 auto' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A2332', margin: '0 0 3px', letterSpacing: '-0.3px' }}>
               יומן פגישות
             </h1>
             <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
-              {loading ? '' : `${records.length} פגישות`}
+              {loading ? '' : `${filtered.length} פגישות${filterLabel ? ` · ${filterLabel}` : ''}`}
             </p>
           </div>
           <AddBtn onClick={() => { setEditing(null); setOpen(true); }} label="+ הוסף פגישה" />
         </div>
 
-        {loading ? <ListSkeleton /> : records.length === 0 ? (
-          <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
+        {/* Filter chips */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <FilterChip label="הכל"    active={filter === 'all'}   onClick={() => router.push('/sessions')} />
+          <FilterChip label="היום"   active={filter === 'today'} onClick={() => router.push('/sessions?filter=today')} />
+          <FilterChip label="השבוע"  active={filter === 'week'}  onClick={() => router.push('/sessions?filter=week')} />
+        </div>
+
+        {loading ? <ListSkeleton /> : filtered.length === 0 ? (
+          <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} filterLabel={filterLabel} />
         ) : (
           <div style={{
             backgroundColor: '#FFFFFF', borderRadius: 16,
             border: '1px solid #E8ECF0', boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
             overflow: 'hidden',
           }}>
-            {records.map((r, i) => {
+            {filtered.map((r, i) => {
               const st = SESSION_STATUS[r.status] ?? SESSION_STATUS.planned;
               return (
                 <div
@@ -80,7 +116,7 @@ export default function SessionsPage() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 16,
                     padding: '14px 24px', cursor: 'pointer',
-                    borderBottom: i < records.length - 1 ? '1px solid #F1F5F9' : 'none',
+                    borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
                     transition: 'background-color 0.1s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
@@ -138,7 +174,7 @@ export default function SessionsPage() {
               padding: '10px 24px', fontSize: 12, color: '#94A3B8',
               backgroundColor: '#F8FAFC', borderTop: '1px solid #F1F5F9',
             }}>
-              {records.length} פגישות
+              {filtered.length} פגישות{filterLabel ? ` · ${filterLabel}` : ''}
             </div>
           </div>
         )}
@@ -181,14 +217,49 @@ function ListSkeleton() {
   );
 }
 
-function EmptyState({ onAdd }: { onAdd: () => void }) {
+function EmptyState({ onAdd, filterLabel }: { onAdd: () => void; filterLabel: string | null }) {
   return (
     <div style={{ backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #E8ECF0', padding: '52px 24px', textAlign: 'center' }}>
-      <p style={{ fontSize: 16, fontWeight: 600, color: '#1A2332', margin: '0 0 6px' }}>אין פגישות עדיין</p>
-      <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px' }}>התחילי בהוספת הפגישה הראשונה</p>
+      <p style={{ fontSize: 16, fontWeight: 600, color: '#1A2332', margin: '0 0 6px' }}>
+        {filterLabel ? `אין פגישות ${filterLabel}` : 'אין פגישות עדיין'}
+      </p>
+      <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px' }}>
+        {filterLabel ? 'נסי סינון אחר או הוסיפי פגישה חדשה' : 'התחילי בהוספת הפגישה הראשונה'}
+      </p>
       <button onClick={onAdd} style={{ backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none', borderRadius: 9, padding: '10px 22px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
         + הוסף פגישה
       </button>
     </div>
+  );
+}
+
+function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '7px 16px', borderRadius: 20, fontSize: 13,
+        fontWeight: active ? 600 : 500,
+        color: active ? '#FFFFFF' : '#64748B',
+        backgroundColor: active ? '#0D9488' : '#FFFFFF',
+        border: `1px solid ${active ? '#0D9488' : '#E8ECF0'}`,
+        cursor: 'pointer', transition: 'all 0.12s',
+        boxShadow: active ? '0 2px 8px rgba(13,148,136,0.22)' : 'none',
+      }}
+      onMouseEnter={e => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.borderColor = '#99F6E4';
+          (e.currentTarget as HTMLElement).style.color = '#0D9488';
+        }
+      }}
+      onMouseLeave={e => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.borderColor = '#E8ECF0';
+          (e.currentTarget as HTMLElement).style.color = '#64748B';
+        }
+      }}
+    >
+      {label}
+    </button>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import RecordingForm from '@/components/recordings/RecordingForm';
@@ -22,6 +23,18 @@ const RECORDING_STATUS: Record<string, { label: string; bg: string; text: string
 };
 
 export default function RecordingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <RecordingsInner />
+    </Suspense>
+  );
+}
+
+function RecordingsInner() {
+  const router = useRouter();
+  const sp     = useSearchParams();
+  const statusFilter = sp.get('status') ?? 'all';
+
   const [records, setRecords] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [open,    setOpen]    = useState(false);
@@ -45,6 +58,19 @@ export default function RecordingsPage() {
     load();
   }
 
+  const filtered = useMemo(() => {
+    if (statusFilter === 'all') return records;
+    return records.filter(r => r.status === statusFilter);
+  }, [records, statusFilter]);
+
+  const STATUS_FILTERS = [
+    { value: 'all',         label: 'הכל' },
+    { value: 'pending',     label: 'ממתין לתמלול' },
+    { value: 'transcribed', label: 'תומלל' },
+    { value: 'draft_ready', label: 'סיכום מוכן' },
+    { value: 'approved',    label: 'אושר' },
+  ];
+
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
       <div style={{ maxWidth: 920, margin: '0 auto' }}>
@@ -56,7 +82,7 @@ export default function RecordingsPage() {
               הקלטות ותמלולים
             </h1>
             <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-              {loading ? '' : `${records.length} הקלטות`}
+              {loading ? '' : `${filtered.length} הקלטות${statusFilter !== 'all' ? ' · מסונן' : ''}`}
             </p>
           </div>
           <button
@@ -77,7 +103,7 @@ export default function RecordingsPage() {
         {/* Info banner */}
         <div style={{
           backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE',
-          borderRadius: 12, padding: '12px 16px', marginBottom: 20,
+          borderRadius: 12, padding: '12px 16px', marginBottom: 16,
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
           <span style={{ fontSize: 14, color: '#1E40AF', flexShrink: 0 }}>ℹ</span>
@@ -86,10 +112,22 @@ export default function RecordingsPage() {
           </p>
         </div>
 
+        {/* Filter chips */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+          {STATUS_FILTERS.map(f => (
+            <FilterChip
+              key={f.value}
+              label={f.label}
+              active={statusFilter === f.value}
+              onClick={() => router.push(f.value === 'all' ? '/recordings' : `/recordings?status=${f.value}`)}
+            />
+          ))}
+        </div>
+
         {/* List */}
         {loading ? (
           <ListSkeleton />
-        ) : records.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
         ) : (
           <div style={{
@@ -97,7 +135,7 @@ export default function RecordingsPage() {
             border: `1px solid ${C.border}`, boxShadow: C.shadow,
             overflow: 'hidden',
           }}>
-            {records.map((r, i) => {
+            {filtered.map((r, i) => {
               const st = RECORDING_STATUS[r.status] ?? RECORDING_STATUS.pending;
               return (
                 <div
@@ -106,7 +144,7 @@ export default function RecordingsPage() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 18,
                     padding: '16px 24px', cursor: 'pointer',
-                    borderBottom: i < records.length - 1 ? `1px solid #F1F5F9` : 'none',
+                    borderBottom: i < filtered.length - 1 ? `1px solid #F1F5F9` : 'none',
                     transition: 'background-color 0.1s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
@@ -185,7 +223,7 @@ export default function RecordingsPage() {
               padding: '10px 24px', fontSize: 12, color: C.muted,
               backgroundColor: '#F8FAFC', borderTop: `1px solid #F1F5F9`,
             }}>
-              {records.length} הקלטות
+              {filtered.length} הקלטות
             </div>
           </div>
         )}
@@ -212,6 +250,38 @@ function ListSkeleton() {
         </div>
       ))}
     </div>
+  );
+}
+
+function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '7px 14px', borderRadius: 20, fontSize: 13,
+        fontWeight: active ? 600 : 500,
+        color: active ? '#FFFFFF' : '#64748B',
+        backgroundColor: active ? '#0D9488' : '#FFFFFF',
+        border: `1px solid ${active ? '#0D9488' : '#E8ECF0'}`,
+        cursor: 'pointer', transition: 'all 0.12s',
+        boxShadow: active ? '0 2px 8px rgba(13,148,136,0.22)' : 'none',
+        whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={e => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.borderColor = '#99F6E4';
+          (e.currentTarget as HTMLElement).style.color = '#0D9488';
+        }
+      }}
+      onMouseLeave={e => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.borderColor = '#E8ECF0';
+          (e.currentTarget as HTMLElement).style.color = '#64748B';
+        }
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import PatientForm from '@/components/patients/PatientForm';
@@ -33,6 +33,18 @@ function initials(name: string) {
 }
 
 export default function PatientsPage() {
+  return (
+    <Suspense fallback={null}>
+      <PatientsInner />
+    </Suspense>
+  );
+}
+
+function PatientsInner() {
+  const router = useRouter();
+  const sp     = useSearchParams();
+  const statusFilter = sp.get('status') ?? 'all';
+
   const [records, setRecords] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [open,    setOpen]    = useState(false);
@@ -57,10 +69,20 @@ export default function PatientsPage() {
     load();
   }
 
-  const filtered = records.filter(r =>
-    r.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    (r.phone ?? '').includes(search)
-  );
+  const filtered = records.filter(r => {
+    const matchesSearch =
+      r.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      (r.phone ?? '').includes(search);
+    const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const STATUS_FILTERS = [
+    { value: 'all',      label: 'הכל' },
+    { value: 'active',   label: 'פעילות' },
+    { value: 'waiting',  label: 'בהמתנה' },
+    { value: 'inactive', label: 'לא פעילות' },
+  ];
 
   return (
     <div style={{ backgroundColor: '#F6F8FB', minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
@@ -92,8 +114,8 @@ export default function PatientsPage() {
           </button>
         </div>
 
-        {/* ── Search ── */}
-        <div style={{ marginBottom: 16 }}>
+        {/* ── Search + filter chips ── */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <input
             type="search"
             placeholder="חיפוש לפי שם או טלפון..."
@@ -114,6 +136,16 @@ export default function PatientsPage() {
               e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
             }}
           />
+          <div style={{ display: 'flex', gap: 8 }}>
+            {STATUS_FILTERS.map(f => (
+              <FilterChip
+                key={f.value}
+                label={f.label}
+                active={statusFilter === f.value}
+                onClick={() => router.push(f.value === 'all' ? '/patients' : `/patients?status=${f.value}`)}
+              />
+            ))}
+          </div>
         </div>
 
         {/* ── List ── */}
@@ -268,5 +300,36 @@ function EmptyState({ search, onAdd }: { search: string; onAdd: () => void }) {
         </button>
       )}
     </div>
+  );
+}
+
+function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '7px 14px', borderRadius: 20, fontSize: 13,
+        fontWeight: active ? 600 : 500,
+        color: active ? '#FFFFFF' : '#64748B',
+        backgroundColor: active ? '#0D9488' : '#FFFFFF',
+        border: `1px solid ${active ? '#0D9488' : '#E8ECF0'}`,
+        cursor: 'pointer', transition: 'all 0.12s',
+        boxShadow: active ? '0 2px 8px rgba(13,148,136,0.22)' : 'none',
+      }}
+      onMouseEnter={e => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.borderColor = '#99F6E4';
+          (e.currentTarget as HTMLElement).style.color = '#0D9488';
+        }
+      }}
+      onMouseLeave={e => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.borderColor = '#E8ECF0';
+          (e.currentTarget as HTMLElement).style.color = '#64748B';
+        }
+      }}
+    >
+      {label}
+    </button>
   );
 }
