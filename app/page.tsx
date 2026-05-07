@@ -4,26 +4,25 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
-interface Session {
+interface UpcomingSession {
   id: string;
   date: string;
   patient: { full_name: string } | null;
 }
 
-interface Payment {
+interface PendingRec {
   id: string;
-  month: string;
+  recorded_at: string;
   patient: { full_name: string } | null;
 }
 
-interface DashboardData {
+interface DashData {
   todaySessions:     number;
   activePatients:    number;
   weekSessions:      number;
-  unpaidPayments:    number;
   pendingRecordings: number;
-  upcomingSessions:  Session[];
-  recentUnpaid:      Payment[];
+  upcoming:          UpcomingSession[];
+  recs:              PendingRec[];
 }
 
 function getGreeting() {
@@ -39,43 +38,39 @@ function formatDate() {
   });
 }
 
-function formatSessionDate(dateStr: string) {
-  const today    = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomStr   = tomorrow.toISOString().slice(0, 10);
-  if (dateStr === today)  return 'היום';
-  if (dateStr === tomStr) return 'מחר';
+function labelDate(dateStr: string) {
+  const today = new Date().toISOString().slice(0, 10);
+  const tom   = new Date(); tom.setDate(tom.getDate() + 1);
+  if (dateStr === today) return 'היום';
+  if (dateStr === tom.toISOString().slice(0, 10)) return 'מחר';
   return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function labelRecDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('he-IL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 const C = {
-  bg:        '#F6F8FB',
-  card:      '#FFFFFF',
-  border:    '#E8ECF0',
-  accent:    '#0D9488',
-  accentSub: '#F0FDF9',
-  accentRim: '#99F6E4',
-  text:      '#1A2332',
-  sub:       '#64748B',
-  muted:     '#94A3B8',
-  shadow:    '0 1px 4px rgba(0,0,0,0.05)',
-  shadowMd:  '0 2px 10px rgba(0,0,0,0.06)',
+  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
+  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
+  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
+  shadow: '0 1px 4px rgba(0,0,0,0.05)',
 };
 
 const shortcuts = [
-  { href: '/patients',   label: 'מטופלות'    },
-  { href: '/sessions',   label: 'פגישות'     },
-  { href: '/summaries',  label: 'סיכומים'    },
-  { href: '/payments',   label: 'תשלומים'    },
-  { href: '/expenses',   label: 'הוצאות'     },
-  { href: '/recordings', label: 'הקלטות'     },
+  { href: '/patients',   label: 'מטופלות'   },
+  { href: '/sessions',   label: 'פגישות'    },
+  { href: '/summaries',  label: 'סיכומים'   },
+  { href: '/recordings', label: 'הקלטות'    },
+  { href: '/quarterly',  label: 'רבעוני'    },
+  { href: '/staff',      label: 'צוות'      },
 ];
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData>({
+  const [data, setData] = useState<DashData>({
     todaySessions: 0, activePatients: 0, weekSessions: 0,
-    unpaidPayments: 0, pendingRecordings: 0,
-    upcomingSessions: [], recentUnpaid: [],
+    pendingRecordings: 0, upcoming: [], recs: [],
   });
   const [loading, setLoading] = useState(true);
 
@@ -86,24 +81,22 @@ export default function DashboardPage() {
       const sat   = new Date(sun); sat.setDate(sun.getDate() + 6);
       const fmt   = (d: Date) => d.toISOString().slice(0, 10);
 
-      const [pts, todaySess, weekSess, recs, pays, upcoming, unpaid] = await Promise.all([
+      const [pts, todaySess, weekSess, recCount, upcoming, recs] = await Promise.all([
         supabase.from('patients').select('id', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', today).eq('status', 'planned'),
         supabase.from('sessions').select('id', { count: 'exact', head: true }).gte('date', fmt(sun)).lte('date', fmt(sat)).eq('status', 'planned'),
         supabase.from('recordings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('payments').select('id', { count: 'exact', head: true }).eq('is_paid', false),
         supabase.from('sessions').select('id, date, patient:patient_id(full_name)').gte('date', today).eq('status', 'planned').order('date').limit(6),
-        supabase.from('payments').select('id, month, patient:patient_id(full_name)').eq('is_paid', false).order('month', { ascending: false }).limit(5),
+        supabase.from('recordings').select('id, recorded_at, patient:patient_id(full_name)').eq('status', 'pending').order('recorded_at', { ascending: false }).limit(5),
       ]);
 
       setData({
-        todaySessions:     todaySess.count ?? 0,
-        activePatients:    pts.count       ?? 0,
-        weekSessions:      weekSess.count  ?? 0,
-        unpaidPayments:    pays.count      ?? 0,
-        pendingRecordings: recs.count      ?? 0,
-        upcomingSessions:  (upcoming.data  ?? []) as unknown as Session[],
-        recentUnpaid:      (unpaid.data    ?? []) as unknown as Payment[],
+        todaySessions:     todaySess.count  ?? 0,
+        activePatients:    pts.count        ?? 0,
+        weekSessions:      weekSess.count   ?? 0,
+        pendingRecordings: recCount.count   ?? 0,
+        upcoming:          (upcoming.data   ?? []) as unknown as UpcomingSession[],
+        recs:              (recs.data       ?? []) as unknown as PendingRec[],
       });
       setLoading(false);
     }
@@ -111,22 +104,22 @@ export default function DashboardPage() {
   }, []);
 
   const kpis = [
-    { label: 'פגישות היום',    value: data.todaySessions,  accent: true  },
-    { label: 'מטופלות פעילות', value: data.activePatients, accent: false },
-    { label: 'פגישות השבוע',   value: data.weekSessions,   accent: false },
-    { label: 'תשלומים פתוחים', value: data.unpaidPayments, accent: false },
+    { label: 'פגישות היום',      value: data.todaySessions,     accent: true  },
+    { label: 'מטופלות פעילות',   value: data.activePatients,    accent: false },
+    { label: 'פגישות השבוע',     value: data.weekSessions,      accent: false },
+    { label: 'הקלטות ממתינות',   value: data.pendingRecordings, accent: false },
   ];
 
   return (
-    <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '40px 36px', direction: 'rtl' }}>
-      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+    <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '40px 40px', direction: 'rtl' }}>
+      <div style={{ maxWidth: 1140, margin: '0 auto' }}>
 
         {/* ── Header ── */}
-        <div style={{ marginBottom: 40 }}>
-          <p style={{ fontSize: 13, color: C.muted, margin: '0 0 8px', fontWeight: 400 }}>
+        <div style={{ marginBottom: 36 }}>
+          <p style={{ fontSize: 13, color: C.muted, margin: '0 0 6px' }}>
             {getGreeting()} · {formatDate()}
           </p>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-0.4px' }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-0.4px' }}>
             מחר אחר – שדה חמד
           </h1>
         </div>
@@ -134,17 +127,13 @@ export default function DashboardPage() {
         {/* ── KPI row ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
           {kpis.map(k => (
-            <div
-              key={k.label}
-              style={{
-                backgroundColor: C.card,
-                borderRadius: 14,
-                border: `1px solid ${k.accent ? C.accentRim : C.border}`,
-                boxShadow: k.accent ? `0 2px 10px rgba(13,148,136,0.08)` : C.shadow,
-                padding: '20px 22px',
-                borderTop: `2px solid ${k.accent ? C.accent : 'transparent'}`,
-              }}
-            >
+            <div key={k.label} style={{
+              backgroundColor: C.card, borderRadius: 14,
+              border: `1px solid ${k.accent ? C.accentRim : C.border}`,
+              boxShadow: k.accent ? '0 2px 10px rgba(13,148,136,0.08)' : C.shadow,
+              padding: '20px 22px',
+              borderTop: `2px solid ${k.accent ? C.accent : 'transparent'}`,
+            }}>
               <p style={{
                 fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 10px',
                 textTransform: 'uppercase', letterSpacing: '0.07em',
@@ -161,147 +150,93 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* ── Two-column layout ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        {/* ── Two-column ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
 
-          {/* Right — Upcoming sessions */}
-          <div style={{
-            backgroundColor: C.card, borderRadius: 16,
-            border: `1px solid ${C.border}`, boxShadow: C.shadow, overflow: 'hidden',
-          }}>
-            <div style={{
-              padding: '20px 26px', borderBottom: `1px solid ${C.border}`,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}>
-              <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>פגישות קרובות</h2>
-              <Link href="/sessions" style={{ fontSize: 12, color: C.accent, textDecoration: 'none', fontWeight: 500 }}>
-                הכל ←
-              </Link>
-            </div>
-            <div>
-              {loading ? (
-                <Skeleton />
-              ) : data.upcomingSessions.length === 0 ? (
-                <Empty text="אין פגישות מתוכננות" />
-              ) : (
-                data.upcomingSessions.map((s, i) => (
-                  <div
-                    key={s.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '13px 26px',
-                      borderBottom: i < data.upcomingSessions.length - 1 ? `1px solid ${C.border}` : 'none',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: C.accent, flexShrink: 0 }} />
-                      <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
-                        {(s.patient as any)?.full_name ?? '—'}
-                      </span>
-                    </div>
-                    <span style={{
-                      fontSize: 12, color: C.sub, backgroundColor: C.bg,
-                      padding: '3px 12px', borderRadius: 20, border: `1px solid ${C.border}`,
-                    }}>
-                      {formatSessionDate(s.date)}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Left — Unpaid payments */}
-          <div style={{
-            backgroundColor: C.card, borderRadius: 16,
-            border: `1px solid ${C.border}`, boxShadow: C.shadow, overflow: 'hidden',
-          }}>
-            <div style={{
-              padding: '20px 26px', borderBottom: `1px solid ${C.border}`,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}>
-              <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>תשלומים פתוחים</h2>
-              <Link href="/payments" style={{ fontSize: 12, color: C.accent, textDecoration: 'none', fontWeight: 500 }}>
-                הכל ←
-              </Link>
-            </div>
-            <div>
-              {loading ? (
-                <Skeleton />
-              ) : data.recentUnpaid.length === 0 ? (
-                <AllClear />
-              ) : (
-                data.recentUnpaid.map((p, i) => (
-                  <div
-                    key={p.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '13px 26px',
-                      borderBottom: i < data.recentUnpaid.length - 1 ? `1px solid ${C.border}` : 'none',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#F59E0B', flexShrink: 0 }} />
-                      <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
-                        {(p.patient as any)?.full_name ?? '—'}
-                      </span>
-                    </div>
-                    <span style={{
-                      fontSize: 12, color: '#92400E', backgroundColor: '#FFFBEB',
-                      padding: '3px 12px', borderRadius: 20, border: '1px solid #FDE68A',
-                    }}>
-                      {p.month}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-            {!loading && data.unpaidPayments > 5 && (
-              <div style={{
-                padding: '10px 26px', borderTop: `1px solid ${C.border}`,
-                backgroundColor: '#FFFBEB',
+          {/* Upcoming sessions */}
+          <SectionCard title="פגישות קרובות" linkHref="/sessions" linkLabel="הכל ←">
+            {loading ? <CardSkeleton /> : data.upcoming.length === 0 ? (
+              <p style={{ padding: '18px 24px', fontSize: 13, color: C.muted }}>אין פגישות מתוכננות</p>
+            ) : data.upcoming.map((s, i) => (
+              <div key={s.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 24px', borderBottom: i < data.upcoming.length - 1 ? `1px solid ${C.border}` : 'none',
               }}>
-                <span style={{ fontSize: 12, color: '#92400E' }}>
-                  + {data.unpaidPayments - 5} נוספים ממתינים לתשלום
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: C.accent, display: 'inline-block', flexShrink: 0 }} />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
+                    {(s.patient as any)?.full_name ?? '—'}
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: 12, color: C.sub, backgroundColor: C.bg,
+                  padding: '3px 11px', borderRadius: 20, border: `1px solid ${C.border}`,
+                }}>
+                  {labelDate(s.date)}
                 </span>
               </div>
-            )}
-          </div>
-        </div>
+            ))}
+          </SectionCard>
 
-        {/* ── Pending recordings alert (only when relevant) ── */}
-        {!loading && data.pendingRecordings > 0 && (
-          <div style={{
-            backgroundColor: C.accentSub, border: `1px solid ${C.accentRim}`,
-            borderRadius: 12, padding: '14px 22px', marginBottom: 20,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: C.accent }} />
-              <span style={{ fontSize: 14, color: '#0F766E', fontWeight: 500 }}>
-                {data.pendingRecordings} הקלטות ממתינות לתמלול
-              </span>
-            </div>
-            <Link href="/recordings" style={{ fontSize: 12, color: C.accent, textDecoration: 'none', fontWeight: 600 }}>
-              לטיפול ←
-            </Link>
-          </div>
-        )}
+          {/* Pending recordings */}
+          <SectionCard title="הקלטות ממתינות לתמלול" linkHref="/recordings" linkLabel="הכל ←">
+            {loading ? <CardSkeleton /> : data.recs.length === 0 ? (
+              <div style={{ padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ fontSize: 15, color: C.accent }}>✓</span>
+                <span style={{ fontSize: 13, color: C.sub, fontWeight: 500 }}>אין הקלטות ממתינות</span>
+              </div>
+            ) : data.recs.map((r, i) => (
+              <div key={r.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 24px', borderBottom: i < data.recs.length - 1 ? `1px solid ${C.border}` : 'none',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#F59E0B', display: 'inline-block', flexShrink: 0 }} />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
+                    {(r.patient as any)?.full_name ?? '—'}
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: 12, color: C.sub, backgroundColor: C.bg,
+                  padding: '3px 11px', borderRadius: 20, border: `1px solid ${C.border}`,
+                }}>
+                  {labelRecDate(r.recorded_at)}
+                </span>
+              </div>
+            ))}
+          </SectionCard>
+        </div>
 
         {/* ── Quick nav ── */}
         <div style={{
-          backgroundColor: C.card, borderRadius: 16,
-          border: `1px solid ${C.border}`, boxShadow: C.shadow, padding: '22px 26px',
+          backgroundColor: C.card, borderRadius: 14,
+          border: `1px solid ${C.border}`, boxShadow: C.shadow, padding: '20px 24px',
         }}>
           <p style={{
-            fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 16px',
+            fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 14px',
             textTransform: 'uppercase', letterSpacing: '0.08em',
           }}>
             ניווט מהיר
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
             {shortcuts.map(s => (
-              <ShortcutLink key={s.href} href={s.href} label={s.label} />
+              <Link key={s.href} href={s.href} style={{
+                display: 'block', padding: '12px 8px', borderRadius: 9,
+                border: `1px solid ${C.border}`, textAlign: 'center',
+                fontSize: 13, fontWeight: 500, color: C.sub, textDecoration: 'none',
+                transition: 'all 0.12s',
+              }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.backgroundColor = C.accentSub; el.style.borderColor = C.accentRim; el.style.color = C.accent;
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.backgroundColor = ''; el.style.borderColor = C.border; el.style.color = C.sub;
+                }}
+              >
+                {s.label}
+              </Link>
             ))}
           </div>
         </div>
@@ -311,58 +246,37 @@ export default function DashboardPage() {
   );
 }
 
-function ShortcutLink({ href, label }: { href: string; label: string }) {
+function SectionCard({ title, linkHref, linkLabel, children }: {
+  title: string; linkHref: string; linkLabel: string; children: React.ReactNode;
+}) {
   return (
-    <Link
-      href={href}
-      style={{
-        display: 'block', padding: '13px 8px', borderRadius: 10,
-        border: `1px solid ${C.border}`, textAlign: 'center',
-        fontSize: 13, fontWeight: 500, color: C.sub,
-        textDecoration: 'none', transition: 'all 0.12s',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.backgroundColor = C.accentSub;
-        e.currentTarget.style.borderColor     = C.accentRim;
-        e.currentTarget.style.color           = C.accent;
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.backgroundColor = '';
-        e.currentTarget.style.borderColor     = C.border;
-        e.currentTarget.style.color           = C.sub;
-      }}
-    >
-      {label}
-    </Link>
+    <div style={{
+      backgroundColor: C.card, borderRadius: 14,
+      border: `1px solid ${C.border}`, boxShadow: C.shadow, overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '18px 24px', borderBottom: `1px solid ${C.border}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>{title}</h2>
+        <Link href={linkHref} style={{ fontSize: 12, color: C.accent, textDecoration: 'none', fontWeight: 500 }}>
+          {linkLabel}
+        </Link>
+      </div>
+      {children}
+    </div>
   );
 }
 
-function Skeleton() {
+function CardSkeleton() {
   return (
-    <div style={{ padding: '16px 26px' }}>
+    <div style={{ padding: '16px 24px' }}>
       {[80, 60, 72].map((w, i) => (
         <div key={i} style={{
-          height: 13, borderRadius: 6, backgroundColor: '#F1F5F9',
-          marginBottom: i < 2 ? 12 : 0, width: `${w}%`,
+          height: 13, backgroundColor: '#F1F5F9', borderRadius: 6,
+          width: `${w}%`, marginBottom: i < 2 ? 12 : 0,
         }} />
       ))}
-    </div>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return (
-    <div style={{ padding: '24px 26px', color: C.muted, fontSize: 13 }}>
-      {text}
-    </div>
-  );
-}
-
-function AllClear() {
-  return (
-    <div style={{ padding: '24px 26px', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: 15, color: C.accent }}>✓</span>
-      <p style={{ fontSize: 13, color: C.sub, margin: 0, fontWeight: 500 }}>כל התשלומים עדכניים</p>
     </div>
   );
 }

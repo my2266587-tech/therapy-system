@@ -5,6 +5,11 @@ import SidebarLayout from '@/components/layout/SidebarLayout';
 export const metadata: Metadata = {
   title: 'מחר אחר – שדה חמד',
   description: 'מערכת ניהול טיפולית',
+  icons: {
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
