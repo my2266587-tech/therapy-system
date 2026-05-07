@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import QuarterlyForm from '@/components/quarterly/QuarterlyForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import { formatGregorian, hebrewLong, hebrewDayMonth, PRESETS } from '@/lib/dateUtils';
 import type { QuarterlySummary } from '@/types';
 
 const C = {
@@ -136,7 +137,7 @@ export default function QuarterlyPage() {
                       {(r.patient as any)?.full_name ?? '—'}
                     </p>
                     <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0' }}>
-                      {r.date}
+                      {r.date} · {hebrewDayMonth(r.date)}
                       {r.duration_minutes ? ` · ${r.duration_minutes} דק'` : ''}
                       {r.participants ? ` · ${r.participants}` : ''}
                     </p>
@@ -226,7 +227,7 @@ function QuarterlyDetail({ record }: { record: QuarterlySummary }) {
       }}>
         <MetaItem label="מטופלת" value={(record.patient as any)?.full_name ?? '—'} />
         <MetaItem label="רבעון" value={quarterOf(record.date)} />
-        <MetaItem label="תאריך" value={record.date} />
+        <MetaItem label="תאריך" value={`${formatGregorian(record.date, PRESETS.long)} · ${hebrewLong(record.date)}`} />
         {record.duration_minutes && <MetaItem label="משך" value={`${record.duration_minutes} דק'`} />}
       </div>
 

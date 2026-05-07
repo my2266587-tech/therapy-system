@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import SummaryForm from '@/components/summaries/SummaryForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import { formatGregorian, hebrewLong, hebrewDayMonth, PRESETS } from '@/lib/dateUtils';
 import type { SessionSummary, Recording } from '@/types';
 
 const C = {
@@ -300,7 +301,7 @@ export default function SummariesPage() {
                         {fromRecording && <SourceBadge label="מהקלטה" />}
                       </div>
                       <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>
-                        {r.date}
+                        {r.date} · {hebrewDayMonth(r.date)}
                         {r.start_time && ` · ${r.start_time}${r.end_time ? ` – ${r.end_time}` : ''}`}
                         {r.duration_minutes ? ` · ${r.duration_minutes} דק'` : ''}
                       </p>
@@ -419,7 +420,7 @@ function SummaryDetail({ summary, recording, onEdit }: {
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center' }}>
-          <MetaItem label="תאריך" value={summary.date} />
+          <MetaItem label="תאריך" value={`${formatGregorian(summary.date, PRESETS.long)} · ${hebrewLong(summary.date)}`} />
           {summary.start_time && (
             <MetaItem label="שעות" value={`${summary.start_time}${summary.end_time ? ` – ${summary.end_time}` : ''}`} />
           )}

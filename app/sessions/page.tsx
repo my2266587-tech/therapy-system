@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import { hebrewDay, hebrewDayMonth } from '@/lib/dateUtils';
 import type { Session } from '@/types';
 
 const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
@@ -18,9 +19,12 @@ const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; 
 function formatDate(dateStr: string) {
   const today = new Date().toISOString().slice(0, 10);
   const tom   = new Date(); tom.setDate(tom.getDate() + 1);
-  if (dateStr === today)                      return 'היום';
-  if (dateStr === tom.toISOString().slice(0, 10)) return 'מחר';
-  return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
+  const greg  = (() => {
+    if (dateStr === today)                          return 'היום';
+    if (dateStr === tom.toISOString().slice(0, 10)) return 'מחר';
+    return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
+  })();
+  return `${greg} · ${hebrewDayMonth(dateStr)}`;
 }
 
 export default function SessionsPage() {
@@ -133,6 +137,9 @@ function SessionsInner() {
                     </p>
                     <p style={{ fontSize: 10, color: '#94A3B8', margin: '2px 0 0', textTransform: 'uppercase' }}>
                       {new Date(r.date).toLocaleDateString('he-IL', { month: 'short' })}
+                    </p>
+                    <p style={{ fontSize: 9, color: '#94A3B8', margin: '2px 0 0', fontWeight: 500 }}>
+                      {hebrewDay(r.date)}
                     </p>
                   </div>
 

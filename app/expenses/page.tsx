@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import { hebrewDay } from '@/lib/dateUtils';
 import type { PrivateExpense } from '@/types';
 
 const C = {
@@ -128,6 +129,9 @@ export default function ExpensesPage() {
                   </p>
                   <p style={{ fontSize: 10, color: C.muted, margin: '2px 0 0', textTransform: 'uppercase' }}>
                     {new Date(r.date).toLocaleDateString('he-IL', { month: 'short' })}
+                  </p>
+                  <p style={{ fontSize: 9, color: C.muted, margin: '2px 0 0', fontWeight: 500 }}>
+                    {hebrewDay(r.date)}
                   </p>
                 </div>
 

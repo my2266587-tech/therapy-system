@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { formatGregorian, hebrewLong, hebrewDayMonth, PRESETS } from '@/lib/dateUtils';
 
 interface UpcomingSession {
   id: string;
@@ -33,22 +34,25 @@ function getGreeting() {
 }
 
 function formatDate() {
-  return new Date().toLocaleDateString('he-IL', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  });
+  const now = new Date();
+  return `${formatGregorian(now, PRESETS.weekday)} · ${hebrewLong(now)}`;
 }
 
 function labelDate(dateStr: string) {
   const today = new Date().toISOString().slice(0, 10);
   const tom   = new Date(); tom.setDate(tom.getDate() + 1);
-  if (dateStr === today) return 'היום';
-  if (dateStr === tom.toISOString().slice(0, 10)) return 'מחר';
-  return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
+  const head  = (() => {
+    if (dateStr === today) return 'היום';
+    if (dateStr === tom.toISOString().slice(0, 10)) return 'מחר';
+    return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
+  })();
+  return `${head} · ${hebrewDayMonth(dateStr)}`;
 }
 
 function labelRecDate(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString('he-IL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const greg = d.toLocaleDateString('he-IL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return `${greg} · ${hebrewDayMonth(d)}`;
 }
 
 const C = {

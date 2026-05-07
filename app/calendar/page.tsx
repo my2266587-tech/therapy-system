@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
+import { formatGregorian, formatHebrew, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
 import type { Session } from '@/types';
 
 const C = {
@@ -45,6 +46,16 @@ function startOfWeek(d: Date) {
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function sameDay(a: Date, b: Date) { return ymd(a) === ymd(b); }
 
+interface DndProps {
+  draggingId:  string | null;
+  dragOverYmd: string | null;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragEnd:   () => void;
+  onDragOver:  (e: React.DragEvent, target: string) => void;
+  onDragLeave: (target: string) => void;
+  onDrop:      (e: React.DragEvent, target: string) => void;
+}
+
 export default function CalendarPage() {
   const [view,    setView]    = useState<View>('month');
   const [anchor,  setAnchor]  = useState(new Date());
@@ -59,6 +70,10 @@ export default function CalendarPage() {
 
   const [editing, setEditing] = useState<Session | null>(null);
   const [open,    setOpen]    = useState(false);
+
+  /* Drag-and-drop */
+  const [draggingId,  setDraggingId]  = useState<string | null>(null);
+  const [dragOverYmd, setDragOverYmd] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,15 +113,24 @@ export default function CalendarPage() {
     return m;
   }, [filtered]);
 
-  /* Header label per view */
-  const headerLabel = useMemo(() => {
-    if (view === 'month') return `${MONTH_LABELS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+  /* Header label per view: { greg, hebrew } */
+  const headerLabel = useMemo<{ greg: string; hebrew: string }>(() => {
+    if (view === 'month') {
+      return {
+        greg:   formatGregorian(anchor, PRESETS.monthYear),
+        hebrew: formatHebrew(anchor, PRESETS.monthYear),
+      };
+    }
     if (view === 'week') {
       const a = startOfWeek(anchor);
       const b = addDays(a, 6);
-      return `${a.getDate()} ${MONTH_LABELS[a.getMonth()].slice(0,3)} – ${b.getDate()} ${MONTH_LABELS[b.getMonth()].slice(0,3)} ${b.getFullYear()}`;
+      const greg = `${a.getDate()} ${MONTH_LABELS[a.getMonth()].slice(0,3)} – ${b.getDate()} ${MONTH_LABELS[b.getMonth()].slice(0,3)} ${b.getFullYear()}`;
+      return { greg, hebrew: `${formatHebrew(a, PRESETS.monthShort)} – ${formatHebrew(b, PRESETS.monthYear)}` };
     }
-    return anchor.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return {
+      greg:   formatGregorian(anchor, PRESETS.weekday),
+      hebrew: hebrewLong(anchor),
+    };
   }, [view, anchor]);
 
   function nav(dir: 1 | -1 | 0) {
@@ -125,6 +149,41 @@ export default function CalendarPage() {
   function openEdit(s: Session) {
     setEditing(s);
     setOpen(true);
+  }
+
+  /* DnD: move session to a new date (date only — time stays the same) */
+  async function moveSession(id: string, newDate: string) {
+    const prev = records;
+    setRecords(rs => rs.map(r => r.id === id ? { ...r, date: newDate } : r));
+    const { error } = await supabase.from('sessions').update({ date: newDate }).eq('id', id);
+    if (error) { setRecords(prev); alert('שגיאה בעדכון הפגישה'); return; }
+    await load();
+  }
+
+  function onEventDragStart(e: React.DragEvent, id: string) {
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  }
+  function onEventDragEnd() {
+    setDraggingId(null); setDragOverYmd(null);
+  }
+  function onCellDragOver(e: React.DragEvent, target: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverYmd !== target) setDragOverYmd(target);
+  }
+  function onCellDragLeave(target: string) {
+    if (dragOverYmd === target) setDragOverYmd(null);
+  }
+  function onCellDrop(e: React.DragEvent, target: string) {
+    e.preventDefault();
+    const id = draggingId ?? e.dataTransfer.getData('text/plain');
+    setDraggingId(null); setDragOverYmd(null);
+    if (!id) return;
+    const cur = records.find(r => r.id === id);
+    if (!cur || cur.date === target) return;
+    moveSession(id, target);
   }
 
   return (
@@ -187,8 +246,13 @@ export default function CalendarPage() {
           </div>
 
           {/* Header label */}
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, minWidth: 140 }}>
-            {headerLabel}
+          <div style={{ minWidth: 200 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.text, lineHeight: 1.2 }}>
+              {headerLabel.greg}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: C.muted, marginTop: 2 }}>
+              {headerLabel.hebrew}
+            </div>
           </div>
 
           {/* View switcher */}
@@ -248,8 +312,20 @@ export default function CalendarPage() {
           backgroundColor: C.card, borderRadius: 14,
           border: `1px solid ${C.border}`, boxShadow: C.shadow, overflow: 'hidden',
         }}>
-          {view === 'month' && <MonthView anchor={anchor} byDate={byDate} onDayClick={openCreate} onEvent={openEdit} loading={loading} />}
-          {view === 'week'  && <WeekView  anchor={anchor} byDate={byDate} onDayClick={openCreate} onEvent={openEdit} loading={loading} />}
+          {view === 'month' && (
+            <MonthView
+              anchor={anchor} byDate={byDate} loading={loading}
+              onDayClick={openCreate} onEvent={openEdit}
+              dnd={{ draggingId, dragOverYmd, onDragStart: onEventDragStart, onDragEnd: onEventDragEnd, onDragOver: onCellDragOver, onDragLeave: onCellDragLeave, onDrop: onCellDrop }}
+            />
+          )}
+          {view === 'week'  && (
+            <WeekView
+              anchor={anchor} byDate={byDate} loading={loading}
+              onDayClick={openCreate} onEvent={openEdit}
+              dnd={{ draggingId, dragOverYmd, onDragStart: onEventDragStart, onDragEnd: onEventDragEnd, onDragOver: onCellDragOver, onDragLeave: onCellDragLeave, onDrop: onCellDrop }}
+            />
+          )}
           {view === 'day'   && <DayView   anchor={anchor} byDate={byDate} onAdd={openCreate}      onEvent={openEdit} loading={loading} />}
         </div>
       </div>
@@ -262,9 +338,10 @@ export default function CalendarPage() {
 }
 
 /* ── Month view ── */
-function MonthView({ anchor, byDate, onDayClick, onEvent, loading }: {
+function MonthView({ anchor, byDate, onDayClick, onEvent, loading, dnd }: {
   anchor: Date; byDate: Map<string, SessionWithRel[]>;
   onDayClick: (d: string) => void; onEvent: (s: Session) => void; loading: boolean;
+  dnd: DndProps;
 }) {
   const cells = useMemo(() => {
     const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -289,26 +366,32 @@ function MonthView({ anchor, byDate, onDayClick, onEvent, loading }: {
       {/* Cells */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
         {cells.map((d, i) => {
-          const inMonth = d.getMonth() === m;
-          const isToday = sameDay(d, today);
-          const events  = byDate.get(ymd(d)) ?? [];
-          const row     = Math.floor(i / 7);
+          const inMonth   = d.getMonth() === m;
+          const isToday   = sameDay(d, today);
+          const events    = byDate.get(ymd(d)) ?? [];
+          const row       = Math.floor(i / 7);
+          const isDropTgt = dnd.dragOverYmd === ymd(d);
           return (
             <div
               key={i}
               onClick={() => onDayClick(ymd(d))}
+              onDragOver={(e) => dnd.onDragOver(e, ymd(d))}
+              onDragLeave={() => dnd.onDragLeave(ymd(d))}
+              onDrop={(e) => dnd.onDrop(e, ymd(d))}
               style={{
                 minHeight: 110, padding: '8px 8px 6px',
                 borderBottom: row < 5 ? `1px solid ${C.border}` : 'none',
                 borderLeft:   i % 7 < 6 ? `1px solid ${C.border}` : 'none',
-                backgroundColor: !inMonth ? '#FAFCFF' : C.card,
+                backgroundColor: isDropTgt ? C.accentSub : (!inMonth ? '#FAFCFF' : C.card),
+                outline: isDropTgt ? `2px solid ${C.accent}` : 'none',
+                outlineOffset: isDropTgt ? '-2px' : 0,
                 cursor: 'pointer', transition: 'background-color 0.1s',
                 position: 'relative',
               }}
-              onMouseEnter={e => { if (inMonth) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = inMonth ? C.card : '#FAFCFF'; }}
+              onMouseEnter={e => { if (inMonth && !isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
+              onMouseLeave={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = inMonth ? C.card : '#FAFCFF'; }}
             >
-              <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   width: 24, height: 24, borderRadius: '50%',
@@ -318,10 +401,22 @@ function MonthView({ anchor, byDate, onDayClick, onEvent, loading }: {
                 }}>
                   {d.getDate()}
                 </span>
+                <span style={{
+                  fontSize: 10, color: inMonth ? C.muted : '#CBD5E1',
+                  fontWeight: 500, lineHeight: 1, paddingTop: 6,
+                }}>
+                  {hebrewDay(d)}
+                </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {events.slice(0, 3).map(ev => (
-                  <EventChip key={ev.id} ev={ev} onClick={(e) => { e.stopPropagation(); onEvent(ev); }} />
+                  <EventChip
+                    key={ev.id} ev={ev}
+                    dragging={dnd.draggingId === ev.id}
+                    onDragStart={(e) => dnd.onDragStart(e, ev.id)}
+                    onDragEnd={dnd.onDragEnd}
+                    onClick={(e) => { e.stopPropagation(); onEvent(ev); }}
+                  />
                 ))}
                 {events.length > 3 && (
                   <div style={{ fontSize: 11, color: C.muted, paddingRight: 4 }}>
@@ -339,9 +434,10 @@ function MonthView({ anchor, byDate, onDayClick, onEvent, loading }: {
 }
 
 /* ── Week view ── */
-function WeekView({ anchor, byDate, onDayClick, onEvent, loading }: {
+function WeekView({ anchor, byDate, onDayClick, onEvent, loading, dnd }: {
   anchor: Date; byDate: Map<string, SessionWithRel[]>;
   onDayClick: (d: string) => void; onEvent: (s: Session) => void; loading: boolean;
+  dnd: DndProps;
 }) {
   const days = useMemo(() => {
     const start = startOfWeek(anchor);
@@ -371,29 +467,45 @@ function WeekView({ anchor, byDate, onDayClick, onEvent, loading }: {
               }}>
                 {d.getDate()}
               </div>
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 3, fontWeight: 500 }}>
+                {hebrewDay(d)}
+              </div>
             </div>
           );
         })}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', minHeight: 540 }}>
         {days.map((d, i) => {
-          const events = byDate.get(ymd(d)) ?? [];
+          const events    = byDate.get(ymd(d)) ?? [];
+          const isDropTgt = dnd.dragOverYmd === ymd(d);
           return (
             <div
               key={i}
               onClick={() => onDayClick(ymd(d))}
+              onDragOver={(e) => dnd.onDragOver(e, ymd(d))}
+              onDragLeave={() => dnd.onDragLeave(ymd(d))}
+              onDrop={(e) => dnd.onDrop(e, ymd(d))}
               style={{
                 padding: 8, borderLeft: i < 6 ? `1px solid ${C.border}` : 'none',
                 cursor: 'pointer', transition: 'background-color 0.1s',
                 display: 'flex', flexDirection: 'column', gap: 4,
+                backgroundColor: isDropTgt ? C.accentSub : 'transparent',
+                outline: isDropTgt ? `2px solid ${C.accent}` : 'none',
+                outlineOffset: isDropTgt ? '-2px' : 0,
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#FAFCFF'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
+              onMouseEnter={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = '#FAFCFF'; }}
+              onMouseLeave={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
             >
               {events.length === 0 ? (
                 <div style={{ fontSize: 11, color: C.muted, padding: 4, opacity: 0.6 }}>—</div>
               ) : events.map(ev => (
-                <EventCard key={ev.id} ev={ev} onClick={(e) => { e.stopPropagation(); onEvent(ev); }} />
+                <EventCard
+                  key={ev.id} ev={ev}
+                  dragging={dnd.draggingId === ev.id}
+                  onDragStart={(e) => dnd.onDragStart(e, ev.id)}
+                  onDragEnd={dnd.onDragEnd}
+                  onClick={(e) => { e.stopPropagation(); onEvent(ev); }}
+                />
               ))}
             </div>
           );
@@ -419,7 +531,10 @@ function DayView({ anchor, byDate, onAdd, onEvent, loading }: {
             {DAY_LABELS[anchor.getDay()] === 'ש׳' ? 'שבת' : `יום ${DAY_LABELS[anchor.getDay()]}`}
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>
-            {anchor.toLocaleDateString('he-IL', { day: 'numeric', month: 'long' })}
+            {formatGregorian(anchor, { day: 'numeric', month: 'long' })}
+          </div>
+          <div style={{ fontSize: 13, color: C.sub, marginTop: 2, fontWeight: 500 }}>
+            {hebrewLong(anchor)}
           </div>
         </div>
         <button
@@ -456,18 +571,28 @@ function DayView({ anchor, byDate, onAdd, onEvent, loading }: {
 }
 
 /* ── Event UI primitives ── */
-function EventChip({ ev, onClick }: { ev: SessionWithRel; onClick: (e: React.MouseEvent) => void }) {
+function EventChip({ ev, onClick, dragging, onDragStart, onDragEnd }: {
+  ev: SessionWithRel;
+  onClick: (e: React.MouseEvent) => void;
+  dragging: boolean;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+}) {
   const st = SESSION_STATUS[ev.status] ?? SESSION_STATUS.planned;
   return (
     <button
       onClick={onClick}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       title={`${ev.patient?.full_name ?? '—'} · ${ev.start_time}–${ev.end_time}`}
       style={{
         display: 'flex', alignItems: 'center', gap: 5,
         padding: '3px 7px', borderRadius: 5, fontSize: 11, fontWeight: 500,
         backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
-        cursor: 'pointer', textAlign: 'right', width: '100%',
+        cursor: dragging ? 'grabbing' : 'grab', textAlign: 'right', width: '100%',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        opacity: dragging ? 0.4 : 1, transition: 'opacity 0.1s',
       }}
     >
       <span style={{ width: 4, height: 4, borderRadius: '50%', backgroundColor: st.dot, flexShrink: 0 }} />
@@ -478,17 +603,27 @@ function EventChip({ ev, onClick }: { ev: SessionWithRel; onClick: (e: React.Mou
   );
 }
 
-function EventCard({ ev, onClick }: { ev: SessionWithRel; onClick: (e: React.MouseEvent) => void }) {
+function EventCard({ ev, onClick, dragging, onDragStart, onDragEnd }: {
+  ev: SessionWithRel;
+  onClick: (e: React.MouseEvent) => void;
+  dragging: boolean;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+}) {
   const st = SESSION_STATUS[ev.status] ?? SESSION_STATUS.planned;
   return (
     <button
       onClick={onClick}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
         padding: '6px 8px', borderRadius: 6, fontSize: 11,
         backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
-        cursor: 'pointer', textAlign: 'right', width: '100%',
+        cursor: dragging ? 'grabbing' : 'grab', textAlign: 'right', width: '100%',
         borderRight: `3px solid ${st.dot}`,
+        opacity: dragging ? 0.4 : 1, transition: 'opacity 0.1s',
       }}
     >
       <span style={{ fontWeight: 700, fontSize: 11 }}>

@@ -9,6 +9,7 @@ import PatientForm from '@/components/patients/PatientForm';
 import {
   housingTypeLabels, maritalStatusLabels,
 } from '@/lib/labels';
+import { formatGregorian, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
 import type { Patient, Session, SessionSummary, Recording } from '@/types';
 
 const C = {
@@ -318,6 +319,9 @@ function SessionsTab({ sessions }: { sessions: Session[] }) {
               <p style={{ fontSize: 9, color: '#94A3B8', margin: '2px 0 0', textTransform: 'uppercase' }}>
                 {new Date(s.date).toLocaleDateString('he-IL', { month: 'short' })}
               </p>
+              <p style={{ fontSize: 8, color: '#94A3B8', margin: '1px 0 0', fontWeight: 500 }}>
+                {hebrewDay(s.date)}
+              </p>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 500, color: '#1A2332', margin: 0 }}>
@@ -371,7 +375,9 @@ function SummariesTab({ summaries, onOpen }: { summaries: SessionSummary[]; onOp
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontWeight: 600, fontSize: 14, color: '#1A2332' }}>{s.date}</span>
+              <span style={{ fontWeight: 600, fontSize: 14, color: '#1A2332' }}>
+                {s.date} · {hebrewLong(s.date)}
+              </span>
               {s.start_time && (
                 <span style={{ fontSize: 12, color: '#94A3B8' }}>· {s.start_time} – {s.end_time}</span>
               )}
@@ -431,7 +437,7 @@ function SummaryDetail({ summary, recordings }: { summary: SessionSummary; recor
         padding: '14px 16px', marginBottom: 18,
         backgroundColor: '#F8FAFC', borderRadius: 10, border: '1px solid #E8ECF0',
       }}>
-        <MetaItem label="תאריך" value={summary.date} />
+        <MetaItem label="תאריך" value={`${formatGregorian(summary.date, PRESETS.long)} · ${hebrewLong(summary.date)}`} />
         {summary.start_time && (
           <MetaItem label="שעות" value={`${summary.start_time} – ${summary.end_time ?? ''}`} />
         )}
