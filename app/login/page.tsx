@@ -58,7 +58,7 @@ export default function LoginPage() {
         </div>
 
         <p style={{ color: '#64748B', fontSize: 13, marginBottom: 32 }}>
-          מערכת ניהול טיפולי · שדה חמד
+          מערכת ניהול - שדה חמד
         </p>
 
         {error && (

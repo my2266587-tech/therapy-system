@@ -36,7 +36,7 @@ export default function Logo({ size = 32, variant = 'mark' }: LogoProps) {
             marginTop: 4,
             letterSpacing: '0.06em',
           }}>
-            כדאי להגשים
+            לבחור להגשים
           </div>
         </div>
       </div>
