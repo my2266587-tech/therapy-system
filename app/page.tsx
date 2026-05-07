@@ -3,23 +3,27 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import StatCard from '@/components/ui/StatCard';
 
-interface DashboardStats {
-  activePatients: number;
-  todaySessions: number;
-  weekSessions: number;
-  pendingRecordings: number;
-  unpaidPayments: number;
+interface Session {
+  id: string;
+  date: string;
+  patient: { full_name: string } | null;
 }
 
-function getWeekRange() {
-  const today = new Date();
-  const day   = today.getDay();
-  const sun   = new Date(today); sun.setDate(today.getDate() - day);
-  const sat   = new Date(sun);  sat.setDate(sun.getDate() + 6);
-  const fmt   = (d: Date) => d.toISOString().slice(0, 10);
-  return { start: fmt(sun), end: fmt(sat) };
+interface Payment {
+  id: string;
+  month: string;
+  patient: { full_name: string } | null;
+}
+
+interface DashboardData {
+  todaySessions:     number;
+  activePatients:    number;
+  weekSessions:      number;
+  unpaidPayments:    number;
+  pendingRecordings: number;
+  upcomingSessions:  Session[];
+  recentUnpaid:      Payment[];
 }
 
 function getGreeting() {
@@ -35,204 +39,337 @@ function formatDate() {
   });
 }
 
-const quickActions = [
-  { href: '/patients',   label: 'הוספת מטופלת',  desc: 'רישום מטופלת חדשה' },
-  { href: '/sessions',   label: 'הוספת פגישה',   desc: 'קביעת פגישה חדשה' },
-  { href: '/summaries',  label: 'סיכום פגישה',   desc: 'תיעוד מפגש' },
-  { href: '/recordings', label: 'הקלטה חדשה',    desc: 'הוספת הקלטה' },
-  { href: '/expenses',   label: 'הוצאה חדשה',    desc: 'רישום הוצאה' },
-];
+function formatSessionDate(dateStr: string) {
+  const today    = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomStr   = tomorrow.toISOString().slice(0, 10);
+  if (dateStr === today)  return 'היום';
+  if (dateStr === tomStr) return 'מחר';
+  return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
+}
 
-const modules = [
-  { href: '/patients',   label: 'מטופלות',         desc: 'ניהול רשימת המטופלות' },
-  { href: '/staff',      label: 'אנשי צוות',        desc: 'רכזות, מדריכות ומטפלות' },
-  { href: '/sessions',   label: 'יומן פגישות',      desc: 'תיאום ומעקב פגישות' },
-  { href: '/summaries',  label: 'סיכומי פגישות',    desc: 'תיעוד מפגשים' },
-  { href: '/recordings', label: 'הקלטות ותמלולים',  desc: 'ניהול הקלטות קוליות' },
-  { href: '/quarterly',  label: 'סיכום רבעון',      desc: 'סקירות תקופתיות' },
-  { href: '/payments',   label: 'תשלומי שיראל',     desc: 'מעקב תשלומים חודשיים' },
-  { href: '/expenses',   label: 'הוצאות פרטיות',    desc: 'הוצאות לפי מטופלת' },
-  { href: '/petty-cash', label: 'מעשר געלט',        desc: 'הוצאות קטנות שוטפות' },
+const C = {
+  bg:        '#F6F8FB',
+  card:      '#FFFFFF',
+  border:    '#E8ECF0',
+  accent:    '#0D9488',
+  accentSub: '#F0FDF9',
+  accentRim: '#99F6E4',
+  text:      '#1A2332',
+  sub:       '#64748B',
+  muted:     '#94A3B8',
+  shadow:    '0 1px 4px rgba(0,0,0,0.05)',
+  shadowMd:  '0 2px 10px rgba(0,0,0,0.06)',
+};
+
+const shortcuts = [
+  { href: '/patients',   label: 'מטופלות'    },
+  { href: '/sessions',   label: 'פגישות'     },
+  { href: '/summaries',  label: 'סיכומים'    },
+  { href: '/payments',   label: 'תשלומים'    },
+  { href: '/expenses',   label: 'הוצאות'     },
+  { href: '/recordings', label: 'הקלטות'     },
 ];
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    activePatients: 0, todaySessions: 0, weekSessions: 0,
-    pendingRecordings: 0, unpaidPayments: 0,
+  const [data, setData] = useState<DashboardData>({
+    todaySessions: 0, activePatients: 0, weekSessions: 0,
+    unpaidPayments: 0, pendingRecordings: 0,
+    upcomingSessions: [], recentUnpaid: [],
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       const today = new Date().toISOString().slice(0, 10);
-      const { start, end } = getWeekRange();
+      const sun   = new Date(); sun.setDate(sun.getDate() - sun.getDay());
+      const sat   = new Date(sun); sat.setDate(sun.getDate() + 6);
+      const fmt   = (d: Date) => d.toISOString().slice(0, 10);
 
-      const [patients, todaySess, weekSess, recordings, payments] = await Promise.all([
+      const [pts, todaySess, weekSess, recs, pays, upcoming, unpaid] = await Promise.all([
         supabase.from('patients').select('id', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', today).eq('status', 'planned'),
-        supabase.from('sessions').select('id', { count: 'exact', head: true }).gte('date', start).lte('date', end).eq('status', 'planned'),
+        supabase.from('sessions').select('id', { count: 'exact', head: true }).gte('date', fmt(sun)).lte('date', fmt(sat)).eq('status', 'planned'),
         supabase.from('recordings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('payments').select('id', { count: 'exact', head: true }).eq('is_paid', false),
+        supabase.from('sessions').select('id, date, patient:patient_id(full_name)').gte('date', today).eq('status', 'planned').order('date').limit(6),
+        supabase.from('payments').select('id, month, patient:patient_id(full_name)').eq('is_paid', false).order('month', { ascending: false }).limit(5),
       ]);
 
-      setStats({
-        activePatients:    patients.count   ?? 0,
-        todaySessions:     todaySess.count  ?? 0,
-        weekSessions:      weekSess.count   ?? 0,
-        pendingRecordings: recordings.count ?? 0,
-        unpaidPayments:    payments.count   ?? 0,
+      setData({
+        todaySessions:     todaySess.count ?? 0,
+        activePatients:    pts.count       ?? 0,
+        weekSessions:      weekSess.count  ?? 0,
+        unpaidPayments:    pays.count      ?? 0,
+        pendingRecordings: recs.count      ?? 0,
+        upcomingSessions:  (upcoming.data  ?? []) as unknown as Session[],
+        recentUnpaid:      (unpaid.data    ?? []) as unknown as Payment[],
       });
       setLoading(false);
     }
     load();
   }, []);
 
-  const statCards = [
-    { title: 'מטופלות פעילות',  value: loading ? '—' : stats.activePatients,    description: 'סה"כ מטופלות פעילות',    accent: true },
-    { title: 'פגישות היום',      value: loading ? '—' : stats.todaySessions,     description: 'מתוכננות להיום' },
-    { title: 'פגישות השבוע',     value: loading ? '—' : stats.weekSessions,      description: 'מתוכננות לשבוע זה' },
-    { title: 'הקלטות ממתינות',   value: loading ? '—' : stats.pendingRecordings, description: 'ממתינות לתמלול' },
-    { title: 'תשלומים פתוחים',   value: loading ? '—' : stats.unpaidPayments,    description: 'חודשים שטרם שולמו' },
+  const kpis = [
+    { label: 'פגישות היום',    value: data.todaySessions,  accent: true  },
+    { label: 'מטופלות פעילות', value: data.activePatients, accent: false },
+    { label: 'פגישות השבוע',   value: data.weekSessions,   accent: false },
+    { label: 'תשלומים פתוחים', value: data.unpaidPayments, accent: false },
   ];
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '40px 36px', direction: 'rtl' }}>
+      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
 
-      {/* ── Page header ── */}
-      <div style={{ marginBottom: 32 }}>
-        <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 4px' }}>
-          {getGreeting()} · {formatDate()}
-        </p>
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0F172A', margin: 0 }}>
-          מחר אחר – שדה חמד
-        </h1>
-        <p style={{ fontSize: 14, color: '#64748B', margin: '4px 0 0' }}>
-          מערכת ניהול טיפולית · מבט כולל על מצב המערכת
-        </p>
-      </div>
-
-      {/* ── Stat cards ── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: 16,
-          marginBottom: 28,
-        }}
-      >
-        {statCards.map((stat) => (
-          <StatCard key={stat.title} {...stat} />
-        ))}
-      </div>
-
-      {/* ── Quick actions ── */}
-      <div
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 12,
-          border: '1px solid #E2E8F0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          padding: '20px 22px',
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 3, height: 16, borderRadius: 2, backgroundColor: '#0F766E' }} />
-          <h2 style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', margin: 0 }}>פעולות מהירות</h2>
+        {/* ── Header ── */}
+        <div style={{ marginBottom: 40 }}>
+          <p style={{ fontSize: 13, color: C.muted, margin: '0 0 8px', fontWeight: 400 }}>
+            {getGreeting()} · {formatDate()}
+          </p>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-0.4px' }}>
+            מחר אחר – שדה חמד
+          </h1>
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-            gap: 10,
-          }}
-        >
-          {quickActions.map((action) => (
-            <Link
-              key={action.href}
-              href={action.href}
+
+        {/* ── KPI row ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+          {kpis.map(k => (
+            <div
+              key={k.label}
               style={{
-                display: 'block',
-                borderRadius: 10,
-                padding: '14px 12px',
-                textAlign: 'center',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                textDecoration: 'none',
-                transition: 'all 0.12s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#F0FDFA';
-                e.currentTarget.style.borderColor = '#99F6E4';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(15,118,110,0.10)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#F8FAFC';
-                e.currentTarget.style.borderColor = '#E2E8F0';
-                e.currentTarget.style.transform = '';
-                e.currentTarget.style.boxShadow = '';
+                backgroundColor: C.card,
+                borderRadius: 16,
+                border: `1px solid ${k.accent ? C.accentRim : C.border}`,
+                boxShadow: k.accent ? `0 2px 12px rgba(13,148,136,0.10)` : C.shadow,
+                padding: '24px 26px',
+                borderTop: `3px solid ${k.accent ? C.accent : C.border}`,
               }}
             >
-              <p style={{ fontSize: 13, fontWeight: 600, margin: '0 0 2px', color: '#0F766E' }}>
-                {action.label}
+              <p style={{
+                fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 14px',
+                textTransform: 'uppercase', letterSpacing: '0.07em',
+              }}>
+                {k.label}
               </p>
-              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{action.desc}</p>
-            </Link>
+              <p style={{
+                fontSize: 40, fontWeight: 700, margin: 0, lineHeight: 1,
+                color: k.accent ? C.accent : C.text,
+              }}>
+                {loading ? '—' : k.value}
+              </p>
+            </div>
           ))}
         </div>
-      </div>
 
-      {/* ── Module grid ── */}
-      <div
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 12,
-          border: '1px solid #E2E8F0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          padding: '20px 22px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 3, height: 16, borderRadius: 2, backgroundColor: '#0F766E' }} />
-          <h2 style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', margin: 0 }}>מודולים</h2>
+        {/* ── Two-column layout ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+
+          {/* Right — Upcoming sessions */}
+          <div style={{
+            backgroundColor: C.card, borderRadius: 16,
+            border: `1px solid ${C.border}`, boxShadow: C.shadow, overflow: 'hidden',
+          }}>
+            <div style={{
+              padding: '20px 26px', borderBottom: `1px solid ${C.border}`,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>פגישות קרובות</h2>
+              <Link href="/sessions" style={{ fontSize: 12, color: C.accent, textDecoration: 'none', fontWeight: 500 }}>
+                הכל ←
+              </Link>
+            </div>
+            <div>
+              {loading ? (
+                <Skeleton />
+              ) : data.upcomingSessions.length === 0 ? (
+                <Empty text="אין פגישות מתוכננות" />
+              ) : (
+                data.upcomingSessions.map((s, i) => (
+                  <div
+                    key={s.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '13px 26px',
+                      borderBottom: i < data.upcomingSessions.length - 1 ? `1px solid ${C.border}` : 'none',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: C.accent, flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
+                        {(s.patient as any)?.full_name ?? '—'}
+                      </span>
+                    </div>
+                    <span style={{
+                      fontSize: 12, color: C.sub, backgroundColor: C.bg,
+                      padding: '3px 12px', borderRadius: 20, border: `1px solid ${C.border}`,
+                    }}>
+                      {formatSessionDate(s.date)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Left — Unpaid payments */}
+          <div style={{
+            backgroundColor: C.card, borderRadius: 16,
+            border: `1px solid ${C.border}`, boxShadow: C.shadow, overflow: 'hidden',
+          }}>
+            <div style={{
+              padding: '20px 26px', borderBottom: `1px solid ${C.border}`,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>תשלומים פתוחים</h2>
+              <Link href="/payments" style={{ fontSize: 12, color: C.accent, textDecoration: 'none', fontWeight: 500 }}>
+                הכל ←
+              </Link>
+            </div>
+            <div>
+              {loading ? (
+                <Skeleton />
+              ) : data.recentUnpaid.length === 0 ? (
+                <AllClear />
+              ) : (
+                data.recentUnpaid.map((p, i) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '13px 26px',
+                      borderBottom: i < data.recentUnpaid.length - 1 ? `1px solid ${C.border}` : 'none',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#F59E0B', flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
+                        {(p.patient as any)?.full_name ?? '—'}
+                      </span>
+                    </div>
+                    <span style={{
+                      fontSize: 12, color: '#92400E', backgroundColor: '#FFFBEB',
+                      padding: '3px 12px', borderRadius: 20, border: '1px solid #FDE68A',
+                    }}>
+                      {p.month}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            {!loading && data.unpaidPayments > 5 && (
+              <div style={{
+                padding: '10px 26px', borderTop: `1px solid ${C.border}`,
+                backgroundColor: '#FFFBEB',
+              }}>
+                <span style={{ fontSize: 12, color: '#92400E' }}>
+                  + {data.unpaidPayments - 5} נוספים ממתינים לתשלום
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 10,
-          }}
-        >
-          {modules.map((mod) => (
-            <Link
-              key={mod.href}
-              href={mod.href}
-              style={{
-                display: 'block',
-                padding: '14px 16px',
-                borderRadius: 10,
-                border: '1px solid #E2E8F0',
-                textDecoration: 'none',
-                transition: 'all 0.12s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#F0FDFA';
-                e.currentTarget.style.borderColor = '#99F6E4';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '';
-                e.currentTarget.style.borderColor = '#E2E8F0';
-              }}
-            >
-              <p style={{ fontWeight: 600, fontSize: 13, margin: '0 0 2px', color: '#0F172A' }}>
-                {mod.label}
-              </p>
-              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{mod.desc}</p>
+
+        {/* ── Pending recordings alert (only when relevant) ── */}
+        {!loading && data.pendingRecordings > 0 && (
+          <div style={{
+            backgroundColor: C.accentSub, border: `1px solid ${C.accentRim}`,
+            borderRadius: 12, padding: '14px 22px', marginBottom: 20,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: C.accent }} />
+              <span style={{ fontSize: 14, color: '#0F766E', fontWeight: 500 }}>
+                {data.pendingRecordings} הקלטות ממתינות לתמלול
+              </span>
+            </div>
+            <Link href="/recordings" style={{ fontSize: 12, color: C.accent, textDecoration: 'none', fontWeight: 600 }}>
+              לטיפול ←
             </Link>
-          ))}
+          </div>
+        )}
+
+        {/* ── Quick nav ── */}
+        <div style={{
+          backgroundColor: C.card, borderRadius: 16,
+          border: `1px solid ${C.border}`, boxShadow: C.shadow, padding: '22px 26px',
+        }}>
+          <p style={{
+            fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 16px',
+            textTransform: 'uppercase', letterSpacing: '0.08em',
+          }}>
+            ניווט מהיר
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
+            {shortcuts.map(s => (
+              <ShortcutLink key={s.href} href={s.href} label={s.label} />
+            ))}
+          </div>
         </div>
+
       </div>
+    </div>
+  );
+}
+
+function ShortcutLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: 'block', padding: '13px 8px', borderRadius: 10,
+        border: `1px solid ${C.border}`, textAlign: 'center',
+        fontSize: 13, fontWeight: 500, color: C.sub,
+        textDecoration: 'none', transition: 'all 0.12s',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.backgroundColor = C.accentSub;
+        e.currentTarget.style.borderColor     = C.accentRim;
+        e.currentTarget.style.color           = C.accent;
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.backgroundColor = '';
+        e.currentTarget.style.borderColor     = C.border;
+        e.currentTarget.style.color           = C.sub;
+      }}
+    >
+      {label}
+    </Link>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div style={{ padding: '20px 26px' }}>
+      {[1, 2, 3].map(i => (
+        <div key={i} style={{
+          height: 14, borderRadius: 6, backgroundColor: '#F1F5F9',
+          marginBottom: 14, width: i === 2 ? '60%' : '80%',
+        }} />
+      ))}
+    </div>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return (
+    <div style={{ padding: '36px 26px', textAlign: 'center', color: C.muted, fontSize: 13 }}>
+      {text}
+    </div>
+  );
+}
+
+function AllClear() {
+  return (
+    <div style={{ padding: '36px 26px', textAlign: 'center' }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: '50%',
+        backgroundColor: C.accentSub, border: `1px solid ${C.accentRim}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        margin: '0 auto 10px', fontSize: 16, color: C.accent,
+      }}>
+        ✓
+      </div>
+      <p style={{ fontSize: 13, color: C.sub, margin: 0, fontWeight: 500 }}>כל התשלומים עדכניים</p>
     </div>
   );
 }

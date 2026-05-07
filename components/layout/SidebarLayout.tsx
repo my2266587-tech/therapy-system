@@ -229,7 +229,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#F8FAFC' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#F6F8FB' }}>
 
       {/* ── Mobile overlay backdrop ── */}
       {mobileOpen && (
