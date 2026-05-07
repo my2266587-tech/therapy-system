@@ -7,8 +7,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import PatientForm from '@/components/patients/PatientForm';
 import {
-  patientStatusLabels, housingTypeLabels, maritalStatusLabels,
-  sessionStatusLabels, recordingStatusLabels,
+  housingTypeLabels, maritalStatusLabels,
 } from '@/lib/labels';
 import type { Patient, Session, SessionSummary, Recording } from '@/types';
 
@@ -23,9 +22,9 @@ const TABS = ['פרטים', 'פגישות', 'סיכומי פגישות', 'מסמ
 type Tab = typeof TABS[number];
 
 const STATUS_STYLE: Record<string, { label: string; bg: string; text: string; border: string }> = {
-  active:     { label: 'פעילה',     bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4' },
-  inactive:   { label: 'לא פעילה',  bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0' },
-  discharged: { label: 'שוחררה',    bg: '#FEF2F2', text: '#DC2626', border: '#FECACA' },
+  active:     { label: 'פעילה',       bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4' },
+  inactive:   { label: 'לא פעילה',    bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0' },
+  discharged: { label: 'שוחררה',      bg: '#FEF2F2', text: '#DC2626', border: '#FECACA' },
   waitlist:   { label: 'רשימת המתנה', bg: '#FFFBEB', text: '#92400E', border: '#FDE68A' },
 };
 
@@ -59,6 +58,7 @@ export default function PatientDetailPage() {
   const [activeTab,  setActiveTab]  = useState<Tab>('פרטים');
   const [loading,    setLoading]    = useState(true);
   const [editOpen,   setEditOpen]   = useState(false);
+  const [openSummary, setOpenSummary] = useState<SessionSummary | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,8 +122,6 @@ export default function PatientDetailPage() {
           padding: '28px 32px', marginBottom: 18,
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-
-            {/* Left: avatar + info */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
               <div style={{
                 width: 64, height: 64, borderRadius: 16, flexShrink: 0,
@@ -156,7 +154,6 @@ export default function PatientDetailPage() {
               </div>
             </div>
 
-            {/* Edit button */}
             <button
               onClick={() => setEditOpen(true)}
               style={{
@@ -204,7 +201,6 @@ export default function PatientDetailPage() {
           backgroundColor: C.card, borderRadius: 16,
           border: `1px solid ${C.border}`, boxShadow: C.shadow, overflow: 'hidden',
         }}>
-          {/* Tab bar */}
           <div style={{
             display: 'flex', overflowX: 'auto',
             borderBottom: `1px solid ${C.border}`,
@@ -231,14 +227,13 @@ export default function PatientDetailPage() {
             })}
           </div>
 
-          {/* Tab content */}
           <div style={{ padding: '24px 28px' }}>
             {activeTab === 'פרטים'          && <DetailsTab patient={patient} />}
             {activeTab === 'פגישות'         && <SessionsTab sessions={sessions} />}
-            {activeTab === 'סיכומי פגישות'  && <SummariesTab summaries={summaries} />}
-            {activeTab === 'מסמכים'         && <ComingSoon label="מסמכים" />}
+            {activeTab === 'סיכומי פגישות'  && <SummariesTab summaries={summaries} onOpen={setOpenSummary} />}
+            {activeTab === 'מסמכים'         && <DocumentsTab />}
             {activeTab === 'משימות'         && <ComingSoon label="משימות" />}
-            {activeTab === 'הערות'          && <ComingSoon label="הערות" />}
+            {activeTab === 'הערות'          && <NotesTab notes={patient.notes} />}
           </div>
         </div>
 
@@ -250,6 +245,15 @@ export default function PatientDetailPage() {
           onSave={() => { setEditOpen(false); load(); }}
           onCancel={() => setEditOpen(false)}
         />
+      </Modal>
+
+      <Modal
+        open={openSummary !== null}
+        onClose={() => setOpenSummary(null)}
+        title="סיכום פגישה"
+        size="xl"
+      >
+        {openSummary && <SummaryDetail summary={openSummary} recordings={recordings} />}
       </Modal>
     </div>
   );
@@ -269,7 +273,6 @@ function DetailsTab({ patient }: { patient: Patient }) {
     ['שם אבא',       patient.father_name],
     ['שם אמא',       patient.mother_name],
     ['מקום במשפחה',  patient.family_position],
-    ['הערות',        patient.notes],
   ];
 
   const visible = rows.filter(([, v]) => !!v);
@@ -340,39 +343,231 @@ function SessionsTab({ sessions }: { sessions: Session[] }) {
   );
 }
 
-function SummariesTab({ summaries }: { summaries: SessionSummary[] }) {
+function SummariesTab({ summaries, onOpen }: { summaries: SessionSummary[]; onOpen: (s: SessionSummary) => void }) {
   if (summaries.length === 0) return <Empty msg="אין סיכומים רשומים" />;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {summaries.map(s => (
-        <div key={s.id} style={{
-          borderRadius: 12, padding: '18px 20px',
-          border: `1px solid #E8ECF0`, borderRight: `3px solid #0D9488`,
-          backgroundColor: '#FAFCFF',
-        }}>
+        <div
+          key={s.id}
+          onClick={() => onOpen(s)}
+          style={{
+            borderRadius: 12, padding: '16px 18px', cursor: 'pointer',
+            border: `1px solid #E8ECF0`, borderRight: `3px solid #0D9488`,
+            backgroundColor: '#FAFCFF', transition: 'all 0.12s',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = '#F0FDF9';
+            e.currentTarget.style.borderColor = '#99F6E4';
+            e.currentTarget.style.borderRightColor = '#0D9488';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(13,148,136,0.08)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = '#FAFCFF';
+            e.currentTarget.style.borderColor = '#E8ECF0';
+            e.currentTarget.style.borderRightColor = '#0D9488';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontWeight: 600, fontSize: 14, color: '#1A2332' }}>{s.date}</span>
-            {s.start_time && (
-              <span style={{ fontSize: 12, color: '#94A3B8' }}>{s.start_time} – {s.end_time}</span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontWeight: 600, fontSize: 14, color: '#1A2332' }}>{s.date}</span>
+              {s.start_time && (
+                <span style={{ fontSize: 12, color: '#94A3B8' }}>· {s.start_time} – {s.end_time}</span>
+              )}
+              {s.duration_minutes && (
+                <span style={{ fontSize: 12, color: '#94A3B8' }}>· {s.duration_minutes} דק'</span>
+              )}
+            </div>
+            <span style={{
+              fontSize: 11, fontWeight: 500, color: '#0D9488',
+              padding: '2px 8px', borderRadius: 12,
+              backgroundColor: '#F0FDF9', border: '1px solid #99F6E4',
+            }}>
+              פתח →
+            </span>
           </div>
           {s.main_topics && (
-            <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 6px' }}>
-              <span style={{ fontWeight: 600, color: '#1A2332' }}>נושאים: </span>{s.main_topics}
+            <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 4px', lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600, color: '#1A2332' }}>נושאים: </span>
+              {s.main_topics.slice(0, 100)}{s.main_topics.length > 100 ? '…' : ''}
             </p>
           )}
-          {s.treatment_actions && (
-            <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 6px' }}>
-              <span style={{ fontWeight: 600, color: '#1A2332' }}>מה עשינו: </span>{s.treatment_actions}
-            </p>
-          )}
-          {s.progress && (
-            <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-              <span style={{ fontWeight: 600, color: '#1A2332' }}>התקדמות: </span>{s.progress}
+          {!s.main_topics && s.treatment_actions && (
+            <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600, color: '#1A2332' }}>מה עשינו: </span>
+              {s.treatment_actions.slice(0, 100)}{s.treatment_actions.length > 100 ? '…' : ''}
             </p>
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function SummaryDetail({ summary, recordings }: { summary: SessionSummary; recordings: Recording[] }) {
+  const fromRecording = summary.session_id
+    ? recordings.find(r => r.id === summary.session_id)
+    : null;
+
+  const sections: { label: string; value: string | null | undefined; tone?: 'accent' }[] = [
+    { label: 'נושאים עיקריים', value: summary.main_topics },
+    { label: 'מה עשינו בפגישה', value: summary.treatment_actions },
+    { label: 'מצב נוכחי', value: summary.current_state },
+    { label: 'התקדמות', value: summary.progress, tone: 'accent' },
+    { label: 'צעדים הבאים', value: summary.next_steps },
+    { label: 'משימות שניתנו', value: summary.tasks_given },
+    { label: 'קשיים', value: summary.difficulties },
+    { label: 'הערות', value: summary.notes },
+  ];
+
+  const visible = sections.filter(s => s.value && s.value.trim());
+
+  return (
+    <div style={{ direction: 'rtl' }}>
+      {/* Meta header */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center',
+        padding: '14px 16px', marginBottom: 18,
+        backgroundColor: '#F8FAFC', borderRadius: 10, border: '1px solid #E8ECF0',
+      }}>
+        <MetaItem label="תאריך" value={summary.date} />
+        {summary.start_time && (
+          <MetaItem label="שעות" value={`${summary.start_time} – ${summary.end_time ?? ''}`} />
+        )}
+        {summary.duration_minutes && (
+          <MetaItem label="משך" value={`${summary.duration_minutes} דק'`} />
+        )}
+        {fromRecording && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500,
+            backgroundColor: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE',
+            marginRight: 'auto',
+          }}>
+            🎙 נוצר מהקלטה
+          </span>
+        )}
+      </div>
+
+      {visible.length === 0 ? (
+        <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '20px 0' }}>
+          אין תוכן בסיכום זה
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {visible.map(s => (
+            <div key={s.label} style={{
+              borderRadius: 10, padding: '14px 16px',
+              backgroundColor: s.tone === 'accent' ? '#F0FDF9' : '#FFFFFF',
+              border: `1px solid ${s.tone === 'accent' ? '#99F6E4' : '#E8ECF0'}`,
+            }}>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: s.tone === 'accent' ? '#0D9488' : '#94A3B8',
+                letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8,
+              }}>
+                {s.label}
+              </div>
+              <div style={{
+                fontSize: 14, color: '#1A2332', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+              }}>
+                {s.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2332', marginTop: 2 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function DocumentsTab() {
+  return (
+    <div>
+      {/* Upload header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 16,
+      }}>
+        <div>
+          <p style={{ fontSize: 14, fontWeight: 600, color: '#1A2332', margin: 0 }}>מסמכים</p>
+          <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>0 מסמכים</p>
+        </div>
+        <button
+          onClick={() => alert('העלאת מסמכים תופעל בקרוב')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+            borderRadius: 9, padding: '9px 16px', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
+            transition: 'opacity 0.15s',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+        >
+          <UploadIcon />
+          העלאת מסמך
+        </button>
+      </div>
+
+      {/* Empty state — drop zone */}
+      <div
+        onClick={() => alert('העלאת מסמכים תופעל בקרוב')}
+        style={{
+          borderRadius: 14, padding: '48px 24px', textAlign: 'center',
+          backgroundColor: '#F8FAFC', border: '2px dashed #CBD5E1',
+          cursor: 'pointer', transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.backgroundColor = '#F0FDF9';
+          e.currentTarget.style.borderColor = '#99F6E4';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.backgroundColor = '#F8FAFC';
+          e.currentTarget.style.borderColor = '#CBD5E1';
+        }}
+      >
+        <div style={{
+          width: 48, height: 48, borderRadius: 12, margin: '0 auto 12px',
+          backgroundColor: '#FFFFFF', border: '1px solid #E8ECF0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#0D9488',
+        }}>
+          <UploadIcon size={20} />
+        </div>
+        <p style={{ fontSize: 14, fontWeight: 600, color: '#1A2332', margin: '0 0 4px' }}>
+          גררי קובץ לכאן או לחצי להעלאה
+        </p>
+        <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>
+          PDF · Word · תמונות · עד 10MB
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function NotesTab({ notes }: { notes: string | null }) {
+  if (!notes || !notes.trim()) return <Empty msg="אין הערות" />;
+  return (
+    <div style={{
+      borderRadius: 12, padding: '18px 20px',
+      backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
+      whiteSpace: 'pre-wrap', fontSize: 14, color: '#1A2332', lineHeight: 1.6,
+    }}>
+      {notes}
     </div>
   );
 }
@@ -408,5 +603,16 @@ function Empty({ msg }: { msg: string }) {
       </div>
       <p style={{ fontSize: 13, color: '#94A3B8' }}>{msg}</p>
     </div>
+  );
+}
+
+function UploadIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
   );
 }

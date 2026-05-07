@@ -41,7 +41,9 @@
       "Bash(vercel alias *)",
       "Bash(curl -s \"https://api.vercel.com/v9/projects?limit=20\" -H \"Authorization: Bearer vca_87NJnNEOPqAYEJL3FOCZM8348f2o5Aceo239j1nHS6ptjtljVp2BJpjQ\")",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p.get\\('name'\\), '->', p.get\\('alias', [{}]\\)[0].get\\('domain',''\\) if p.get\\('alias'\\) else ''\\) for p in d.get\\('projects',[]\\)]\")",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(cd \"/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system\" && ls components/ui/)",
+      "Read(//c/c/Users/user1/Desktop/אוטומציה/מחר אחר - יהודית/therapy-system/components/**)"
     ],
     "additionalDirectories": [
       "C:\\Users\\user1\\AppData\\Roaming\\com.vercel.cli\\Data"
