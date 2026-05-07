@@ -132,27 +132,27 @@ export default function DashboardPage() {
         </div>
 
         {/* ── KPI row ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
           {kpis.map(k => (
             <div
               key={k.label}
               style={{
                 backgroundColor: C.card,
-                borderRadius: 16,
+                borderRadius: 14,
                 border: `1px solid ${k.accent ? C.accentRim : C.border}`,
-                boxShadow: k.accent ? `0 2px 12px rgba(13,148,136,0.10)` : C.shadow,
-                padding: '24px 26px',
-                borderTop: `3px solid ${k.accent ? C.accent : C.border}`,
+                boxShadow: k.accent ? `0 2px 10px rgba(13,148,136,0.08)` : C.shadow,
+                padding: '20px 22px',
+                borderTop: `2px solid ${k.accent ? C.accent : 'transparent'}`,
               }}
             >
               <p style={{
-                fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 14px',
+                fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 10px',
                 textTransform: 'uppercase', letterSpacing: '0.07em',
               }}>
                 {k.label}
               </p>
               <p style={{
-                fontSize: 40, fontWeight: 700, margin: 0, lineHeight: 1,
+                fontSize: 36, fontWeight: 700, margin: 0, lineHeight: 1,
                 color: k.accent ? C.accent : C.text,
               }}>
                 {loading ? '—' : k.value}
@@ -339,11 +339,11 @@ function ShortcutLink({ href, label }: { href: string; label: string }) {
 
 function Skeleton() {
   return (
-    <div style={{ padding: '20px 26px' }}>
-      {[1, 2, 3].map(i => (
+    <div style={{ padding: '16px 26px' }}>
+      {[80, 60, 72].map((w, i) => (
         <div key={i} style={{
-          height: 14, borderRadius: 6, backgroundColor: '#F1F5F9',
-          marginBottom: 14, width: i === 2 ? '60%' : '80%',
+          height: 13, borderRadius: 6, backgroundColor: '#F1F5F9',
+          marginBottom: i < 2 ? 12 : 0, width: `${w}%`,
         }} />
       ))}
     </div>
@@ -352,7 +352,7 @@ function Skeleton() {
 
 function Empty({ text }: { text: string }) {
   return (
-    <div style={{ padding: '36px 26px', textAlign: 'center', color: C.muted, fontSize: 13 }}>
+    <div style={{ padding: '24px 26px', color: C.muted, fontSize: 13 }}>
       {text}
     </div>
   );
@@ -360,15 +360,8 @@ function Empty({ text }: { text: string }) {
 
 function AllClear() {
   return (
-    <div style={{ padding: '36px 26px', textAlign: 'center' }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: '50%',
-        backgroundColor: C.accentSub, border: `1px solid ${C.accentRim}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto 10px', fontSize: 16, color: C.accent,
-      }}>
-        ✓
-      </div>
+    <div style={{ padding: '24px 26px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ fontSize: 15, color: C.accent }}>✓</span>
       <p style={{ fontSize: 13, color: C.sub, margin: 0, fontWeight: 500 }}>כל התשלומים עדכניים</p>
     </div>
   );

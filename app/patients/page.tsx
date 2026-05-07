@@ -1,27 +1,35 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import PageHeader from '@/components/ui/PageHeader';
 import Modal from '@/components/ui/Modal';
-import Badge from '@/components/ui/Badge';
 import PatientForm from '@/components/patients/PatientForm';
-import { patientStatusLabels, housingTypeLabels } from '@/lib/labels';
 import type { Patient } from '@/types';
 
-const thStyle: React.CSSProperties = {
-  padding: '10px 16px',
-  textAlign: 'right',
-  fontWeight: 600,
-  fontSize: 11,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  color: '#64748B',
-  whiteSpace: 'nowrap',
-  backgroundColor: '#F8FAFC',
-  borderBottom: '1px solid #E2E8F0',
+const AVATAR_COLORS = [
+  { bg: '#E6F7F5', text: '#0D9488', border: '#99F6E4' },
+  { bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE' },
+  { bg: '#FEF9C3', text: '#A16207', border: '#FDE68A' },
+  { bg: '#FCE7F3', text: '#BE185D', border: '#FBCFE8' },
+  { bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0' },
+  { bg: '#FFF7ED', text: '#C2410C', border: '#FDBA74' },
+];
+
+const STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+  active:   { label: 'פעילה',     bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4', dot: '#0D9488' },
+  inactive: { label: 'לא פעילה', bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0', dot: '#CBD5E1' },
+  waiting:  { label: 'ממתינה',    bg: '#FFFBEB', text: '#92400E', border: '#FDE68A', dot: '#F59E0B' },
 };
+
+function avatarColor(name: string) {
+  return AVATAR_COLORS[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
+}
+
+function initials(name: string) {
+  const p = name.trim().split(/\s+/);
+  return p.length >= 2 ? p[0][0] + p[1][0] : name.slice(0, 2);
+}
 
 export default function PatientsPage() {
   const [records, setRecords] = useState<Patient[]>([]);
@@ -34,16 +42,13 @@ export default function PatientsPage() {
     setLoading(true);
     const { data } = await supabase
       .from('patients')
-      .select('*, coordinator:coordinator_id(full_name), staff_member:staff_id(full_name)')
+      .select('*, coordinator:coordinator_id(full_name)')
       .order('full_name');
     setRecords((data ?? []) as Patient[]);
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  function openAdd()             { setEditing(null); setOpen(true); }
-  function openEdit(r: Patient)  { setEditing(r);    setOpen(true); }
 
   async function handleDelete(id: string) {
     if (!confirm('האם למחוק את המטופלת? פעולה זו אינה ניתנת לביטול.')) return;
@@ -57,193 +62,240 @@ export default function PatientsPage() {
   );
 
   return (
-    <div className="max-w-screen-xl mx-auto px-6 py-8">
-      <PageHeader
-        title="מטופלות"
-        description="ניהול רשימת המטופלות במערכת"
-        buttonLabel="הוסף מטופלת"
-        onAdd={openAdd}
-      />
+    <div style={{ backgroundColor: '#F6F8FB', minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
+      <div style={{ maxWidth: 860, margin: '0 auto' }}>
 
-      {/* Search */}
-      <div className="mb-5">
-        <input
-          type="search"
-          placeholder="חיפוש לפי שם או טלפון..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{
-            border: '1px solid #E2E8F0',
-            borderRadius: 8,
-            padding: '8px 14px',
-            fontSize: 14,
-            backgroundColor: '#FFFFFF',
-            color: '#0F172A',
-            width: 280,
-            outline: 'none',
-          }}
-          onFocus={e => {
-            e.target.style.borderColor = '#0F766E';
-            e.target.style.boxShadow = '0 0 0 3px rgba(15,118,110,0.10)';
-          }}
-          onBlur={e => {
-            e.target.style.borderColor = '#E2E8F0';
-            e.target.style.boxShadow = '';
-          }}
-        />
+        {/* ── Header ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A2332', margin: '0 0 3px', letterSpacing: '-0.3px' }}>
+              מטופלות
+            </h1>
+            <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+              {loading ? '' : `${records.length} מטופלות במערכת`}
+            </p>
+          </div>
+          <button
+            onClick={() => { setEditing(null); setOpen(true); }}
+            style={{
+              backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+              borderRadius: 10, padding: '10px 20px', fontSize: 14,
+              fontWeight: 600, cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+          >
+            + הוסף מטופלת
+          </button>
+        </div>
+
+        {/* ── Search ── */}
+        <div style={{ marginBottom: 16 }}>
+          <input
+            type="search"
+            placeholder="חיפוש לפי שם או טלפון..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              border: '1px solid #E8ECF0', borderRadius: 9, padding: '9px 16px',
+              fontSize: 14, backgroundColor: '#FFFFFF', color: '#1A2332',
+              width: 260, outline: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              transition: 'border-color 0.15s, box-shadow 0.15s',
+            }}
+            onFocus={e => {
+              e.target.style.borderColor = '#0D9488';
+              e.target.style.boxShadow = '0 0 0 3px rgba(13,148,136,0.09)';
+            }}
+            onBlur={e => {
+              e.target.style.borderColor = '#E8ECF0';
+              e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
+            }}
+          />
+        </div>
+
+        {/* ── List ── */}
+        {loading ? (
+          <ListSkeleton />
+        ) : filtered.length === 0 ? (
+          <EmptyState search={search} onAdd={() => { setEditing(null); setOpen(true); }} />
+        ) : (
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: 16,
+            border: '1px solid #E8ECF0', boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
+            overflow: 'hidden',
+          }}>
+            {filtered.map((r, i) => (
+              <PatientRow
+                key={r.id}
+                patient={r}
+                divider={i < filtered.length - 1}
+                onEdit={() => { setEditing(r); setOpen(true); }}
+                onDelete={() => handleDelete(r.id)}
+              />
+            ))}
+            <div style={{
+              padding: '10px 24px', fontSize: 12, color: '#94A3B8',
+              backgroundColor: '#F8FAFC', borderTop: '1px solid #F1F5F9',
+            }}>
+              {filtered.length} מטופלות{search && ` · תוצאות עבור "${search}"`}
+            </div>
+          </div>
+        )}
       </div>
 
-      {loading ? (
-        <LoadingState />
-      ) : filtered.length === 0 ? (
-        <EmptyState onAdd={openAdd} hasSearch={search.length > 0} />
-      ) : (
-        <div
-          className="bg-white rounded-xl overflow-x-auto"
-          style={{ border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
-        >
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                {['שם מטופלת', 'טלפון', 'סטטוס', 'רכזת', 'סוג דירה', 'פעולות'].map(h => (
-                  <th key={h} style={thStyle}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r, i) => (
-                <tr
-                  key={r.id}
-                  style={{ borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none' }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-                >
-                  <td className="px-4 py-3.5">
-                    <Link
-                      href={`/patients/${r.id}`}
-                      className="font-semibold hover:underline"
-                      style={{ color: '#0F766E' }}
-                    >
-                      {r.full_name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>
-                    {r.phone ?? '—'}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <Badge value={r.status} labels={patientStatusLabels} />
-                  </td>
-                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>
-                    {(r.coordinator as any)?.full_name ?? '—'}
-                  </td>
-                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>
-                    {r.housing_type ? (housingTypeLabels[r.housing_type] ?? r.housing_type) : '—'}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <ActionButtons
-                      onEdit={() => openEdit(r)}
-                      onDelete={() => handleDelete(r.id)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div
-            className="px-4 py-3 text-xs"
-            style={{ color: '#94A3B8', borderTop: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}
-          >
-            {filtered.length} מטופלות{search && ` · תוצאות עבור "${search}"`}
-          </div>
-        </div>
-      )}
-
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'עריכת מטופלת' : 'הוספת מטופלת'}
-        size="xl"
-      >
-        <PatientForm
-          initial={editing}
-          onSave={() => { setOpen(false); load(); }}
-          onCancel={() => setOpen(false)}
-        />
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'עריכת מטופלת' : 'הוספת מטופלת'} size="xl">
+        <PatientForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} />
       </Modal>
     </div>
   );
 }
 
-function LoadingState() {
-  return (
-    <div
-      className="bg-white rounded-xl flex items-center justify-center py-20"
-      style={{ border: '1px solid #E2E8F0' }}
-    >
-      <div className="text-center">
-        <div
-          className="w-8 h-8 rounded-full border-2 border-t-transparent mx-auto mb-3 animate-spin"
-          style={{ borderColor: '#0F766E', borderTopColor: 'transparent' }}
-        />
-        <p className="text-sm" style={{ color: '#94A3B8' }}>טוען נתונים...</p>
-      </div>
-    </div>
-  );
-}
+function PatientRow({ patient, divider, onEdit, onDelete }: {
+  patient: Patient; divider: boolean; onEdit: () => void; onDelete: () => void;
+}) {
+  const router = useRouter();
+  const col    = avatarColor(patient.full_name);
+  const ini    = initials(patient.full_name);
+  const st     = STATUS[patient.status] ?? STATUS.inactive;
 
-function EmptyState({ onAdd, hasSearch }: { onAdd: () => void; hasSearch: boolean }) {
   return (
     <div
-      className="bg-white rounded-xl p-16 text-center"
-      style={{ border: '1px solid #E2E8F0' }}
+      role="button"
+      onClick={() => router.push(`/patients/${patient.id}`)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 16,
+        padding: '14px 24px', cursor: 'pointer',
+        borderBottom: divider ? '1px solid #F1F5F9' : 'none',
+        transition: 'background-color 0.1s',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
     >
-      <div
-        className="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4"
-        style={{ backgroundColor: '#F1F5F9', color: '#94A3B8' }}
-      >
-        {hasSearch ? '○' : '○'}
+      {/* Avatar */}
+      <div style={{
+        width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
+        backgroundColor: col.bg, border: `1.5px solid ${col.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 14, fontWeight: 700, color: col.text, letterSpacing: '0.03em',
+      }}>
+        {ini}
       </div>
-      {hasSearch ? (
-        <p className="text-sm" style={{ color: '#64748B' }}>לא נמצאו תוצאות לחיפוש</p>
-      ) : (
-        <>
-          <p className="font-semibold mb-1" style={{ color: '#0F172A' }}>אין מטופלות עדיין</p>
-          <p className="text-sm mb-4" style={{ color: '#94A3B8' }}>התחילי בהוספת המטופלת הראשונה</p>
-          <button
-            onClick={onAdd}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-            style={{ backgroundColor: '#0F766E' }}
-          >
-            + הוסף מטופלת
-          </button>
-        </>
+
+      {/* Name + phone */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2332', margin: 0, lineHeight: 1.3 }}>
+          {patient.full_name}
+        </p>
+        {patient.phone && (
+          <p style={{ fontSize: 12, color: '#94A3B8', margin: '3px 0 0', direction: 'ltr', textAlign: 'right' }}>
+            {patient.phone}
+          </p>
+        )}
+      </div>
+
+      {/* Coordinator */}
+      {(patient.coordinator as any)?.full_name && (
+        <span style={{ fontSize: 12, color: '#94A3B8', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          {(patient.coordinator as any).full_name}
+        </span>
       )}
+
+      {/* Status */}
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
+        padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+        backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
+      }}>
+        <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: st.dot, display: 'inline-block' }} />
+        {st.label}
+      </span>
+
+      {/* Actions */}
+      <div
+        style={{ display: 'flex', gap: 6, flexShrink: 0 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <RowBtn onClick={onEdit}   label="ערוך" hoverColor="#0D9488" />
+        <RowBtn onClick={onDelete} label="מחק"  hoverColor="#DC2626" />
+      </div>
     </div>
   );
 }
 
-function ActionButtons({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+function RowBtn({ onClick, label, hoverColor }: { onClick: () => void; label: string; hoverColor: string }) {
   return (
-    <div className="flex gap-3">
-      <button
-        onClick={onEdit}
-        className="text-xs font-medium"
-        style={{ color: '#0F766E' }}
-        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-        onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}
-      >
-        ערוך
-      </button>
-      <button
-        onClick={onDelete}
-        className="text-xs font-medium"
-        style={{ color: '#DC2626' }}
-        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-        onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}
-      >
-        מחק
-      </button>
+    <button
+      onClick={onClick}
+      style={{
+        padding: '5px 13px', borderRadius: 7,
+        border: '1px solid #E8ECF0', backgroundColor: '#F8FAFC',
+        color: '#64748B', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+        transition: 'all 0.12s',
+      }}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = hoverColor + '55';
+        el.style.backgroundColor = hoverColor + '0A';
+        el.style.color = hoverColor;
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = '#E8ECF0';
+        el.style.backgroundColor = '#F8FAFC';
+        el.style.color = '#64748B';
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div style={{ backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #E8ECF0', overflow: 'hidden' }}>
+      {[1, 2, 3, 4, 5].map((i, idx) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', gap: 16, padding: '14px 24px',
+          borderBottom: idx < 4 ? '1px solid #F1F5F9' : 'none',
+        }}>
+          <div style={{ width: 42, height: 42, borderRadius: '50%', backgroundColor: '#F1F5F9', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ height: 13, backgroundColor: '#F1F5F9', borderRadius: 6, width: '35%', marginBottom: 7 }} />
+            <div style={{ height: 10, backgroundColor: '#F8FAFC', borderRadius: 6, width: '20%' }} />
+          </div>
+          <div style={{ height: 22, width: 65, backgroundColor: '#F1F5F9', borderRadius: 20 }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ search, onAdd }: { search: string; onAdd: () => void }) {
+  return (
+    <div style={{
+      backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #E8ECF0',
+      padding: '52px 24px', textAlign: 'center',
+    }}>
+      <p style={{ fontSize: 16, fontWeight: 600, color: '#1A2332', margin: '0 0 6px' }}>
+        {search ? 'לא נמצאו תוצאות' : 'אין מטופלות עדיין'}
+      </p>
+      <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px' }}>
+        {search ? `לא נמצאו מטופלות עבור "${search}"` : 'התחילי בהוספת המטופלת הראשונה'}
+      </p>
+      {!search && (
+        <button
+          onClick={onAdd}
+          style={{
+            backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+            borderRadius: 9, padding: '10px 22px', fontSize: 14,
+            fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          + הוסף מטופלת
+        </button>
+      )}
     </div>
   );
 }

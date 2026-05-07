@@ -59,15 +59,15 @@ const navItems = [
 /* ── Colour constants (sidebar is dark) ── */
 const SB = {
   bg:           '#0F172A',
-  itemText:     'rgba(255,255,255,0.65)',
-  itemHover:    'rgba(255,255,255,0.06)',
+  itemText:     'rgba(255,255,255,0.55)',
+  itemHover:    'rgba(255,255,255,0.05)',
   activeText:   '#FFFFFF',
-  activeBg:     'rgba(15,118,110,0.18)',
-  activeBorder: '#0F766E',
+  activeBg:     'rgba(255,255,255,0.10)',
+  activeBorder: '#0D9488',
   brand:        '#FFFFFF',
-  brandSub:     'rgba(255,255,255,0.45)',
-  divider:      'rgba(255,255,255,0.08)',
-  logoMark:     '#0F766E',
+  brandSub:     'rgba(255,255,255,0.40)',
+  divider:      'rgba(255,255,255,0.07)',
+  logoMark:     '#0D9488',
 };
 
 export default function SidebarLayout({ children }: { children: React.ReactNode }) {
@@ -87,7 +87,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
     return pathname?.startsWith(href) ?? false;
   }
 
-  const sidebarW = collapsed ? 64 : 240;
+  const sidebarW = collapsed ? 56 : 216;
 
   /* ── Single nav item ── */
   function NavItem({ item }: { item: typeof navItems[0] }) {
@@ -97,27 +97,26 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
         href={item.href}
         title={collapsed ? item.label : undefined}
         style={{
-          display:        'flex',
-          alignItems:     'center',
-          gap:            10,
-          padding:        collapsed ? '10px 0' : '9px 14px',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          borderRadius:   8,
-          marginBottom:   2,
-          fontSize:       13,
-          fontWeight:     active ? 600 : 400,
-          color:          active ? SB.activeText : SB.itemText,
+          display:         'flex',
+          alignItems:      'center',
+          gap:             9,
+          padding:         collapsed ? '9px 0' : '8px 11px',
+          justifyContent:  collapsed ? 'center' : 'flex-start',
+          borderRadius:    7,
+          marginBottom:    1,
+          fontSize:        13,
+          fontWeight:      active ? 500 : 400,
+          color:           active ? SB.activeText : SB.itemText,
           backgroundColor: active ? SB.activeBg : 'transparent',
-          borderLeft:     active ? `3px solid ${SB.activeBorder}` : '3px solid transparent',
-          transition:     'all 0.12s ease',
-          textDecoration: 'none',
-          whiteSpace:     'nowrap',
-          overflow:       'hidden',
+          transition:      'all 0.1s ease',
+          textDecoration:  'none',
+          whiteSpace:      'nowrap',
+          overflow:        'hidden',
         }}
         onMouseEnter={e => {
           if (!active) {
             e.currentTarget.style.backgroundColor = SB.itemHover;
-            e.currentTarget.style.color = 'rgba(255,255,255,0.9)';
+            e.currentTarget.style.color = 'rgba(255,255,255,0.85)';
           }
         }}
         onMouseLeave={e => {
