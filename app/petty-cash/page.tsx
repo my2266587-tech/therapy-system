@@ -2,22 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import PageHeader from '@/components/ui/PageHeader';
 import Modal from '@/components/ui/Modal';
 import PettyCashForm from '@/components/petty-cash/PettyCashForm';
+import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import type { PettyCash } from '@/types';
 
-const thStyle: React.CSSProperties = {
-  padding: '10px 16px',
-  textAlign: 'right',
-  fontWeight: 600,
-  fontSize: 11,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  color: '#64748B',
-  whiteSpace: 'nowrap',
-  backgroundColor: '#F8FAFC',
-  borderBottom: '1px solid #E2E8F0',
+const C = {
+  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
+  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
+  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
+  shadow: '0 1px 4px rgba(0,0,0,0.05)',
 };
 
 export default function PettyCashPage() {
@@ -47,77 +41,137 @@ export default function PettyCashPage() {
   const total = records.reduce((s, r) => s + Number(r.amount), 0);
 
   return (
-    <div className="max-w-screen-xl mx-auto px-6 py-8">
-      <PageHeader
-        title="מעשר געלט"
-        description="הוצאות קטנות שוטפות"
-        buttonLabel="הוסף הוצאה"
-        onAdd={() => { setEditing(null); setOpen(true); }}
-      />
+    <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
+      <div style={{ maxWidth: 980, margin: '0 auto' }}>
 
-      {records.length > 0 && (
-        <div
-          className="rounded-xl px-5 py-4 mb-6 flex items-center justify-between"
-          style={{ backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}
-        >
-          <span className="text-sm font-medium" style={{ color: '#92400E' }}>סה"כ</span>
-          <span className="text-xl font-bold" style={{ color: '#0F172A' }}>
-            ₪{total.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
-          </span>
-        </div>
-      )}
-
-      {loading ? (
-        <LoadingState />
-      ) : records.length === 0 ? (
-        <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
-      ) : (
-        <div
-          className="bg-white rounded-xl overflow-x-auto"
-          style={{ border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
-        >
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                {['תאריך', 'סכום', 'עבור', 'מטופלת', 'הערות', 'פעולות'].map(h => (
-                  <th key={h} style={thStyle}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r, i) => (
-                <tr
-                  key={r.id}
-                  style={{ borderBottom: i < records.length - 1 ? '1px solid #F1F5F9' : 'none' }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-                >
-                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>{r.date}</td>
-                  <td className="px-4 py-3.5 font-semibold" style={{ color: '#0F172A' }}>
-                    ₪{Number(r.amount).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3.5" style={{ color: '#475569' }}>{r.purpose}</td>
-                  <td className="px-4 py-3.5" style={{ color: '#64748B' }}>
-                    {(r.patient as any)?.full_name ?? '—'}
-                  </td>
-                  <td className="px-4 py-3.5 max-w-xs truncate" style={{ color: '#94A3B8' }}>
-                    {r.notes ?? '—'}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <ActionButtons
-                      onEdit={() => { setEditing(r); setOpen(true); }}
-                      onDelete={() => handleDelete(r.id)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="px-4 py-3 text-xs" style={{ color: '#94A3B8', borderTop: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
-            {records.length} רשומות
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: '0 0 3px', letterSpacing: '-0.3px' }}>
+              מעשר געלט
+            </h1>
+            <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
+              {loading ? '' : `${records.length} רשומות`}
+            </p>
           </div>
+          <button
+            onClick={() => { setEditing(null); setOpen(true); }}
+            style={{
+              backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
+              borderRadius: 10, padding: '10px 20px', fontSize: 14,
+              fontWeight: 600, cursor: 'pointer',
+              boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+          >
+            + הוסף הוצאה
+          </button>
         </div>
-      )}
+
+        {/* Total card */}
+        {records.length > 0 && (
+          <div style={{
+            backgroundColor: C.card, borderRadius: 14,
+            border: `1px solid #FDE68A`,
+            boxShadow: `0 2px 10px rgba(245,158,11,0.08)`,
+            padding: '20px 22px', marginBottom: 24,
+            borderTop: `2px solid #F59E0B`,
+          }}>
+            <p style={{
+              fontSize: 11, fontWeight: 600, color: '#92400E', margin: '0 0 10px',
+              textTransform: 'uppercase', letterSpacing: '0.07em',
+            }}>
+              סה"כ
+            </p>
+            <p style={{
+              fontSize: 32, fontWeight: 700, margin: 0, lineHeight: 1,
+              color: '#F59E0B',
+            }}>
+              ₪{total.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+        )}
+
+        {/* List */}
+        {loading ? (
+          <ListSkeleton />
+        ) : records.length === 0 ? (
+          <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
+        ) : (
+          <div style={{
+            backgroundColor: C.card, borderRadius: 16,
+            border: `1px solid ${C.border}`, boxShadow: C.shadow,
+            overflow: 'hidden',
+          }}>
+            {records.map((r, i) => (
+              <div
+                key={r.id}
+                onClick={() => { setEditing(r); setOpen(true); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 18,
+                  padding: '16px 24px', cursor: 'pointer',
+                  borderBottom: i < records.length - 1 ? `1px solid #F1F5F9` : 'none',
+                  transition: 'background-color 0.1s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
+              >
+                {/* Date badge */}
+                <div style={{
+                  minWidth: 54, textAlign: 'center', flexShrink: 0,
+                  backgroundColor: '#F6F8FB', border: `1px solid ${C.border}`,
+                  borderRadius: 10, padding: '8px 6px',
+                }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: 0, lineHeight: 1 }}>
+                    {new Date(r.date).getDate()}
+                  </p>
+                  <p style={{ fontSize: 10, color: C.muted, margin: '2px 0 0', textTransform: 'uppercase' }}>
+                    {new Date(r.date).toLocaleDateString('he-IL', { month: 'short' })}
+                  </p>
+                </div>
+
+                {/* Purpose + details */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
+                    {r.purpose}
+                  </p>
+                  <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0' }}>
+                    {r.notes ? r.notes.slice(0, 50) : '—'}{r.notes && r.notes.length > 50 ? '…' : ''}
+                  </p>
+                </div>
+
+                {/* Patient (if linked) */}
+                {(r.patient as any)?.full_name && (
+                  <span style={{ fontSize: 12, color: C.sub, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {(r.patient as any).full_name}
+                  </span>
+                )}
+
+                {/* Amount */}
+                <span style={{
+                  fontSize: 15, fontWeight: 700, color: C.text,
+                  flexShrink: 0, whiteSpace: 'nowrap',
+                }}>
+                  ₪{Number(r.amount).toFixed(2)}
+                </span>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 5 }} onClick={e => e.stopPropagation()}>
+                  <IconBtn onClick={() => { setEditing(r); setOpen(true); }} icon={<PencilIcon />} hoverColor={C.accent} title="ערוך" />
+                  <IconBtn onClick={() => handleDelete(r.id)} icon={<TrashIcon />} hoverColor="#DC2626" title="מחק" />
+                </div>
+              </div>
+            ))}
+            <div style={{
+              padding: '10px 24px', fontSize: 12, color: C.muted,
+              backgroundColor: '#F8FAFC', borderTop: `1px solid #F1F5F9`,
+            }}>
+              {records.length} רשומות
+            </div>
+          </div>
+        )}
+      </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'עריכת הוצאה' : 'הוספת הוצאה'}>
         <PettyCashForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} />
@@ -126,33 +180,37 @@ export default function PettyCashPage() {
   );
 }
 
-function LoadingState() {
+function ListSkeleton() {
   return (
-    <div className="bg-white rounded-xl flex items-center justify-center py-20" style={{ border: '1px solid #E2E8F0' }}>
-      <div className="text-center">
-        <div className="w-8 h-8 rounded-full border-2 mx-auto mb-3 animate-spin" style={{ borderColor: '#0F766E', borderTopColor: 'transparent' }} />
-        <p className="text-sm" style={{ color: '#94A3B8' }}>טוען נתונים...</p>
-      </div>
+    <div style={{ backgroundColor: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+      {[1,2,3,4,5].map((i, idx) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '16px 24px', borderBottom: idx < 4 ? `1px solid #F1F5F9` : 'none' }}>
+          <div style={{ width: 54, height: 40, borderRadius: 10, backgroundColor: '#F1F5F9', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ height: 14, backgroundColor: '#F1F5F9', borderRadius: 6, width: '25%', marginBottom: 8 }} />
+            <div style={{ height: 11, backgroundColor: '#F8FAFC', borderRadius: 6, width: '30%' }} />
+          </div>
+          <div style={{ height: 14, width: 70, backgroundColor: '#F1F5F9', borderRadius: 6 }} />
+        </div>
+      ))}
     </div>
   );
 }
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="bg-white rounded-xl p-16 text-center" style={{ border: '1px solid #E2E8F0' }}>
-      <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4" style={{ backgroundColor: '#F1F5F9', color: '#94A3B8' }}>○</div>
-      <p className="font-semibold mb-1" style={{ color: '#0F172A' }}>אין רשומות עדיין</p>
-      <p className="text-sm mb-4" style={{ color: '#94A3B8' }}>לחצי להוספת הרשומה הראשונה</p>
-      <button onClick={onAdd} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#0F766E' }}>+ הוסף הוצאה</button>
-    </div>
-  );
-}
-
-function ActionButtons({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
-  return (
-    <div className="flex gap-3">
-      <button onClick={onEdit} className="text-xs font-medium" style={{ color: '#0F766E' }} onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')} onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}>ערוך</button>
-      <button onClick={onDelete} className="text-xs font-medium" style={{ color: '#DC2626' }} onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')} onMouseLeave={e => (e.currentTarget.style.textDecoration = '')}>מחק</button>
+    <div style={{ backgroundColor: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '52px 24px', textAlign: 'center' }}>
+      <p style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>אין רשומות עדיין</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>התחילי בהוספת הרשומה הראשונה</p>
+      <button
+        onClick={onAdd}
+        style={{
+          backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
+          borderRadius: 9, padding: '10px 22px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+        }}
+      >
+        + הוסף הוצאה
+      </button>
     </div>
   );
 }

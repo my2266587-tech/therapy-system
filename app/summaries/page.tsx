@@ -4,7 +4,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import SummaryForm from '@/components/summaries/SummaryForm';
+import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import type { SessionSummary } from '@/types';
+
+const C = {
+  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
+  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
+  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
+  shadow: '0 1px 4px rgba(0,0,0,0.05)',
+};
 
 /* ── Recording widget ── */
 type RecState = 'idle' | 'recording' | 'done';
@@ -61,12 +69,12 @@ function RecordingWidget() {
 
   return (
     <div style={{
-      backgroundColor: '#FFFFFF', borderRadius: 14,
-      border: '1px solid #E8ECF0', boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+      backgroundColor: C.card, borderRadius: 14,
+      border: `1px solid ${C.border}`, boxShadow: C.shadow,
       padding: '18px 24px', marginBottom: 24, direction: 'rtl',
     }}>
       <p style={{
-        fontSize: 11, fontWeight: 600, color: '#94A3B8',
+        fontSize: 11, fontWeight: 600, color: C.muted,
         margin: '0 0 14px', textTransform: 'uppercase', letterSpacing: '0.07em',
       }}>
         הקלטת פגישה
@@ -78,10 +86,10 @@ function RecordingWidget() {
             onClick={start}
             style={{
               display: 'flex', alignItems: 'center', gap: 9,
-              backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+              backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
               borderRadius: 10, padding: '11px 22px', fontSize: 14,
               fontWeight: 600, cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(13,148,136,0.22)', transition: 'opacity 0.15s',
+              boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
@@ -89,7 +97,7 @@ function RecordingWidget() {
             <MicIcon />
             התחל הקלטה
           </button>
-          <span style={{ fontSize: 13, color: '#94A3B8' }}>לחצי להתחיל הקלטת הפגישה</span>
+          <span style={{ fontSize: 13, color: C.muted }}>לחצי להתחיל הקלטת הפגישה</span>
         </div>
       )}
 
@@ -104,7 +112,7 @@ function RecordingWidget() {
           </div>
           <span style={{
             fontVariantNumeric: 'tabular-nums', fontSize: 24, fontWeight: 700,
-            color: '#1A2332', letterSpacing: '0.04em',
+            color: C.text, letterSpacing: '0.04em',
           }}>
             {fmt(seconds)}
           </span>
@@ -135,8 +143,8 @@ function RecordingWidget() {
       {state === 'done' && audioUrl && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <span style={{ fontSize: 16, color: '#0D9488' }}>✓</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#0D9488' }}>
+            <span style={{ fontSize: 16, color: C.accent }}>✓</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.accent }}>
               הקלטה הסתיימה · {fmt(seconds)}
             </span>
           </div>
@@ -144,8 +152,8 @@ function RecordingWidget() {
           <button
             onClick={reset}
             style={{
-              fontSize: 12, fontWeight: 500, color: '#64748B', background: 'none',
-              border: '1px solid #E8ECF0', borderRadius: 7,
+              fontSize: 12, fontWeight: 500, color: C.sub, background: 'none',
+              border: `1px solid ${C.border}`, borderRadius: 7,
               padding: '6px 14px', cursor: 'pointer',
             }}
           >
@@ -182,12 +190,6 @@ function StopIcon() {
 }
 
 /* ── Main page ── */
-const thStyle: React.CSSProperties = {
-  padding: '10px 16px', textAlign: 'right', fontWeight: 600,
-  fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase',
-  color: '#64748B', whiteSpace: 'nowrap',
-  backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0',
-};
 
 export default function SummariesPage() {
   const [records, setRecords] = useState<SessionSummary[]>([]);
@@ -213,32 +215,27 @@ export default function SummariesPage() {
     load();
   }
 
-  function truncate(s: string | null, n = 52) {
-    if (!s) return '—';
-    return s.length > n ? s.slice(0, n) + '…' : s;
-  }
-
   return (
-    <div style={{ backgroundColor: '#F6F8FB', minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
-      <div style={{ maxWidth: 1040, margin: '0 auto' }}>
+    <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
+      <div style={{ maxWidth: 980, margin: '0 auto' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A2332', margin: '0 0 3px', letterSpacing: '-0.3px' }}>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: '0 0 3px', letterSpacing: '-0.3px' }}>
               סיכומי פגישות
             </h1>
-            <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+            <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
               {loading ? '' : `${records.length} סיכומים`}
             </p>
           </div>
           <button
             onClick={() => { setEditing(null); setOpen(true); }}
             style={{
-              backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+              backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
               borderRadius: 10, padding: '10px 20px', fontSize: 14,
               fontWeight: 600, cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(13,148,136,0.22)', transition: 'opacity 0.15s',
+              boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
@@ -250,62 +247,107 @@ export default function SummariesPage() {
         {/* Recording widget */}
         <RecordingWidget />
 
-        {/* Summaries table */}
+        {/* Summaries */}
         {loading ? (
-          <TableSkeleton />
+          <ListSkeleton />
         ) : records.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
         ) : (
-          <div style={{
-            backgroundColor: '#FFFFFF', borderRadius: 16,
-            border: '1px solid #E8ECF0', boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-            overflow: 'hidden',
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-              <thead>
-                <tr>
-                  {['מטופלת', 'תאריך', 'שעות', 'נושאים עיקריים', 'התקדמות', 'פעולות'].map(h => (
-                    <th key={h} style={thStyle}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((r, i) => (
-                  <tr
-                    key={r.id}
-                    style={{ borderBottom: i < records.length - 1 ? '1px solid #F1F5F9' : 'none' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
-                  >
-                    <td style={{ padding: '13px 16px', fontWeight: 600, color: '#1A2332' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {records.map(r => (
+              <div
+                key={r.id}
+                onClick={() => { setEditing(r); setOpen(true); }}
+                style={{
+                  backgroundColor: C.card, borderRadius: 12,
+                  border: `1px solid ${C.border}`, boxShadow: C.shadow,
+                  padding: '18px 20px', cursor: 'pointer',
+                  transition: 'all 0.12s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = C.accentRim;
+                  e.currentTarget.style.boxShadow = `0 4px 12px rgba(13,148,136,0.08)`;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = C.border;
+                  e.currentTarget.style.boxShadow = C.shadow;
+                }}
+              >
+                {/* Header row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0 }}>
                       {(r.patient as any)?.full_name ?? '—'}
-                    </td>
-                    <td style={{ padding: '13px 16px', color: '#475569', whiteSpace: 'nowrap' }}>{r.date}</td>
-                    <td style={{ padding: '13px 16px', color: '#475569', whiteSpace: 'nowrap' }}>
-                      {r.start_time ?? '—'} – {r.end_time ?? '—'}
-                    </td>
-                    <td style={{ padding: '13px 16px', color: '#64748B', maxWidth: 220 }}>
-                      {truncate(r.main_topics)}
-                    </td>
-                    <td style={{ padding: '13px 16px', color: '#64748B', maxWidth: 180 }}>
-                      {truncate(r.progress)}
-                    </td>
-                    <td style={{ padding: '13px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <RowBtn onClick={() => { setEditing(r); setOpen(true); }} label="ערוך" color="#0D9488" />
-                        <RowBtn onClick={() => handleDelete(r.id)} label="מחק" color="#DC2626" />
+                    </p>
+                    <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0' }}>
+                      {r.date}
+                      {r.start_time && ` · ${r.start_time} – ${r.end_time}`}
+                      {r.duration_minutes && ` · ${r.duration_minutes} דק'`}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                    <IconBtn onClick={() => { setEditing(r); setOpen(true); }} icon={<PencilIcon />} hoverColor={C.accent} title="ערוך" />
+                    <IconBtn onClick={() => handleDelete(r.id)} icon={<TrashIcon />} hoverColor="#DC2626" title="מחק" />
+                  </div>
+                </div>
+
+                {/* Content sections */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  {r.main_topics && (
+                    <div style={{
+                      borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
+                      border: `1px solid ${C.border}`,
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+                        נושאים
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div style={{
-              padding: '10px 16px', fontSize: 12, color: '#94A3B8',
-              borderTop: '1px solid #F1F5F9', backgroundColor: '#F8FAFC',
-            }}>
-              {records.length} סיכומים
-            </div>
+                      <p style={{ fontSize: 13, color: C.sub, margin: 0, lineHeight: 1.5 }}>
+                        {r.main_topics.slice(0, 80)}{r.main_topics.length > 80 ? '…' : ''}
+                      </p>
+                    </div>
+                  )}
+                  {r.treatment_actions && (
+                    <div style={{
+                      borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
+                      border: `1px solid ${C.border}`,
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+                        מה עשינו
+                      </div>
+                      <p style={{ fontSize: 13, color: C.sub, margin: 0, lineHeight: 1.5 }}>
+                        {r.treatment_actions.slice(0, 80)}{r.treatment_actions.length > 80 ? '…' : ''}
+                      </p>
+                    </div>
+                  )}
+                  {r.progress && (
+                    <div style={{
+                      borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
+                      border: `1px solid ${C.border}`,
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+                        התקדמות
+                      </div>
+                      <p style={{ fontSize: 13, color: C.sub, margin: 0, lineHeight: 1.5 }}>
+                        {r.progress.slice(0, 80)}{r.progress.length > 80 ? '…' : ''}
+                      </p>
+                    </div>
+                  )}
+                  {r.next_steps && (
+                    <div style={{
+                      borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
+                      border: `1px solid ${C.border}`,
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+                        צעדים הבאים
+                      </div>
+                      <p style={{ fontSize: 13, color: C.sub, margin: 0, lineHeight: 1.5 }}>
+                        {r.next_steps.slice(0, 80)}{r.next_steps.length > 80 ? '…' : ''}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -317,37 +359,25 @@ export default function SummariesPage() {
   );
 }
 
-function RowBtn({ onClick, label, color }: { onClick: () => void; label: string; color: string }) {
+function ListSkeleton() {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: '5px 13px', borderRadius: 7, border: '1px solid #E8ECF0',
-        backgroundColor: '#F8FAFC', color: '#64748B',
-        fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.12s',
-      }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = color + '55'; el.style.backgroundColor = color + '0A'; el.style.color = color;
-      }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = '#E8ECF0'; el.style.backgroundColor = '#F8FAFC'; el.style.color = '#64748B';
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function TableSkeleton() {
-  return (
-    <div style={{ backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #E8ECF0', overflow: 'hidden' }}>
-      {[1,2,3,4].map((i, idx) => (
-        <div key={i} style={{ display: 'flex', gap: 24, padding: '14px 16px', borderBottom: idx < 3 ? '1px solid #F1F5F9' : 'none' }}>
-          {[25,15,18,30,25].map((w, j) => (
-            <div key={j} style={{ height: 13, backgroundColor: '#F1F5F9', borderRadius: 6, width: `${w}%` }} />
-          ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {[1,2,3,4].map(i => (
+        <div key={i} style={{
+          backgroundColor: C.card, borderRadius: 12,
+          border: `1px solid ${C.border}`, padding: '18px 20px',
+        }}>
+          <div style={{ height: 14, backgroundColor: '#F1F5F9', borderRadius: 6, width: '30%', marginBottom: 12 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {[1,2,3,4].map(j => (
+              <div key={j} style={{
+                borderRadius: 8, padding: '12px', backgroundColor: '#F8FAFC',
+              }}>
+                <div style={{ height: 10, backgroundColor: '#E8ECF0', borderRadius: 4, width: '40%', marginBottom: 6 }} />
+                <div style={{ height: 30, backgroundColor: '#F1F5F9', borderRadius: 4 }} />
+              </div>
+            ))}
+          </div>
         </div>
       ))}
     </div>
@@ -356,16 +386,13 @@ function TableSkeleton() {
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div style={{
-      backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #E8ECF0',
-      padding: '52px 24px', textAlign: 'center',
-    }}>
-      <p style={{ fontSize: 16, fontWeight: 600, color: '#1A2332', margin: '0 0 6px' }}>אין סיכומים עדיין</p>
-      <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px' }}>התחילי בהוספת הסיכום הראשון</p>
+    <div style={{ backgroundColor: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '52px 24px', textAlign: 'center' }}>
+      <p style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>אין סיכומים עדיין</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>התחילי בהוספת הסיכום הראשון</p>
       <button
         onClick={onAdd}
         style={{
-          backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+          backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
           borderRadius: 9, padding: '10px 22px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
         }}
       >
