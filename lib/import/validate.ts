@@ -1,9 +1,18 @@
 /**
- * The validation + dedup pipeline shared by /preview and /confirm.
+ * Validation + dedup pipeline for /preview and /confirm.
  *
- * The pipeline is deterministic: same input bytes + same mapping → same
- * ValidatedRow[]. The /confirm endpoint runs the same code so the client
- * cannot inject arbitrary normalized values.
+ * Pipeline order:
+ *   1. rewriteSheet  — combine "שם פרטי" + "שם משפחה" into a synthesized
+ *                      "שם מלא" column when there's no full-name column.
+ *   2. autoMapHeaders — match each header to a target field by label/aliases
+ *                       (case- and punctuation-insensitive).
+ *   3. drop entirely-empty rows (counted, not flagged as errors).
+ *   4. coerce per-field types (date, time, number, enum, lookup, …).
+ *   5. dedup against the DB and within the batch.
+ *   6. attach a single human-readable `reason` to each non-valid row.
+ *
+ * /confirm runs the same pipeline so the client cannot tamper with
+ * normalized values.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -11,7 +20,32 @@ import type {
   TargetSpec, FieldSpec, RawSheet, ValidatedRow, PreviewResult, RowStatus,
 } from './types';
 
-/* ── Header → field auto-mapping ───────────────────────────────────── */
+/* ── 1. sheet rewrite (split-name auto-combine) ─────────────────────── */
+
+const FIRST_NAME_RE = /^(?:שם\s*פרטי|first[\s_-]?name|firstname|fname|given[\s_-]?name)$/i;
+const LAST_NAME_RE  = /^(?:שם\s*משפחה|last[\s_-]?name|lastname|surname|family[\s_-]?name|lname)$/i;
+const FULL_NAME_RE  = /^(?:שם\s*מלא|שם\s*המטופלת|שם\s*המטופל|full[\s_-]?name|fullname|name)$/i;
+
+function rewriteSheet(sheet: RawSheet): RawSheet {
+  const trimHeaders = sheet.headers.map(h => h.trim());
+  const firstIdx = trimHeaders.findIndex(h => FIRST_NAME_RE.test(h));
+  const lastIdx  = trimHeaders.findIndex(h => LAST_NAME_RE.test(h));
+  const fullIdx  = trimHeaders.findIndex(h => FULL_NAME_RE.test(h));
+
+  // Only synthesize when first+last exist AND there is no full-name column.
+  if (firstIdx < 0 || lastIdx < 0 || fullIdx >= 0) return sheet;
+
+  return {
+    headers: [...sheet.headers, 'שם מלא'],
+    rows: sheet.rows.map(r => {
+      const first = (r[firstIdx] ?? '').trim();
+      const last  = (r[lastIdx]  ?? '').trim();
+      return [...r, [first, last].filter(Boolean).join(' ')];
+    }),
+  };
+}
+
+/* ── 2. header auto-mapping ─────────────────────────────────────────── */
 
 function normalizeHeader(s: string): string {
   return s.trim().toLowerCase().replace(/[״׳"'.\-_\s]+/g, '');
@@ -37,20 +71,24 @@ export function autoMapHeaders(
   return out;
 }
 
-/* ── Type coercions ─────────────────────────────────────────────────── */
+/* ── 3. empty-row detection ─────────────────────────────────────────── */
+
+function isRowEmpty(row: string[]): boolean {
+  return row.every(c => c == null || String(c).trim() === '');
+}
+
+/* ── 4. type coercions ──────────────────────────────────────────────── */
 
 function coerceDate(raw: string): { ok: true; value: string } | { ok: false; reason: string } {
   const s = raw.trim();
   if (!s) return { ok: false, reason: 'תאריך ריק' };
 
-  // Already YYYY-MM-DD
   let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) {
     const y = +m[1], mo = +m[2], d = +m[3];
     if (mo < 1 || mo > 12 || d < 1 || d > 31) return { ok: false, reason: `תאריך לא תקין: ${s}` };
     return { ok: true, value: `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
   }
-  // DD/MM/YYYY  or  DD-MM-YYYY  or  DD.MM.YYYY
   m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
   if (m) {
     const d = +m[1], mo = +m[2];
@@ -99,7 +137,7 @@ function coerceEnum(raw: string, field: FieldSpec): { ok: true; value: string } 
   return { ok: false, reason: `ערך לא חוקי "${s}". מותר: ${allowed}` };
 }
 
-/* ── Lookup cache (avoid N queries for N rows) ─────────────────────── */
+/* ── 5. lookup cache ────────────────────────────────────────────────── */
 
 interface LookupCache {
   staffByName:    Map<string, string>;
@@ -113,11 +151,11 @@ async function buildLookupCache(supabase: SupabaseClient): Promise<LookupCache> 
   ]);
   const staffByName = new Map<string, string>();
   for (const s of (staff.data ?? []) as Array<{ id: string; full_name: string }>) {
-    staffByName.set(s.full_name.trim(), s.id);
+    staffByName.set(s.full_name.trim().toLowerCase(), s.id);
   }
   const patientsByName = new Map<string, string>();
   for (const p of (patients.data ?? []) as Array<{ id: string; full_name: string }>) {
-    patientsByName.set(p.full_name.trim(), p.id);
+    patientsByName.set(p.full_name.trim().toLowerCase(), p.id);
   }
   return { staffByName, patientsByName };
 }
@@ -128,27 +166,21 @@ function resolveLookup(
   const s = raw.trim();
   if (!s) return { ok: false, reason: 'ערך ריק לחיפוש' };
   const map = field.lookup?.table === 'staff' ? cache.staffByName : cache.patientsByName;
-  const id = map.get(s);
+  const id = map.get(s.toLowerCase());
   if (!id) {
-    // Try case-insensitive fallback
-    for (const [k, v] of map) {
-      if (k.toLowerCase() === s.toLowerCase()) return { ok: true, value: v };
-    }
-    return { ok: false, reason: `לא נמצא: "${s}"` };
+    const what = field.lookup?.table === 'staff' ? 'איש צוות' : 'מטופלת';
+    return { ok: false, reason: `לא נמצא${field.lookup?.table === 'staff' ? '' : 'ה'} ${what} בשם "${s}"` };
   }
   return { ok: true, value: id };
 }
 
-/* ── Dedup against existing rows ───────────────────────────────────── */
+/* ── 6. dedup ───────────────────────────────────────────────────────── */
 
 async function fetchExistingForDedup(
-  supabase: SupabaseClient,
-  spec: TargetSpec,
+  supabase: SupabaseClient, spec: TargetSpec,
 ): Promise<Array<{ id: string; values: Record<string, unknown> }>> {
   const cols = ['id', ...spec.dedupeKeys];
-  const { data } = await supabase
-    .from(spec.tableName)
-    .select(cols.join(','));
+  const { data } = await supabase.from(spec.tableName).select(cols.join(','));
   return ((data ?? []) as unknown as Array<Record<string, unknown> & { id: string }>).map(r => {
     const values: Record<string, unknown> = {};
     for (const k of spec.dedupeKeys) values[k] = r[k];
@@ -163,15 +195,40 @@ function dedupKey(values: Record<string, unknown>, keys: string[]): string {
   }).join('||');
 }
 
-/* ── Public: validateRows ──────────────────────────────────────────── */
+/* ── 7. headline reason builder ─────────────────────────────────────── */
+
+function summarizeReason(errors: string[], status: RowStatus): string | undefined {
+  if (status === 'valid')     return undefined;
+  if (status === 'duplicate') return 'שורה כפולה — קיימת כבר במערכת';
+  if (errors.length === 0)    return undefined;
+  // Headline = first error, polished a bit
+  const first = errors[0];
+  // Common case: "חסר: שדה" → flatten to "חסר <שדה>"
+  return first.replace(/^חסר:\s*/, 'חסר ');
+}
+
+/* ── 8. main entry — validateRows ───────────────────────────────────── */
 
 export async function validateRows(
   supabase: SupabaseClient,
   spec:     TargetSpec,
-  sheet:    RawSheet,
+  inputSheet: RawSheet,
   mapping:  Record<string, string>,
 ): Promise<PreviewResult> {
-  // Reverse mapping: field.key → original column index in the sheet
+  // Step 1: synthesize "שם מלא" from "שם פרטי" + "שם משפחה" if needed.
+  const sheet = rewriteSheet(inputSheet);
+
+  // If we just appended a "שם מלא" column the mapping doesn't yet know
+  // about it — auto-route it to full_name when full_name has no mapping.
+  if (sheet.headers.length > inputSheet.headers.length) {
+    const synthHeader = sheet.headers[sheet.headers.length - 1];
+    const fullField   = spec.fields.find(f => /full_name|^name$/.test(f.key));
+    if (fullField && !Object.values(mapping).includes(fullField.key)) {
+      mapping = { ...mapping, [synthHeader]: fullField.key };
+    }
+  }
+
+  // Step 2: build header→column index, field→column index.
   const headerIndex = new Map<string, number>();
   sheet.headers.forEach((h, i) => headerIndex.set(h, i));
   const fieldToCol = new Map<string, number>();
@@ -180,17 +237,22 @@ export async function validateRows(
     if (idx != null) fieldToCol.set(fieldKey, idx);
   }
 
-  const cache = await buildLookupCache(supabase);
+  // Step 3: caches.
+  const cache    = await buildLookupCache(supabase);
   const existing = await fetchExistingForDedup(supabase, spec);
   const existingByKey = new Map<string, string>();
   for (const e of existing) {
     existingByKey.set(dedupKey(e.values, spec.dedupeKeys), e.id);
   }
-
-  // Track in-batch duplicates (same row appearing twice in the same upload).
   const seenInBatch = new Set<string>();
 
-  const validated: ValidatedRow[] = sheet.rows.map((row, i) => {
+  // Step 4: per-row work.
+  let emptySkipped = 0;
+  const validated: ValidatedRow[] = [];
+
+  sheet.rows.forEach((row, i) => {
+    if (isRowEmpty(row)) { emptySkipped++; return; }
+
     const errors:   string[] = [];
     const warnings: string[] = [];
     const values:   Record<string, string | number | boolean | null> = {};
@@ -217,12 +279,8 @@ export async function validateRows(
         default:        coerced = { ok: true, value: raw.trim() }; break;
       }
 
-      if (coerced.ok) {
-        values[field.key] = coerced.value;
-      } else {
-        errors.push(`${field.label}: ${coerced.reason}`);
-        values[field.key] = null;
-      }
+      if (coerced.ok) values[field.key] = coerced.value;
+      else { errors.push(`${field.label}: ${coerced.reason}`); values[field.key] = null; }
     }
 
     let status: RowStatus = errors.length > 0 ? 'error' : 'valid';
@@ -243,15 +301,23 @@ export async function validateRows(
       }
     }
 
-    return {
-      index: i + 2, // +2 = header row (1) + 1-based
+    validated.push({
+      index: i + 2, // +2 = header row + 1-based
       status,
-      errors,
-      warnings,
-      values,
-      duplicateOf,
-    };
+      reason: summarizeReason(errors, status),
+      errors, warnings, values, duplicateOf,
+    });
   });
+
+  // Step 5: mapping diagnostics.
+  const mappedHeaders     = new Set(Object.keys(mapping));
+  const unmappedHeaders   = sheet.headers
+    .filter(h => h.trim() && !mappedHeaders.has(h));
+
+  const usedFields        = new Set(Object.values(mapping));
+  const missingRequired   = spec.fields
+    .filter(f => f.required && !usedFields.has(f.key))
+    .map(f => ({ key: f.key, label: f.label }));
 
   const summary = {
     total:      validated.length,
@@ -259,6 +325,7 @@ export async function validateRows(
     duplicates: validated.filter(r => r.status === 'duplicate').length,
     errors:     validated.filter(r => r.status === 'error').length,
     warnings:   validated.filter(r => r.warnings.length > 0).length,
+    empty:      emptySkipped,
   };
 
   return {
@@ -268,10 +335,12 @@ export async function validateRows(
     suggestedMapping: autoMapHeaders(sheet.headers, spec),
     appliedMapping:   mapping,
     summary,
+    unmappedHeaders,
+    missingRequired,
   };
 }
 
-/* ── Public: insertValidRows  (used by /confirm) ───────────────────── */
+/* ── 9. insert (used by /confirm) ──────────────────────────────────── */
 
 export async function insertValidRows(
   supabase: SupabaseClient,
@@ -281,8 +350,6 @@ export async function insertValidRows(
   const valid = preview.rows.filter(r => r.status === 'valid');
   if (valid.length === 0) return { inserted: 0, skipped: preview.rows.length, errors: [] };
 
-  // Strip null values so the DB falls back to its column defaults instead
-  // of overwriting (e.g. created_at default now()).
   const payload = valid.map(r => {
     const obj: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(r.values)) {

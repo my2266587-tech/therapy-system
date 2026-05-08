@@ -63,7 +63,11 @@ export interface ValidatedRow {
   /** 1-based row index in the original sheet (so error messages match Excel). */
   index: number;
   status: RowStatus;
-  /** Per-field issues. */
+  /** Short, single-sentence Hebrew reason for non-valid rows.
+   *  Examples: "חסר שם מטופלת", "תאריך לא תקין: 32/13/26",
+   *  "לא נמצאה מטופלת בשם 'יוסי'", "שורה כפולה". */
+  reason?: string;
+  /** Per-field issues (the full list — `reason` is the headline). */
   errors: string[];
   /** Per-field non-blocking warnings. */
   warnings: string[];
@@ -87,7 +91,14 @@ export interface PreviewResult {
     duplicates: number;
     errors:     number;
     warnings:   number;
+    /** Rows that were entirely blank in the source file and silently skipped. */
+    empty:      number;
   };
+  /** Headers from the source sheet that the user mapped to no field —
+   *  surfaced so the mapping UI can warn "כותרת זו לא זוהתה". */
+  unmappedHeaders: string[];
+  /** Required fields with no header pointing at them — blocks the import. */
+  missingRequired: { key: string; label: string }[];
 }
 
 export interface ConfirmResult {

@@ -243,6 +243,28 @@ export default function ImportPage() {
             <SelectedTargetBar target={target} onChange={reset} />
 
             <Section title="מיפוי עמודות">
+              {preview.missingRequired.length > 0 && (
+                <div style={{
+                  padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+                  backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
+                  color: '#991B1B', fontSize: 12.5, lineHeight: 1.55,
+                }}>
+                  <strong>חסרים שדות חובה:</strong>{' '}
+                  {preview.missingRequired.map(f => f.label).join(' · ')}.{' '}
+                  בחרי מתוך הרשימה למטה לאיזה שדה שייכת כל עמודה בקובץ.
+                </div>
+              )}
+              {preview.unmappedHeaders.length > 0 && (
+                <div style={{
+                  padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+                  backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
+                  color: '#78350F', fontSize: 12.5, lineHeight: 1.55,
+                }}>
+                  <strong>עמודות לא מזוהות:</strong>{' '}
+                  {preview.unmappedHeaders.join(' · ')}.{' '}
+                  אפשר למפות אותן ידנית או לדלג עליהן.
+                </div>
+              )}
               <ImportMappingTable
                 headers={sheet.headers}
                 fields={target.fields.map(f => ({
@@ -447,6 +469,23 @@ function SummaryRow({
           </button>
         );
       })}
+      {summary.empty > 0 && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '6px 12px', borderRadius: 18, fontSize: 12, fontWeight: 600,
+          border: `1px dashed ${C.border}`, backgroundColor: C.card, color: C.muted,
+        }}
+        title="שורות שהיו ריקות לחלוטין בקובץ — דולגו ולא נספרות כשגיאה.">
+          שורות ריקות שדולגו
+          <span style={{
+            minWidth: 22, padding: '0 6px', borderRadius: 10,
+            backgroundColor: '#F1F5F9', color: C.sub, fontSize: 11, fontWeight: 700,
+            textAlign: 'center',
+          }}>
+            {summary.empty}
+          </span>
+        </span>
+      )}
     </div>
   );
 }

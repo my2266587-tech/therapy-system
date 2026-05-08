@@ -52,16 +52,16 @@ export default function ImportPreviewTable({ rows, fields, filter }: Props) {
             <tr style={{ backgroundColor: '#F8FAFC', borderBottom: `1px solid ${C.border}` }}>
               <th style={th}>#</th>
               <th style={th}>סטטוס</th>
+              <th style={{ ...th, minWidth: 180 }}>סיבה</th>
               {fields.map(f => (
                 <th key={f.key} style={th}>{f.label}</th>
               ))}
-              <th style={th}>הערות</th>
             </tr>
           </thead>
           <tbody>
             {visible.map(r => {
               const st = STATUS_STYLE[r.status] ?? STATUS_STYLE.warning;
-              const issues = [...r.errors, ...r.warnings];
+              const allIssues = [...r.errors, ...r.warnings];
               return (
                 <tr key={r.index} style={{
                   borderBottom: `1px solid #F1F5F9`,
@@ -78,6 +78,20 @@ export default function ImportPreviewTable({ rows, fields, filter }: Props) {
                       {st.label}
                     </span>
                   </td>
+                  <td style={{
+                    ...td, maxWidth: 320, whiteSpace: 'normal',
+                    color: r.status === 'valid' ? C.muted :
+                           r.status === 'duplicate' ? '#92400E' : '#DC2626',
+                    fontWeight: r.status !== 'valid' ? 500 : 400,
+                  }}
+                  title={allIssues.length > 1 ? allIssues.join(' · ') : undefined}>
+                    {r.reason ?? (r.warnings.length > 0 ? r.warnings[0] : '—')}
+                    {r.errors.length > 1 && (
+                      <span style={{ display: 'block', fontSize: 11, color: C.muted, fontWeight: 400, marginTop: 2 }}>
+                        +{r.errors.length - 1} שגיאות נוספות
+                      </span>
+                    )}
+                  </td>
                   {fields.map(f => {
                     const v = r.values[f.key];
                     return (
@@ -86,9 +100,6 @@ export default function ImportPreviewTable({ rows, fields, filter }: Props) {
                       </td>
                     );
                   })}
-                  <td style={{ ...td, color: r.errors.length ? '#DC2626' : C.sub, maxWidth: 320 }}>
-                    {issues.length === 0 ? '—' : issues.join(' · ')}
-                  </td>
                 </tr>
               );
             })}
