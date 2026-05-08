@@ -68,6 +68,24 @@ export interface TargetSpec {
    *  `import_metadata` instead of being silently dropped. Requires the
    *  table to have an `import_metadata jsonb` column. */
   captureUnmappedAsMetadata?: boolean;
+  /**
+   * Per-row post-processing hook. Runs AFTER per-field coercion but
+   * BEFORE dedup. Lets a target derive missing fields from others
+   * ("חודש חסר → חולץ מ-received_date"), normalize cross-field
+   * inconsistencies, or apply business rules. Anything appended to
+   * `fixes` shows up in the row's preview as a soft "תוקן אוטומטית"
+   * badge — the row stays 'valid'.
+   */
+  postProcess?: (ctx: PostProcessContext) => void;
+}
+
+/** Context passed to TargetSpec.postProcess. Mutate `values` in place
+ *  and push human-readable Hebrew descriptions to `fixes` / `warnings`. */
+export interface PostProcessContext {
+  values:   Record<string, string | number | boolean | null | Record<string, string>>;
+  raw:      Map<string, string>;     // field.key → original cell text
+  fixes:    string[];
+  warnings: string[];
 }
 
 /* ── Raw + validated rows ────────────────────────────────────────────── */
@@ -91,6 +109,10 @@ export interface ValidatedRow {
   errors: string[];
   /** Per-field non-blocking warnings. */
   warnings: string[];
+  /** Hebrew descriptions of automatic corrections that ran on this row —
+   *  e.g. "checked → כן", "חודש (2026-03) חולץ מתאריך הקבלה". The row
+   *  remains 'valid' but the UI can show a soft "תוקן אוטומטית" badge. */
+  fixes: string[];
   /** Normalized values keyed by field.key (these are what we'd insert).
    *  Includes synthetic columns (`import_metadata`, fallback text fields).
    *  Object values are JSON-encoded when sent to the DB. */

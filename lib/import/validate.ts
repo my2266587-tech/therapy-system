@@ -117,19 +117,90 @@ function coerceTime(raw: string): { ok: true; value: string } | { ok: false; rea
   return { ok: true, value: `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}:${String(se).padStart(2, '0')}` };
 }
 
-function coerceNumber(raw: string): { ok: true; value: number } | { ok: false; reason: string } {
+/**
+ * Numeric parsing for amounts in the wild. We accept the value with a
+ * currency mark on either side ("₪500", "500₪", "500 ש״ח", "1,200 ILS"),
+ * a thousands separator (`1,200` or `1.200` when there's no decimal
+ * point), and surrounding whitespace. The currency / unit suffix that
+ * was stripped is reported back so the row can show "₪ → הוסר" in the
+ * fixes list.
+ */
+function coerceNumber(raw: string): { ok: true; value: number; fix?: string } | { ok: false; reason: string } {
   if (looksLikeMisparsedCell(raw.trim())) return { ok: false, reason: MISPARSE_HINT };
-  const s = raw.trim().replace(/[,\s]/g, '').replace(/^₪/, '');
+  let s = raw.trim();
+  if (!s) return { ok: false, reason: 'מספר ריק' };
+
+  let stripped = false;
+  // Currency/unit marks anywhere — order matters (longest first).
+  const marks = [/[₪$€£]/g, /\bש["״׳]?ח\b/gi, /\bnis\b/gi, /\bils\b/gi];
+  for (const m of marks) {
+    if (m.test(s)) { s = s.replace(m, ''); stripped = true; }
+  }
+  s = s.replace(/[\s ]+/g, '');
+
+  // If the remainder has both '.' and ',', whichever comes last is the
+  // decimal separator (en/he/he-IL all match this convention).
+  if (s.includes('.') && s.includes(',')) {
+    const lastDot   = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  } else if (s.includes(',')) {
+    // Single ',' — treat as thousands sep when followed by 3 digits, else decimal.
+    s = /,\d{3}(\D|$)/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.');
+  }
+
   if (!s) return { ok: false, reason: 'מספר ריק' };
   const n = Number(s);
   if (!Number.isFinite(n)) return { ok: false, reason: `לא מספר: ${raw}` };
-  return { ok: true, value: n };
+  return {
+    ok: true, value: n,
+    fix: stripped ? `סימן מטבע / יחידה הוסר מהערך "${raw.trim()}".` : undefined,
+  };
 }
 
-function coerceBoolean(raw: string): { ok: true; value: boolean } | { ok: false; reason: string } {
+/**
+ * Boolean variants seen in real exports. All of these mean TRUE:
+ *   1, true, TRUE, yes, y, on, ✓, ✔, V, v, checked, marked,
+ *   כן, שולם, ש, ✓ שולם
+ * All of these mean FALSE:
+ *   0, false, FALSE, no, n, off, x, -, unpaid, unchecked,
+ *   לא, טרם, טרם שולם
+ * Empty cells are returned as `false` — typical "checkbox unchecked"
+ * semantics in Excel exports — but we report a fix description so the
+ * user knows we made an assumption.
+ */
+const TRUE_TOKENS  = new Set([
+  '1', 'true', 'yes', 'y', 'on', '✓', '✔', 'v', 'checked', 'marked',
+  'כן', 'שולם', 'ש',
+]);
+const FALSE_TOKENS = new Set([
+  '0', 'false', 'no', 'n', 'off', 'x', '-', '–', '—', 'unpaid', 'unchecked',
+  'לא', 'טרם',
+]);
+
+function coerceBoolean(raw: string): { ok: true; value: boolean; fix?: string } | { ok: false; reason: string } {
   const s = raw.trim().toLowerCase();
-  if (['1', 'true', 'yes', 'כן', 'שולם', '✓', 'v'].includes(s))    return { ok: true, value: true };
-  if (['0', 'false', 'no', 'לא', 'טרם', 'x', '', '-'].includes(s)) return { ok: true, value: false };
+  if (TRUE_TOKENS.has(s)) {
+    const fix = !['true', '1', 'כן'].includes(s) ? `"${raw.trim()}" → כן.` : undefined;
+    return { ok: true, value: true, fix };
+  }
+  if (FALSE_TOKENS.has(s) || s === '') {
+    const fix = s === '' ? 'תא ריק → לא.' : (!['false', '0', 'לא'].includes(s) ? `"${raw.trim()}" → לא.` : undefined);
+    return { ok: true, value: false, fix };
+  }
+  // Phrase-style — "טרם שולם", "✓ שולם", "כן בוצע" — fall back to a
+  // contains-based check so we don't fail on minor word noise.
+  if (/(שולם|כן|true|yes|v\b|✓|✔|checked|marked)/i.test(raw)
+      && !/(לא|טרם|no|false|unpaid|unchecked)/i.test(raw)) {
+    return { ok: true, value: true, fix: `"${raw.trim()}" → כן.` };
+  }
+  if (/(לא|טרם|no|false|unpaid|unchecked)/i.test(raw)) {
+    return { ok: true, value: false, fix: `"${raw.trim()}" → לא.` };
+  }
   return { ok: false, reason: `ערך בוליאני לא ברור: ${raw}` };
 }
 
@@ -296,7 +367,9 @@ export async function validateRows(
 
     const errors:   string[] = [];
     const warnings: string[] = [];
+    const fixes:    string[] = [];
     const values:   Record<string, string | number | boolean | null | Record<string, string>> = {};
+    const rawByField = new Map<string, string>();
 
     // Defaults first (e.g. role='coordinator' for the coordinators target).
     if (spec.defaultValues) {
@@ -306,14 +379,28 @@ export async function validateRows(
     for (const field of spec.fields) {
       const col = fieldToCol.get(field.key);
       const raw = col != null ? (row[col] ?? '').toString() : '';
+      rawByField.set(field.key, raw);
 
       if (!raw.trim()) {
+        // Boolean cells that arrive empty are treated as `false` — the
+        // typical "unchecked checkbox" semantic in Excel exports — and
+        // the assumption is surfaced as a fix so the user can spot it.
+        if (field.kind === 'boolean') {
+          const r = coerceBoolean('');
+          if (r.ok) {
+            values[field.key] = r.value;
+            if (r.fix) fixes.push(`${field.label}: ${r.fix}`);
+          }
+          continue;
+        }
         if (field.required) errors.push(`חסר: ${field.label}`);
         if (!(field.key in values)) values[field.key] = null;
         continue;
       }
 
-      let coerced: { ok: true; value: string | number | boolean } | { ok: false; reason: string };
+      let coerced:
+        | { ok: true; value: string | number | boolean; fix?: string }
+        | { ok: false; reason: string };
       switch (field.kind) {
         case 'date':    coerced = coerceDate(raw); break;
         case 'time':    coerced = coerceTime(raw); break;
@@ -338,6 +425,7 @@ export async function validateRows(
 
       if (coerced.ok) {
         values[field.key] = coerced.value;
+        if (coerced.fix) fixes.push(`${field.label}: ${coerced.fix}`);
       } else if (field.kind === 'lookup' && field.fallbackTextKey) {
         // Lookup miss — keep the raw text on the fallback column instead
         // of failing the whole row. Common case: import a patient whose
@@ -352,6 +440,34 @@ export async function validateRows(
       } else {
         errors.push(`${field.label}: ${coerced.reason}`);
         if (!(field.key in values)) values[field.key] = null;
+      }
+    }
+
+    // Per-target post-processing — derive missing fields, normalize
+    // cross-field inconsistencies, etc. Always runs (even with errors)
+    // because its job is often to fix exactly those errors. After it
+    // runs, "חסר: <label>" errors for fields that are now filled get
+    // cleared.
+    if (spec.postProcess) {
+      try {
+        spec.postProcess({ values, raw: rawByField, fixes, warnings });
+      } catch (e) {
+        warnings.push(`postProcess נכשל: ${(e as Error).message}`);
+      }
+
+      if (errors.length > 0) {
+        const stillMissing: string[] = [];
+        for (const err of errors) {
+          const m = err.match(/^חסר:\s*(.+)$/);
+          if (!m) { stillMissing.push(err); continue; }
+          const field = spec.fields.find(f => f.label === m[1]);
+          if (!field) { stillMissing.push(err); continue; }
+          const v = values[field.key];
+          if (v == null || v === '') stillMissing.push(err);
+          // else — postProcess filled it, drop the error.
+        }
+        errors.length = 0;
+        errors.push(...stillMissing);
       }
     }
 
@@ -387,7 +503,7 @@ export async function validateRows(
       index: i + 2, // +2 = header row + 1-based
       status,
       reason: summarizeReason(errors, status),
-      errors, warnings, values, duplicateOf,
+      errors, warnings, fixes, values, duplicateOf,
     });
   });
 

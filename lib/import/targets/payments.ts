@@ -1,5 +1,23 @@
 import type { TargetSpec } from '../types';
 
+/**
+ * Real-world CSV often has a `received_date` ("13/3/2026") but no explicit
+ * `month`. The postProcess hook derives "YYYY-MM" from the date so the
+ * row passes the required-month check without manual fixing in Excel.
+ */
+function derivePaymentFields(ctx: import('../types').PostProcessContext) {
+  const { values, fixes } = ctx;
+  const month = values.month;
+  const date  = values.received_date;
+  if ((month == null || month === '') && typeof date === 'string') {
+    const m = date.match(/^(\d{4})-(\d{2})/);
+    if (m) {
+      values.month = `${m[1]}-${m[2]}`;
+      fixes.push(`חודש: חולץ אוטומטית מתאריך הקבלה (${values.month}).`);
+    }
+  }
+}
+
 export const PAYMENTS_TARGET: TargetSpec = {
   key:         'payments',
   label:       'תשלומי שיראל',
@@ -7,6 +25,7 @@ export const PAYMENTS_TARGET: TargetSpec = {
   tableName:   'payments',
   dedupeKeys:  ['coordinator_id', 'month'],
   captureUnmappedAsMetadata: true,
+  postProcess: derivePaymentFields,
   fields: [
     { key: 'month', label: 'חודש', required: true, kind: 'string', maxLength: 30,
       aliases: ['month', 'חודש תשלום', 'תקופה'],

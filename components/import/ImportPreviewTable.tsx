@@ -70,13 +70,27 @@ export default function ImportPreviewTable({ rows, fields, filter }: Props) {
                 }}>
                   <td style={td}>{r.index}</td>
                   <td style={td}>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center',
-                      padding: '2px 9px', borderRadius: 18, fontSize: 11, fontWeight: 600,
-                      backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
-                    }}>
-                      {st.label}
-                    </span>
+                    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center',
+                        padding: '2px 9px', borderRadius: 18, fontSize: 11, fontWeight: 600,
+                        backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
+                      }}>
+                        {st.label}
+                      </span>
+                      {r.fixes && r.fixes.length > 0 && (
+                        <span
+                          title={r.fixes.join(' · ')}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            padding: '1px 7px', borderRadius: 18, fontSize: 10, fontWeight: 600,
+                            backgroundColor: '#EFF6FF', color: '#1D4ED8',
+                            border: '1px solid #BFDBFE',
+                          }}>
+                          ✨ תוקן · {r.fixes.length}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{
                     ...td, maxWidth: 320, whiteSpace: 'normal',
@@ -85,7 +99,8 @@ export default function ImportPreviewTable({ rows, fields, filter }: Props) {
                     fontWeight: r.status !== 'valid' ? 500 : 400,
                   }}
                   title={allIssues.length > 1 ? allIssues.join(' · ') : undefined}>
-                    {r.reason ?? (r.warnings.length > 0 ? r.warnings[0] : '—')}
+                    {r.reason ?? (r.warnings.length > 0 ? r.warnings[0] :
+                      (r.fixes && r.fixes.length > 0 ? r.fixes[0] : '—'))}
                     {r.errors.length > 1 && (
                       <span style={{ display: 'block', fontSize: 11, color: C.muted, fontWeight: 400, marginTop: 2 }}>
                         +{r.errors.length - 1} שגיאות נוספות
