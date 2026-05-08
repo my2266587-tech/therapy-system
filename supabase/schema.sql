@@ -161,9 +161,64 @@ create index if not exists idx_patient_documents_patient
 
 -- Private storage bucket. We never expose the service_role key on the client;
 -- the API route signs short-lived URLs for download/preview.
-insert into storage.buckets (id, name, public)
-values ('patient-documents', 'patient-documents', false)
-on conflict (id) do nothing;
+--
+-- The cap (10 MB) is enforced both here and in the API route. If the
+-- bucket cannot be created via SQL on your Supabase plan, create it manually
+-- in Dashboard → Storage with name "patient-documents" and "Public" off.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'patient-documents',
+  'patient-documents',
+  false,
+  10485760,
+  array[
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/jpeg','image/png','image/gif','image/webp','image/heic','image/heif'
+  ]
+)
+on conflict (id) do update
+set public             = excluded.public,
+    file_size_limit    = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+-- Storage policies. The API route already uses the service_role key (which
+-- bypasses RLS), so these are not strictly required for the current flows.
+-- They are defense-in-depth: if the bucket is ever queried with an anon /
+-- authenticated key directly, only authenticated users get through.
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname = 'patient_documents_authenticated_read'
+  ) then
+    create policy patient_documents_authenticated_read
+      on storage.objects for select to authenticated
+      using (bucket_id = 'patient-documents');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname = 'patient_documents_authenticated_write'
+  ) then
+    create policy patient_documents_authenticated_write
+      on storage.objects for insert to authenticated
+      with check (bucket_id = 'patient-documents');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname = 'patient_documents_authenticated_delete'
+  ) then
+    create policy patient_documents_authenticated_delete
+      on storage.objects for delete to authenticated
+      using (bucket_id = 'patient-documents');
+  end if;
+end $$;
 
 -- ── Authorized Users (login access control) ──────────────────────────────────
 -- Run this block in Supabase SQL Editor if the table does not exist yet.

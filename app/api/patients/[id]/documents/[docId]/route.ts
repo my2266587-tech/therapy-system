@@ -10,8 +10,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseServer';
 import { getAuthorizedUser } from '@/lib/getAdminUser';
+import { BUCKETS, friendlyStorageError } from '@/lib/storage';
 
-const BUCKET = 'patient-documents';
+const BUCKET = BUCKETS.patientDocuments;
 
 export async function DELETE(
   req: NextRequest,
@@ -37,10 +38,13 @@ export async function DELETE(
     .from(BUCKET)
     .remove([row.storage_path]);
 
-  // "not found" in storage is OK — proceed to delete the row anyway.
+  // Object not found is OK (already gone) — proceed to delete the row.
+  // Bucket-not-found is also tolerated: with no bucket the bytes are gone too,
+  // so we still drop the orphan row instead of leaving a phantom record.
   if (rmErr && !/not.*found|no such/i.test(rmErr.message)) {
+    console.error('[documents DELETE] storage.remove failed:', rmErr.message);
     return NextResponse.json(
-      { error: `שגיאת מחיקה מהאחסון: ${rmErr.message}` },
+      { error: friendlyStorageError(rmErr.message) },
       { status: 500 },
     );
   }
