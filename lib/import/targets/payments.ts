@@ -8,7 +8,7 @@ export const PAYMENTS_TARGET: TargetSpec = {
   dedupeKeys:  ['coordinator_id', 'month'],
   captureUnmappedAsMetadata: true,
   fields: [
-    { key: 'month', label: 'חודש', required: true, kind: 'string',
+    { key: 'month', label: 'חודש', required: true, kind: 'string', maxLength: 30,
       aliases: ['month', 'חודש תשלום', 'תקופה'],
       hint: 'פורמט "YYYY-MM" או "מאי 2026" או מספר חודש.' },
     { key: 'amount', label: 'סכום', required: true, kind: 'number',

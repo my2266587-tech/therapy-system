@@ -94,9 +94,22 @@ export default function ImportPreviewTable({ rows, fields, filter }: Props) {
                   </td>
                   {fields.map(f => {
                     const v = r.values[f.key];
+                    const text = v == null ? '—' : String(v);
+                    const isLong = text.length > 80 || text.includes('\n');
                     return (
-                      <td key={f.key} style={{ ...td, color: v == null ? C.muted : C.text }}>
-                        {v == null ? '—' : String(v)}
+                      <td
+                        key={f.key}
+                        title={isLong ? text : undefined}
+                        style={{
+                          ...td,
+                          color: v == null ? C.muted : C.text,
+                          maxWidth: 260,
+                          overflow:     isLong ? 'hidden'         : undefined,
+                          textOverflow: isLong ? 'ellipsis'       : undefined,
+                          whiteSpace:   isLong ? 'nowrap'         : 'nowrap',
+                        }}
+                      >
+                        {isLong ? text.replace(/\n/g, ' ⏎ ').slice(0, 120) + (text.length > 120 ? '…' : '') : text}
                       </td>
                     );
                   })}

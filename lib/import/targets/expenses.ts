@@ -18,7 +18,7 @@ export const EXPENSES_TARGET: TargetSpec = {
       hint: 'יחפש בטבלת המטופלות. שורות בלי התאמה ייכשלו.' },
     { key: 'date', label: 'תאריך', kind: 'date',
       aliases: ['date', 'תאריך הוצאה', 'יום'] },
-    { key: 'treatment_type', label: 'סוג טיפול', required: true, kind: 'string',
+    { key: 'treatment_type', label: 'סוג טיפול', required: true, kind: 'string', maxLength: 100,
       aliases: ['treatment', 'type', 'סוג', 'תחום טיפול'] },
     { key: 'cost', label: 'עלות', required: true, kind: 'number',
       aliases: ['cost', 'amount', 'מחיר', 'סכום', 'עלות בש״ח'],

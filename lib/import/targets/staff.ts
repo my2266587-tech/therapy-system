@@ -8,7 +8,7 @@ export const STAFF_TARGET: TargetSpec = {
   dedupeKeys:  ['full_name', 'email'],
   captureUnmappedAsMetadata: true,
   fields: [
-    { key: 'full_name', label: 'שם מלא', required: true, kind: 'string',
+    { key: 'full_name', label: 'שם מלא', required: true, kind: 'string', maxLength: 120,
       aliases: [
         'שם', 'שם פרטי ומשפחה', 'שם פרטי + משפחה',
         'name', 'full name', 'fullname',
@@ -22,9 +22,9 @@ export const STAFF_TARGET: TargetSpec = {
         { value: 'other',       labels: ['אחר', 'אחרת', 'other'] },
       ],
     },
-    { key: 'email', label: 'אימייל', kind: 'string',
+    { key: 'email', label: 'אימייל', kind: 'string', maxLength: 150,
       aliases: ['מייל', 'דואר אלקטרוני', 'דוא״ל', 'דואל', 'דוא"ל', 'email', 'e-mail', 'mail'] },
-    { key: 'phone', label: 'טלפון', kind: 'string',
+    { key: 'phone', label: 'טלפון', kind: 'string', maxLength: 40,
       aliases: [
         'נייד', 'פלאפון', 'סלולר', 'סלולרי', 'מספר טלפון', 'מספר נייד',
         'טל', 'phone', 'mobile', 'cell', 'cellphone', 'tel',

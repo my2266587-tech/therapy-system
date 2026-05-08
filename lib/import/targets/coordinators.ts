@@ -21,15 +21,15 @@ export const COORDINATORS_TARGET: TargetSpec = {
   defaultValues: { role: 'coordinator' },
   captureUnmappedAsMetadata: true,
   fields: [
-    { key: 'full_name', label: 'שם רכזת', required: true, kind: 'string',
+    { key: 'full_name', label: 'שם רכזת', required: true, kind: 'string', maxLength: 120,
       aliases: ['שם', 'name', 'full name', 'fullname', 'רכזת', 'שם הרכזת'] },
-    { key: 'phone', label: 'טלפון רכזת', kind: 'string',
+    { key: 'phone', label: 'טלפון רכזת', kind: 'string', maxLength: 40,
       aliases: [
         'טלפון', 'נייד', 'פלאפון', 'סלולר', 'סלולרי',
         'מספר טלפון', 'מספר נייד', 'טל',
         'phone', 'mobile', 'cell', 'tel',
       ] },
-    { key: 'email', label: 'אימייל', kind: 'string',
+    { key: 'email', label: 'אימייל', kind: 'string', maxLength: 150,
       aliases: [
         'מייל', 'דואר אלקטרוני', 'דוא״ל', 'דואל', 'דוא"ל',
         'אימייל רכזת', 'מייל רכזת',

@@ -39,6 +39,13 @@ export interface FieldSpec {
    * even when "רכזת אחראית = רחל" doesn't match any staff record yet.
    */
   fallbackTextKey?: string;
+  /**
+   * For 'string' — maximum allowed length. A value above the cap, or any
+   * value containing a newline, is flagged as a likely CSV-parse glitch
+   * (paragraph spilling from a multi-line cell). Leave undefined for
+   * genuinely multi-line fields like notes/details/main_topics.
+   */
+  maxLength?: number;
   /** Help text shown next to the field in the mapping UI. */
   hint?: string;
 }

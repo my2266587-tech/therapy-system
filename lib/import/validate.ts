@@ -87,6 +87,7 @@ function isRowEmpty(row: string[]): boolean {
 function coerceDate(raw: string): { ok: true; value: string } | { ok: false; reason: string } {
   const s = raw.trim();
   if (!s) return { ok: false, reason: 'תאריך ריק' };
+  if (looksLikeMisparsedCell(s)) return { ok: false, reason: MISPARSE_HINT };
 
   let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) {
@@ -108,6 +109,7 @@ function coerceDate(raw: string): { ok: true; value: string } | { ok: false; rea
 function coerceTime(raw: string): { ok: true; value: string } | { ok: false; reason: string } {
   const s = raw.trim();
   if (!s) return { ok: false, reason: 'שעה ריקה' };
+  if (looksLikeMisparsedCell(s)) return { ok: false, reason: MISPARSE_HINT };
   const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return { ok: false, reason: `פורמט שעה לא מוכר: ${s}` };
   const h = +m[1], mi = +m[2], se = m[3] ? +m[3] : 0;
@@ -116,6 +118,7 @@ function coerceTime(raw: string): { ok: true; value: string } | { ok: false; rea
 }
 
 function coerceNumber(raw: string): { ok: true; value: number } | { ok: false; reason: string } {
+  if (looksLikeMisparsedCell(raw.trim())) return { ok: false, reason: MISPARSE_HINT };
   const s = raw.trim().replace(/[,\s]/g, '').replace(/^₪/, '');
   if (!s) return { ok: false, reason: 'מספר ריק' };
   const n = Number(s);
@@ -130,9 +133,25 @@ function coerceBoolean(raw: string): { ok: true; value: boolean } | { ok: false;
   return { ok: false, reason: `ערך בוליאני לא ברור: ${raw}` };
 }
 
+/**
+ * Heuristic: a cell that contains a newline or is much longer than a
+ * sensible "short" value almost always means the CSV parser misaligned
+ * — usually because a multiline quoted cell wasn't closed properly and
+ * a paragraph from a "notes" column spilled into the next field.
+ *
+ * For short-typed fields (enum / boolean / number / date / time / lookup)
+ * the message is more useful than the raw "ערך לא חוקי …".
+ */
+function looksLikeMisparsedCell(raw: string): boolean {
+  return raw.includes('\n') || raw.length > 200;
+}
+
+const MISPARSE_HINT = 'נראה שהקובץ פורש לא נכון — התא מכיל מעבר שורה או טקסט ארוך מהצפוי.';
+
 function coerceEnum(raw: string, field: FieldSpec): { ok: true; value: string } | { ok: false; reason: string } {
   const s = raw.trim();
   if (!s) return { ok: false, reason: 'ערך ריק' };
+  if (looksLikeMisparsedCell(s)) return { ok: false, reason: MISPARSE_HINT };
   for (const ev of field.enumValues ?? []) {
     if (ev.value === s || ev.labels.some(l => l.trim() === s)) {
       return { ok: true, value: ev.value };
@@ -170,6 +189,7 @@ function resolveLookup(
 ): { ok: true; value: string } | { ok: false; reason: string } {
   const s = raw.trim();
   if (!s) return { ok: false, reason: 'ערך ריק לחיפוש' };
+  if (looksLikeMisparsedCell(s)) return { ok: false, reason: MISPARSE_HINT };
   const map = field.lookup?.table === 'staff' ? cache.staffByName : cache.patientsByName;
   const id = map.get(s.toLowerCase());
   if (!id) {
@@ -302,7 +322,18 @@ export async function validateRows(
         case 'enum':    coerced = coerceEnum(raw, field); break;
         case 'lookup':  coerced = resolveLookup(raw, field, cache); break;
         case 'string':
-        default:        coerced = { ok: true, value: raw.trim() }; break;
+        default: {
+          const trimmed = raw.trim();
+          // String fields with a maxLength are "short" — newlines or
+          // overlong content almost certainly mean the CSV parser
+          // misaligned, not legitimate data.
+          if (field.maxLength != null && (trimmed.includes('\n') || trimmed.length > field.maxLength)) {
+            coerced = { ok: false, reason: MISPARSE_HINT };
+          } else {
+            coerced = { ok: true, value: trimmed };
+          }
+          break;
+        }
       }
 
       if (coerced.ok) {
