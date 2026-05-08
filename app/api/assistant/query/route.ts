@@ -56,13 +56,24 @@ export async function POST(req: NextRequest) {
 
   const parsed   = parseQuestion(question);
   const toolName = INTENT_TO_TOOL[parsed.intent];
+
+  // Server-side debug — we want to see in logs what the parser decided
+  // and which candidates it considered. Useful when iterating on phrasing.
+  console.log('[assistant]', JSON.stringify({
+    q:      question,
+    intent: parsed.intent,
+    range:  parsed.range?.label ?? null,
+    name:   parsed.name ?? null,
+    debug:  parsed.debug ?? [],
+  }));
+
   const supabase = createServerClient();
 
   // Intent the parser couldn't classify — return help, never invoke a tool.
   if (!toolName) {
     return NextResponse.json({
       intent: 'unknown',
-      answer: 'לא הבנתי את השאלה. הנה דוגמאות לשאלות שאפשר לשאול:',
+      answer: 'לא הצלחתי להבין את השאלה. הנה כמה דוגמאות שעובדות:',
       links:  [],
       rows:   EXAMPLE_QUESTIONS.map(q => ({ title: q })),
     });

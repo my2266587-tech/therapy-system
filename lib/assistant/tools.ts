@@ -44,6 +44,12 @@ const SESSION_STATUS_HE: Record<string, string> = {
   no_show:   'לא הגיעה',
 };
 
+const PATIENT_STATUS_HE: Record<string, string> = {
+  active:   'פעילה',
+  inactive: 'לא פעילה',
+  waiting:  'ממתינה',
+};
+
 const PAID_STATUS_HE: Record<string, string> = {
   not_sent: 'לא נשלח',
   sent:     'נשלח',
@@ -371,17 +377,63 @@ export async function getPatientDocuments(
   };
 }
 
-/* ── 9. Help / examples ────────────────────────────────────────────────── */
+/* ── 9. Patient list / count ───────────────────────────────────────────── */
+
+export async function getPatientList(
+  supabase: SupabaseClient,
+  opts: { statusFilter?: string } = {},
+): Promise<ToolResult> {
+  let query = supabase
+    .from('patients')
+    .select('id, full_name, status', { count: 'exact' })
+    .order('full_name')
+    .limit(20);
+
+  if (opts.statusFilter) {
+    query = query.eq('status', opts.statusFilter);
+  }
+
+  const { data, error, count } = await query;
+  if (error) return { answer: `שגיאה: ${error.message}` };
+
+  const total = count ?? 0;
+  const rows = (data ?? []) as Array<{ id: string; full_name: string; status: string }>;
+
+  if (total === 0) {
+    return {
+      answer: opts.statusFilter
+        ? `אין מטופלות במצב ${PATIENT_STATUS_HE[opts.statusFilter] ?? opts.statusFilter}.`
+        : 'אין מטופלות במערכת עדיין.',
+    };
+  }
+
+  const filterLabel = opts.statusFilter
+    ? ` (${PATIENT_STATUS_HE[opts.statusFilter] ?? opts.statusFilter})`
+    : '';
+  const showing = rows.length < total ? ` — מוצגות ${rows.length} מתוך ${total}` : '';
+
+  return {
+    answer: `${pluralBy(total, 'מטופלת', 'מטופלות')}${filterLabel} במערכת${showing}:`,
+    rows: rows.map(p => ({
+      title:    p.full_name,
+      subtitle: PATIENT_STATUS_HE[p.status] ?? p.status,
+      href:     `/patients/${p.id}`,
+    })),
+    links: [{ label: 'פתח כל המטופלות', href: '/patients' }],
+  };
+}
+
+/* ── 10. Help / examples ───────────────────────────────────────────────── */
 
 export const EXAMPLE_QUESTIONS = [
-  'אילו פגישות יש היום?',
-  'מי המטופלות למחר?',
-  'איזו פגישה הייתה ביום שני?',
+  'מי מגיעה מחר?',
+  'אילו פגישות יש השבוע?',
+  'מה היה ביום שני?',
+  'כמה מטופלות יש?',
   'למי חסר סיכום פגישה?',
   'אילו תשלומים עדיין פתוחים?',
   'אילו הקלטות לא עובדו?',
-  'תני סיכום פעילות של [שם מטופלת]',
-  'אילו מסמכים יש למטופלת [שם]?',
+  'סיכום פעילות של [שם מטופלת]',
 ] as const;
 
 export function helpResult(): ToolResult {

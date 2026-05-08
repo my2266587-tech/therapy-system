@@ -48,6 +48,7 @@ export const TOOL_NAMES = [
   'getUnprocessedRecordings',
   'getPatientTimeline',
   'getPatientDocuments',
+  'getPatientList',
   'help',
 ] as const;
 
@@ -67,6 +68,7 @@ export const INTENT_TO_TOOL: Record<Intent, ToolName | null> = {
   unprocessedRecordings: 'getUnprocessedRecordings',
   patientTimeline:       'getPatientTimeline',
   patientDocuments:      'getPatientDocuments',
+  listPatients:          'getPatientList',
   help:                  'help',
   unknown:               null,
 };
@@ -125,6 +127,11 @@ export async function dispatchTool(
         return { answer: 'לא ציינת שם של מטופלת. נסי: "אילו מסמכים יש למטופלת [שם]?"' };
       }
       return tools.getPatientDocuments(supabase, name);
+    }
+
+    case 'getPatientList': {
+      const statusFilter = typeof input.statusFilter === 'string' ? input.statusFilter : undefined;
+      return tools.getPatientList(supabase, { statusFilter });
     }
 
     case 'help':

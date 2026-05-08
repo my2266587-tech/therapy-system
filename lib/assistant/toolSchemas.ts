@@ -100,6 +100,20 @@ export const TOOL_SCHEMAS: ClaudeToolSchema[] = [
     },
   },
   {
+    name: 'getPatientList',
+    description: 'Total count + alphabetical list of patients in the system. Use for "כמה מטופלות יש?", "מי המטופלות?", "האם יש מטופלות במערכת?", and similar questions about the patient roster as a whole. Optionally filter by status.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        statusFilter: {
+          type: 'string',
+          enum: ['active', 'inactive', 'waiting'],
+          description: 'Optional patient status filter. Omit to list all.',
+        },
+      },
+    },
+  },
+  {
     name: 'help',
     description: 'Return the list of example questions the assistant can answer. Use only when the user explicitly asks for help or examples — not as a fallback.',
     input_schema: { type: 'object', properties: {} },
