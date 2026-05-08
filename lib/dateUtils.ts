@@ -160,16 +160,6 @@ export interface DatePartsOpts {
   smartToday?: boolean;
 }
 
-export interface DateParts {
-  weekday: string;     // "יום שני" — or "היום" / "מחר" when smartToday is on
-  gregorian: string;   // "4 במאי 2026"
-  time: string | null; // "10:31" or null
-  isToday: boolean;
-  isTomorrow: boolean;
-}
-
-const SEP = ' | ';
-
 function hasTimeComponent(d: Date | string): boolean {
   if (d instanceof Date) return true;
   // YYYY-MM-DD pure-date strings have no time. Anything with 'T' or ':' does.
@@ -182,21 +172,33 @@ function isSameDay(a: Date, b: Date): boolean {
       && a.getDate()     === b.getDate();
 }
 
-/** Granular parts for custom rendering. */
+export interface DateParts {
+  weekday: string;       // "יום שני" — or "היום" / "מחר" when smartToday is on
+  gregorian: string;     // "4 במאי 2026"
+  hebrew: string;        // "י״ז באייר תשפ״ו"  (always present; system requirement)
+  hebrewShort: string;   // "י״ז אייר"          (no year, for compact layouts)
+  time: string | null;   // "10:31" or null
+  isToday: boolean;
+  isTomorrow: boolean;
+}
+
+/** Granular parts for custom rendering. Hebrew + Gregorian always included. */
 export function dateParts(
   d: Date | string | null | undefined,
   opts: DatePartsOpts = {},
 ): DateParts {
-  if (!d) return { weekday: '', gregorian: '', time: null, isToday: false, isTomorrow: false };
+  if (!d) return {
+    weekday: '', gregorian: '', hebrew: '', hebrewShort: '',
+    time: null, isToday: false, isTomorrow: false,
+  };
   const date = toDate(d);
   const withYear = opts.withYear ?? true;
   const withTime = opts.withTime ?? hasTimeComponent(d);
 
   const weekdayStr  = fmt('he-IL', { weekday: 'long' }).format(date);
-  const gregorianStr = fmt('he-IL', withYear
-    ? { day: 'numeric', month: 'long', year: 'numeric' }
-    : { day: 'numeric', month: 'long' }
-  ).format(date);
+  const gregorianStr = formatGregorian(date, withYear ? PRESETS.long : { day: 'numeric', month: 'long' });
+  const hebrewStr    = formatHebrew(date, withYear ? PRESETS.long : { day: 'numeric', month: 'long' });
+  const hebrewShortStr = formatHebrew(date, { day: 'numeric', month: 'long' });
   const timeStr = withTime
     ? fmt('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
     : null;
@@ -212,26 +214,36 @@ export function dateParts(
     else if (isTomorrow) weekday = 'מחר';
   }
 
-  return { weekday, gregorian: gregorianStr, time: timeStr, isToday, isTomorrow };
+  return {
+    weekday, gregorian: gregorianStr, hebrew: hebrewStr,
+    hebrewShort: hebrewShortStr, time: timeStr, isToday, isTomorrow,
+  };
 }
 
-/** "יום שני | 4 במאי 2026 | 10:31" — flat string for places that need one. */
-export function formatDateLine(
-  d: Date | string | null | undefined,
-  opts: DatePartsOpts = {},
-): string {
-  const p = dateParts(d, opts);
-  if (!p.gregorian) return '';
-  return [p.weekday, p.gregorian, p.time].filter(Boolean).join(SEP);
-}
-
-/** Two strings for a stacked layout — weekday on top, date(+time) below. */
+/** Two-row strings for stacked layouts.
+ *    top:    "יום שני · 4 במאי 2026"
+ *    bottom: "י״ז באייר תשפ״ו · 10:31"
+ */
 export function formatDateStacked(
   d: Date | string | null | undefined,
   opts: DatePartsOpts = {},
 ): { top: string; bottom: string } {
   const p = dateParts(d, opts);
   if (!p.gregorian) return { top: '', bottom: '' };
-  const bottom = [p.gregorian, p.time].filter(Boolean).join(SEP);
-  return { top: p.weekday, bottom };
+  const top    = [p.weekday, p.gregorian].filter(Boolean).join(' · ');
+  const bottom = [p.hebrew, p.time].filter(Boolean).join(' · ');
+  return { top, bottom };
+}
+
+/** Flat string for places (Excel cells, modal labels, copy text) that
+ *  must take one line. Compact = no Hebrew calendar.
+ *      "יום שני · 4 במאי 2026 · 10:31"
+ */
+export function formatDateLine(
+  d: Date | string | null | undefined,
+  opts: DatePartsOpts = {},
+): string {
+  const p = dateParts(d, opts);
+  if (!p.gregorian) return '';
+  return [p.weekday, p.gregorian, p.time].filter(Boolean).join(' · ');
 }

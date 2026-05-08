@@ -7,7 +7,6 @@ import SummaryForm from '@/components/summaries/SummaryForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
-import { formatDateLine, hebrewLong } from '@/lib/dateUtils';
 import type { SessionSummary, Recording } from '@/types';
 
 const C = {
@@ -324,10 +323,13 @@ export default function SummariesPage() {
                         </p>
                         {fromRecording && <SourceBadge label="מהקלטה" />}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <DateDisplay date={r.date} variant="line" size="sm" />
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                        <DateDisplay date={r.date} size="sm" />
                         {r.start_time && (
-                          <span style={{ fontSize: 12, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
+                          <span style={{
+                            fontSize: 11, color: C.muted, fontVariantNumeric: 'tabular-nums',
+                            alignSelf: 'center',
+                          }}>
                             {r.start_time}{r.end_time ? `–${r.end_time}` : ''}
                             {r.duration_minutes ? ` · ${r.duration_minutes} דק'` : ''}
                           </span>
@@ -448,7 +450,7 @@ function SummaryDetail({ summary, recording, onEdit }: {
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center' }}>
-          <MetaItem label="תאריך" value={`${formatDateLine(summary.date)} · ${hebrewLong(summary.date)}`} />
+          <MetaItem label="תאריך" value={<DateDisplay date={summary.date} size="sm" />} />
           {summary.start_time && (
             <MetaItem label="שעות" value={`${summary.start_time}${summary.end_time ? ` – ${summary.end_time}` : ''}`} />
           )}
@@ -549,7 +551,7 @@ function Section({ label, value, accent }: { label: string; value: string; accen
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
+function MetaItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>

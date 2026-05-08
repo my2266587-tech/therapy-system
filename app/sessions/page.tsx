@@ -168,10 +168,9 @@ function SessionsInner() {
                   {/* Day label */}
                   <DateDisplay
                     date={r.date}
-                    variant="line"
                     size="sm"
                     smartToday
-                    style={{ flexShrink: 0 }}
+                    style={{ flexShrink: 0, alignItems: 'flex-end' }}
                   />
 
                   {/* Status */}

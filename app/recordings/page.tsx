@@ -186,9 +186,7 @@ function RecordingsInner() {
                     </p>
                     <DateDisplay
                       date={r.recorded_at}
-                      variant="line"
                       size="sm"
-                      withTime
                       style={{ marginTop: 4 }}
                     />
                   </div>

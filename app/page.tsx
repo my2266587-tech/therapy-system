@@ -184,13 +184,14 @@ export default function DashboardPage() {
                     {(s.patient as any)?.full_name ?? '—'}
                   </span>
                 </div>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center',
-                  backgroundColor: C.bg,
-                  padding: '4px 11px', borderRadius: 20, border: `1px solid ${C.border}`,
-                }}>
-                  <DateDisplay date={s.date} variant="line" size="sm" smartToday muted={C.sub} strong={C.text} />
-                </span>
+                <DateDisplay
+                  date={s.date}
+                  size="sm"
+                  smartToday
+                  muted={C.muted}
+                  strong={C.text}
+                  style={{ alignItems: 'flex-end', flexShrink: 0 }}
+                />
               </div>
             ))}
           </SectionCard>
@@ -213,13 +214,13 @@ export default function DashboardPage() {
                     {(r.patient as any)?.full_name ?? '—'}
                   </span>
                 </div>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center',
-                  backgroundColor: C.bg,
-                  padding: '4px 11px', borderRadius: 20, border: `1px solid ${C.border}`,
-                }}>
-                  <DateDisplay date={r.recorded_at} variant="line" size="sm" withTime muted={C.sub} strong={C.text} />
-                </span>
+                <DateDisplay
+                  date={r.recorded_at}
+                  size="sm"
+                  muted={C.muted}
+                  strong={C.text}
+                  style={{ alignItems: 'flex-end', flexShrink: 0 }}
+                />
               </div>
             ))}
           </SectionCard>

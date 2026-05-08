@@ -1,45 +1,52 @@
 /**
- * Unified date display — "יום שני | 4 במאי 2026 | 10:31".
+ * Unified date display — Hebrew + Gregorian + time, every time.
  *
- * Single component, two layouts:
- *   variant="line"     →  one row, separators between segments
- *   variant="stacked"  →  weekday on top, date+time below
+ * Default layout (`variant="stacked"`, the recommended one):
  *
- * Always RTL. The weekday is the visual emphasis: bolder + darker than
- * the date+time tail, regardless of layout. "size" picks a coherent
- * (font, line-height, gap) preset rather than letting callers drift.
+ *   יום שני · 4 במאי 2026          ← primary line
+ *   י״ז באייר תשפ״ו · 10:31         ← secondary line (smaller, muted)
  *
- * For the smart "היום"/"מחר" prefix used in some lists, pass smartToday.
+ * Compact layout (`variant="compact"`) — for chips and tight cells.
+ * Single row, gregorian first, hebrew abbreviated (no year), tiny font:
+ *
+ *   יום שני · 4 במאי 2026 · י״ז אייר · 10:31
+ *
+ * Always RTL. Weekday is the visual anchor (semibold, dark). The hebrew
+ * calendar line is intentionally lighter than the gregorian line so the
+ * eye reads gregorian first, hebrew as supporting context.
+ *
+ * Use the `smartToday` flag to swap the weekday for "היום"/"מחר" when
+ * the date matches the current/next day.
  */
 
 import { dateParts, type DatePartsOpts } from '@/lib/dateUtils';
 
-export type DateVariant = 'line' | 'stacked';
+export type DateVariant = 'stacked' | 'compact';
 export type DateSize = 'sm' | 'md';
 
 interface Props extends DatePartsOpts {
   date: Date | string | null | undefined;
   variant?: DateVariant;
   size?: DateSize;
-  /** Override the muted color (e.g. white-on-dark). */
+  /** Override the muted color (e.g. dark backgrounds). */
   muted?: string;
-  /** Override the strong color (weekday). */
+  /** Override the strong color (weekday + gregorian primary line). */
   strong?: string;
   /** Inline style escape hatch — applied to the wrapper. */
   style?: React.CSSProperties;
 }
 
 const SIZES: Record<DateSize, {
-  weekdayFs: number; tailFs: number; lineH: number; gapStacked: number;
+  primaryFs: number; secondaryFs: number; lineH: number; gap: number;
 }> = {
-  sm: { weekdayFs: 12, tailFs: 11, lineH: 1.35, gapStacked: 1 },
-  md: { weekdayFs: 13, tailFs: 12, lineH: 1.4,  gapStacked: 2 },
+  sm: { primaryFs: 12, secondaryFs: 11, lineH: 1.4,  gap: 2 },
+  md: { primaryFs: 13, secondaryFs: 12, lineH: 1.45, gap: 3 },
 };
 
-const SEP = '|';
+const SEP = '·';
 
 export default function DateDisplay({
-  date, variant = 'line', size = 'md',
+  date, variant = 'stacked', size = 'md',
   withTime, withYear, smartToday,
   muted  = '#94A3B8',
   strong = '#1A2332',
@@ -50,46 +57,67 @@ export default function DateDisplay({
 
   const s = SIZES[size];
 
-  if (variant === 'stacked') {
+  if (variant === 'compact') {
+    // Single line, all info, abbreviated hebrew (no year).
     return (
       <span
         style={{
-          display: 'inline-flex', flexDirection: 'column',
-          gap: s.gapStacked, lineHeight: s.lineH, direction: 'rtl',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          lineHeight: s.lineH, direction: 'rtl', whiteSpace: 'nowrap',
           ...style,
         }}
       >
-        <span style={{ fontSize: s.weekdayFs, fontWeight: 600, color: strong }}>
+        <span style={{ fontSize: s.primaryFs, fontWeight: 600, color: strong }}>
           {p.weekday}
         </span>
-        <span style={{ fontSize: s.tailFs, color: muted }}>
-          {[p.gregorian, p.time].filter(Boolean).join(` ${SEP} `)}
+        <Sep color={muted} />
+        <span style={{ fontSize: s.primaryFs, color: muted }}>{p.gregorian}</span>
+        <Sep color={muted} />
+        <span style={{ fontSize: s.secondaryFs, color: muted, opacity: 0.85 }}>
+          {p.hebrewShort}
         </span>
+        {p.time && (
+          <>
+            <Sep color={muted} />
+            <span style={{
+              fontSize: s.secondaryFs, color: muted,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {p.time}
+            </span>
+          </>
+        )}
       </span>
     );
   }
 
+  // Default: two-row stacked layout.
   return (
     <span
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        lineHeight: s.lineH, direction: 'rtl', whiteSpace: 'nowrap',
+        display: 'inline-flex', flexDirection: 'column',
+        gap: s.gap, lineHeight: s.lineH, direction: 'rtl',
         ...style,
       }}
     >
-      <span style={{ fontSize: s.weekdayFs, fontWeight: 600, color: strong }}>
-        {p.weekday}
+      <span style={{
+        fontSize: s.primaryFs, fontWeight: 600, color: strong, letterSpacing: '-0.005em',
+      }}>
+        <span>{p.weekday}</span>
+        <SepInline color={muted} />
+        <span style={{ fontWeight: 500 }}>{p.gregorian}</span>
       </span>
-      <Sep color={muted} />
-      <span style={{ fontSize: s.tailFs, color: muted }}>{p.gregorian}</span>
-      {p.time && (
-        <>
-          <Sep color={muted} />
-          <span style={{ fontSize: s.tailFs, color: muted, fontVariantNumeric: 'tabular-nums' }}>
-            {p.time}
-          </span>
-        </>
-      )}
+      <span style={{
+        fontSize: s.secondaryFs, color: muted, opacity: 0.95,
+      }}>
+        <span>{p.hebrew}</span>
+        {p.time && (
+          <>
+            <SepInline color={muted} />
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{p.time}</span>
+          </>
+        )}
+      </span>
     </span>
   );
 }
@@ -97,7 +125,17 @@ export default function DateDisplay({
 function Sep({ color }: { color: string }) {
   return (
     <span aria-hidden="true" style={{
-      color, opacity: 0.6, fontSize: 11, lineHeight: 1, userSelect: 'none',
+      color, opacity: 0.55, fontSize: 11, lineHeight: 1, userSelect: 'none',
+    }}>
+      {SEP}
+    </span>
+  );
+}
+
+function SepInline({ color }: { color: string }) {
+  return (
+    <span aria-hidden="true" style={{
+      margin: '0 6px', color, opacity: 0.55, userSelect: 'none',
     }}>
       {SEP}
     </span>

@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import QuarterlyForm from '@/components/quarterly/QuarterlyForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
-import { hebrewLong, formatDateLine } from '@/lib/dateUtils';
 import DateDisplay from '@/components/ui/DateDisplay';
 import type { QuarterlySummary } from '@/types';
 
@@ -137,14 +136,15 @@ export default function QuarterlyPage() {
                     <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
                       {(r.patient as any)?.full_name ?? '—'}
                     </p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
-                      <DateDisplay date={r.date} variant="line" size="sm" />
-                      {r.duration_minutes ? (
-                        <span style={{ fontSize: 12, color: C.muted }}>· {r.duration_minutes} דק'</span>
-                      ) : null}
-                      {r.participants ? (
-                        <span style={{ fontSize: 12, color: C.muted }}>· {r.participants}</span>
-                      ) : null}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+                      <DateDisplay date={r.date} size="sm" />
+                      {(r.duration_minutes || r.participants) && (
+                        <span style={{ fontSize: 11, color: C.muted, alignSelf: 'center' }}>
+                          {r.duration_minutes ? `${r.duration_minutes} דק'` : ''}
+                          {r.duration_minutes && r.participants ? ' · ' : ''}
+                          {r.participants ?? ''}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -232,7 +232,7 @@ function QuarterlyDetail({ record }: { record: QuarterlySummary }) {
       }}>
         <MetaItem label="מטופלת" value={(record.patient as any)?.full_name ?? '—'} />
         <MetaItem label="רבעון" value={quarterOf(record.date)} />
-        <MetaItem label="תאריך" value={`${formatDateLine(record.date)} · ${hebrewLong(record.date)}`} />
+        <MetaItem label="תאריך" value={<DateDisplay date={record.date} size="sm" />} />
         {record.duration_minutes && <MetaItem label="משך" value={`${record.duration_minutes} דק'`} />}
       </div>
 
@@ -277,7 +277,7 @@ function Section({ label, value, tone }: { label: string; value: string; tone?: 
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
+function MetaItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <div style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>

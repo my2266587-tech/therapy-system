@@ -11,7 +11,7 @@ import PatientForm from '@/components/patients/PatientForm';
 import {
   housingTypeLabels, maritalStatusLabels,
 } from '@/lib/labels';
-import { hebrewDay, hebrewLong, formatDateLine } from '@/lib/dateUtils';
+import { hebrewDay } from '@/lib/dateUtils';
 import type {
   Patient, Session, SessionSummary, Recording, PatientDocumentWithUrl,
 } from '@/types';
@@ -377,14 +377,15 @@ function SummariesTab({ summaries, onOpen }: { summaries: SessionSummary[]; onOp
             e.currentTarget.style.boxShadow = 'none';
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <DateDisplay date={s.date} variant="line" size="md" strong="#1A2332" muted="#64748B" />
-              {s.start_time && (
-                <span style={{ fontSize: 12, color: '#94A3B8' }}>· {s.start_time} – {s.end_time}</span>
-              )}
-              {s.duration_minutes && (
-                <span style={{ fontSize: 12, color: '#94A3B8' }}>· {s.duration_minutes} דק'</span>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+              <DateDisplay date={s.date} size="md" strong="#1A2332" muted="#64748B" />
+              {(s.start_time || s.duration_minutes) && (
+                <span style={{ fontSize: 12, color: '#94A3B8', alignSelf: 'center' }}>
+                  {s.start_time ? `${s.start_time}${s.end_time ? ` – ${s.end_time}` : ''}` : ''}
+                  {s.start_time && s.duration_minutes ? ' · ' : ''}
+                  {s.duration_minutes ? `${s.duration_minutes} דק'` : ''}
+                </span>
               )}
             </div>
             <span style={{
@@ -439,7 +440,7 @@ function SummaryDetail({ summary, recordings }: { summary: SessionSummary; recor
         padding: '14px 16px', marginBottom: 18,
         backgroundColor: '#F8FAFC', borderRadius: 10, border: '1px solid #E8ECF0',
       }}>
-        <MetaItem label="תאריך" value={`${formatDateLine(summary.date)} · ${hebrewLong(summary.date)}`} />
+        <MetaItem label="תאריך" value={<DateDisplay date={summary.date} size="sm" />} />
         {summary.start_time && (
           <MetaItem label="שעות" value={`${summary.start_time} – ${summary.end_time ?? ''}`} />
         )}
@@ -489,7 +490,7 @@ function SummaryDetail({ summary, recordings }: { summary: SessionSummary; recor
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
+function MetaItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <div style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -756,10 +757,12 @@ function DocumentsTab({ patientId, patientName }: { patientId: string; patientNa
                   }}>
                     {doc.file_name}
                   </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-                    <DateDisplay date={doc.uploaded_at} variant="line" size="sm" withTime />
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+                    <DateDisplay date={doc.uploaded_at} size="sm" />
                     {doc.file_size != null && (
-                      <span style={{ fontSize: 11, color: '#94A3B8' }}>· {formatBytes(doc.file_size)}</span>
+                      <span style={{ fontSize: 11, color: '#94A3B8', alignSelf: 'center' }}>
+                        · {formatBytes(doc.file_size)}
+                      </span>
                     )}
                   </div>
                 </div>
