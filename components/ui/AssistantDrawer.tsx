@@ -4,6 +4,23 @@ import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 're
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
+/**
+ * Floating side assistant — does not block the page.
+ *
+ * Mounted persistently inside SidebarLayout. The component never
+ * unmounts during normal navigation, so:
+ *   - chat history stays across open/close cycles
+ *   - the composer's draft stays across open/close cycles
+ *   - clicking the FAB re-opens to exactly the previous state
+ *
+ * Closed state = launcher FAB only.
+ * Open state   = a 380px floating side panel on desktop (with the rest of
+ *                the page fully visible and interactive behind it),
+ *                or a full-screen sheet on mobile.
+ *
+ * No logic change vs. the previous version — only UX.
+ */
+
 interface RowItem  { title: string; subtitle?: string; href?: string }
 interface LinkItem { label: string; href: string }
 
@@ -36,7 +53,7 @@ const C = {
   bg:          '#F6F8FB',
   userBubble:  '#0D9488',
   userText:    '#FFFFFF',
-  botBubble:   '#F8FAFC',
+  botBubble:   '#FFFFFF',
   errorBubble: '#FEF2F2',
   errorText:   '#DC2626',
 };
@@ -46,28 +63,31 @@ export default function AssistantDrawer() {
   const [input, setInput]     = useState('');
   const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef  = useRef<HTMLTextAreaElement | null>(null);
 
-  // Lock body scroll when drawer is open
+  /* ── Responsive: detect mobile breakpoint ──────────────────────── */
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const handler = () => setIsMobile(mq.matches);
+    handler();
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  /* ── Behavior: scroll-to-bottom + autofocus + Esc ───────────────── */
+
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
-
-  // Scroll to bottom when new messages arrive
-  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, sending]);
+  }, [open, messages.length, sending]);
 
-  // Focus input when drawer opens
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 200);
   }, [open]);
 
-  // Esc closes drawer
   useEffect(() => {
     if (!open) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -76,6 +96,8 @@ export default function AssistantDrawer() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
+
+  /* ── Send / clear ──────────────────────────────────────────────── */
 
   const send = useCallback(async (raw: string) => {
     const question = raw.trim();
@@ -101,10 +123,7 @@ export default function AssistantDrawer() {
     try {
       const res = await fetch('/api/assistant/query', {
         method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          Authorization:   `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ question }),
       });
       const json = await res.json().catch(() => null);
@@ -116,8 +135,7 @@ export default function AssistantDrawer() {
         }]);
       } else {
         setMessages(prev => [...prev, {
-          id:    `a-${Date.now()}`,
-          role:  'assistant',
+          id: `a-${Date.now()}`, role: 'assistant',
           text:  json.answer ?? '',
           rows:  json.rows  ?? [],
           links: json.links ?? [],
@@ -133,113 +151,148 @@ export default function AssistantDrawer() {
     }
   }, [sending]);
 
+  const clearChat = useCallback(() => {
+    if (messages.length === 0) return;
+    if (!window.confirm('למחוק את היסטוריית השיחה?')) return;
+    setMessages([]);
+  }, [messages.length]);
+
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter sends; Shift+Enter inserts newline.
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       send(input);
     }
   };
 
+  /* ── Geometry ──────────────────────────────────────────────────── */
+
+  const panelStyle: React.CSSProperties = isMobile
+    ? {
+        top: 0, bottom: 0, insetInlineStart: 0, insetInlineEnd: 0,
+        width: 'auto', borderRadius: 0,
+      }
+    : {
+        top: 16, bottom: 16, insetInlineStart: 16,
+        width: 380, borderRadius: 16,
+      };
+
+  /* ── Render ───────────────────────────────────────────────────── */
+
   return (
     <>
-      {/* ── Floating launcher button ───────────────────────────────── */}
-      <button
-        onClick={() => setOpen(true)}
-        title="עוזר חכם"
-        aria-label="פתח עוזר חכם"
-        style={{
-          position: 'fixed', insetInlineStart: 24, bottom: 24,
-          width: 52, height: 52, borderRadius: '50%', border: 'none',
-          backgroundColor: C.accent, color: '#FFFFFF',
-          boxShadow: '0 8px 24px rgba(13,148,136,0.35)',
-          cursor: 'pointer', zIndex: 60,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'transform 0.12s, box-shadow 0.12s',
-        }}
-        onMouseEnter={e => {
-          (e.currentTarget as HTMLElement).style.transform = 'scale(1.06)';
-          (e.currentTarget as HTMLElement).style.boxShadow = '0 12px 28px rgba(13,148,136,0.45)';
-        }}
-        onMouseLeave={e => {
-          (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
-          (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(13,148,136,0.35)';
-        }}
-      >
-        <SparkleIcon />
-      </button>
-
-      {/* ── Backdrop ─────────────────────────────────────────────── */}
-      {open && (
-        <div
-          onClick={() => setOpen(false)}
+      {/* ── Floating launcher ─ visible only when drawer is closed ── */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          title="עוזר חכם"
+          aria-label="פתח עוזר חכם"
           style={{
-            position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.45)',
-            backdropFilter: 'blur(2px)', zIndex: 70,
+            position: 'fixed', insetInlineStart: 24, bottom: 24,
+            width: 52, height: 52, borderRadius: '50%', border: 'none',
+            backgroundColor: C.accent, color: '#FFFFFF',
+            boxShadow: '0 8px 24px rgba(13,148,136,0.35)',
+            cursor: 'pointer', zIndex: 60,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'transform 0.12s, box-shadow 0.12s',
           }}
-        />
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.transform = 'scale(1.06)';
+            (e.currentTarget as HTMLElement).style.boxShadow = '0 12px 28px rgba(13,148,136,0.45)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+            (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(13,148,136,0.35)';
+          }}
+        >
+          <SparkleIcon />
+          {messages.length > 0 && (
+            <span aria-label={`${messages.length} הודעות`} style={{
+              position: 'absolute', insetInlineEnd: -2, top: -2,
+              minWidth: 18, height: 18, padding: '0 5px',
+              borderRadius: 9, backgroundColor: '#FFFFFF',
+              color: C.accent, fontSize: 10, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: `1.5px solid ${C.accent}`,
+            }}>
+              {messages.filter(m => m.role === 'user').length}
+            </span>
+          )}
+        </button>
       )}
 
-      {/* ── Drawer ────────────────────────────────────────────────── */}
+      {/*
+        ── Drawer ── always mounted so chat + draft persist across closes.
+        Pointer-events flips to none when closed so the panel can't intercept
+        clicks on the dashboard behind it. No backdrop, no scroll lock —
+        the page stays fully usable.
+      */}
       <aside
         role="dialog"
         aria-label="עוזר חכם"
         aria-hidden={!open}
         style={{
-          position: 'fixed', top: 0, height: '100vh',
-          insetInlineStart: 0,                        // RTL: visually right edge
-          width: 'min(420px, 100vw)',
-          backgroundColor: C.card,
-          boxShadow: open ? '-8px 0 24px rgba(15,23,42,0.12)' : 'none',
-          transform: open ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)',
-          zIndex: 80, direction: 'rtl',
+          position: 'fixed', zIndex: 70, direction: 'rtl',
+          ...panelStyle,
+          backgroundColor: 'rgba(255,255,255,0.92)',
+          backdropFilter:   'blur(14px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(14px) saturate(180%)',
+          border: `1px solid ${C.border}`,
+          boxShadow: open
+            ? '0 12px 36px rgba(15,23,42,0.16), 0 2px 6px rgba(15,23,42,0.06)'
+            : 'none',
+          transform: open ? 'translateX(0) scale(1)' : `translateX(${isMobile ? '-100%' : 'calc(-100% - 24px)'}) scale(0.985)`,
+          opacity:   open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+          transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1), opacity 0.2s, box-shadow 0.2s',
           display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
         {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 20px', borderBottom: `1px solid ${C.border}`,
+          padding: '12px 14px',
+          borderBottom: `1px solid ${C.border}`,
           flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <span style={{
-              width: 32, height: 32, borderRadius: 9, display: 'inline-flex',
+              width: 30, height: 30, borderRadius: 8, display: 'inline-flex',
               alignItems: 'center', justifyContent: 'center',
               backgroundColor: C.accentSub, color: C.accent, border: `1px solid ${C.accentRim}`,
+              flexShrink: 0,
             }}>
-              <SparkleIcon size={16} />
+              <SparkleIcon size={15} />
             </span>
-            <div>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>עוזר חכם</p>
-              <p style={{ margin: '2px 0 0', fontSize: 11, color: C.muted }}>שאלות תפעוליות בעברית</p>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.text }}>עוזר חכם</p>
+              <p style={{ margin: '1px 0 0', fontSize: 10.5, color: C.muted }}>
+                {messages.length === 0 ? 'מוכן לשאלות' : `${messages.length} הודעות`}
+              </p>
             </div>
           </div>
-          <button
-            onClick={() => setOpen(false)}
-            aria-label="סגור"
-            style={{
-              width: 30, height: 30, borderRadius: 7,
-              border: 'none', background: 'transparent', cursor: 'pointer',
-              color: C.sub, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = C.bg; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
-          >
-            <CloseIcon />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <IconBtn label="מחיקת שיחה" onClick={clearChat} disabled={messages.length === 0}>
+              <BroomIcon />
+            </IconBtn>
+            <IconBtn label="מזעור" onClick={() => setOpen(false)}>
+              <MinimizeIcon />
+            </IconBtn>
+            <IconBtn label="סגור" onClick={() => setOpen(false)}>
+              <CloseIcon />
+            </IconBtn>
+          </div>
         </div>
 
         {/* Conversation area */}
         <div
           ref={scrollRef}
-          style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', backgroundColor: C.bg }}
+          style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}
         >
           {messages.length === 0 ? (
             <EmptyState onPick={q => send(q)} />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {messages.map(m => <MessageBubble key={m.id} msg={m} onClose={() => setOpen(false)} />)}
               {sending && <ThinkingBubble />}
             </div>
@@ -248,14 +301,13 @@ export default function AssistantDrawer() {
 
         {/* Composer */}
         <div style={{
-          padding: '12px 16px', borderTop: `1px solid ${C.border}`,
-          backgroundColor: C.card, flexShrink: 0,
+          padding: '10px 12px', borderTop: `1px solid ${C.border}`,
+          backgroundColor: 'rgba(255,255,255,0.6)', flexShrink: 0,
         }}>
           <div style={{
             display: 'flex', alignItems: 'flex-end', gap: 8,
-            border: `1px solid ${C.border}`, borderRadius: 12,
-            padding: '8px 10px', backgroundColor: C.bg,
-            transition: 'border-color 0.12s, box-shadow 0.12s',
+            border: `1px solid ${C.border}`, borderRadius: 11,
+            padding: '7px 9px', backgroundColor: C.card,
           }}>
             <textarea
               ref={inputRef}
@@ -267,8 +319,8 @@ export default function AssistantDrawer() {
               dir="rtl"
               style={{
                 flex: 1, resize: 'none', border: 'none', outline: 'none',
-                background: 'transparent', fontSize: 14, color: C.text,
-                fontFamily: 'inherit', lineHeight: 1.5, maxHeight: 120,
+                background: 'transparent', fontSize: 13.5, color: C.text,
+                fontFamily: 'inherit', lineHeight: 1.5, maxHeight: 110,
               }}
             />
             <button
@@ -277,7 +329,7 @@ export default function AssistantDrawer() {
               aria-label="שליחה"
               style={{
                 flexShrink: 0,
-                width: 34, height: 34, borderRadius: 8, border: 'none',
+                width: 30, height: 30, borderRadius: 7, border: 'none',
                 backgroundColor: !input.trim() || sending ? C.border : C.accent,
                 color: '#FFFFFF',
                 cursor: !input.trim() || sending ? 'not-allowed' : 'pointer',
@@ -289,7 +341,7 @@ export default function AssistantDrawer() {
             </button>
           </div>
           <p style={{
-            margin: '6px 4px 0', fontSize: 10.5, color: C.muted, textAlign: 'right',
+            margin: '5px 4px 0', fontSize: 10, color: C.muted, textAlign: 'right',
           }}>
             הבוט קורא בלבד — לא מבצע שינויים.
           </p>
@@ -299,14 +351,54 @@ export default function AssistantDrawer() {
   );
 }
 
+/* ── Header icon button ─────────────────────────────────────────────── */
+
+function IconBtn({
+  label, onClick, disabled, children,
+}: {
+  label: string; onClick: () => void; disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      style={{
+        width: 28, height: 28, borderRadius: 6, border: 'none',
+        background: 'transparent',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        color: disabled ? '#CBD5E1' : C.sub,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background-color 0.1s, color 0.1s',
+      }}
+      onMouseEnter={e => {
+        if (disabled) return;
+        const el = e.currentTarget as HTMLElement;
+        el.style.backgroundColor = C.bg;
+        el.style.color = C.text;
+      }}
+      onMouseLeave={e => {
+        if (disabled) return;
+        const el = e.currentTarget as HTMLElement;
+        el.style.backgroundColor = 'transparent';
+        el.style.color = C.sub;
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /* ── Empty state ─────────────────────────────────────────────────────── */
 
 function EmptyState({ onPick }: { onPick: (q: string) => void }) {
   return (
-    <div style={{ padding: '14px 0' }}>
+    <div style={{ padding: '6px 0' }}>
       <div style={{
         backgroundColor: C.card, border: `1px solid ${C.border}`,
-        borderRadius: 12, padding: '16px 18px', marginBottom: 14,
+        borderRadius: 11, padding: '14px 16px', marginBottom: 12,
       }}>
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.text }}>
           איך אפשר לעזור?
@@ -315,19 +407,19 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
           אפשר לשאול בעברית טבעית — היום, מחר, יום שני, ושמות של מטופלות.
         </p>
       </div>
-      <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 8px',
+      <p style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, margin: '0 0 6px',
         textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         דוגמאות
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {EXAMPLES.map(q => (
           <button
             key={q}
             onClick={() => onPick(q)}
             style={{
-              textAlign: 'right', padding: '10px 12px',
+              textAlign: 'right', padding: '9px 11px',
               backgroundColor: C.card, border: `1px solid ${C.border}`,
-              borderRadius: 9, fontSize: 13, color: C.text, cursor: 'pointer',
+              borderRadius: 8, fontSize: 12.5, color: C.text, cursor: 'pointer',
               transition: 'all 0.12s',
             }}
             onMouseEnter={e => {
@@ -374,19 +466,17 @@ function MessageBubble({ msg, onClose }: { msg: AssistantMessage; onClose: () =>
         maxWidth: '92%',
         backgroundColor: bubbleBg, color: textColor,
         border: isUser ? 'none' : `1px solid ${isError ? '#FECACA' : C.border}`,
-        borderRadius: 12,
-        borderEndStartRadius: !isUser ? 4 : 12,
-        borderEndEndRadius:    isUser ? 4 : 12,
-        padding: '10px 14px',
-        fontSize: 13.5, lineHeight: 1.55,
+        borderRadius: 11,
+        borderEndStartRadius: !isUser ? 4 : 11,
+        borderEndEndRadius:    isUser ? 4 : 11,
+        padding: '9px 12px',
+        fontSize: 13, lineHeight: 1.55,
         whiteSpace: 'pre-wrap', wordBreak: 'break-word',
       }}>
         <p style={{ margin: 0 }}>{msg.text}</p>
 
         {msg.rows && msg.rows.length > 0 && (
-          <div style={{
-            marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4,
-          }}>
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {msg.rows.map((r, i) => (
               <RowLine key={i} row={r} onClose={onClose} />
             ))}
@@ -394,7 +484,7 @@ function MessageBubble({ msg, onClose }: { msg: AssistantMessage; onClose: () =>
         )}
 
         {msg.links && msg.links.length > 0 && (
-          <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {msg.links.map((l, i) => (
               <Link
                 key={i}
@@ -402,8 +492,8 @@ function MessageBubble({ msg, onClose }: { msg: AssistantMessage; onClose: () =>
                 onClick={onClose}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '4px 10px', borderRadius: 18,
-                  fontSize: 11.5, fontWeight: 600,
+                  padding: '3px 9px', borderRadius: 16,
+                  fontSize: 11, fontWeight: 600,
                   backgroundColor: C.accentSub, color: C.accent,
                   border: `1px solid ${C.accentRim}`, textDecoration: 'none',
                 }}
@@ -421,9 +511,9 @@ function MessageBubble({ msg, onClose }: { msg: AssistantMessage; onClose: () =>
 function RowLine({ row, onClose }: { row: RowItem; onClose: () => void }) {
   const inner = (
     <>
-      <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{row.title}</span>
+      <span style={{ fontSize: 12.5, fontWeight: 500, color: C.text }}>{row.title}</span>
       {row.subtitle && (
-        <span style={{ fontSize: 11.5, color: C.muted, marginInlineStart: 0, display: 'block' }}>
+        <span style={{ fontSize: 11, color: C.muted, display: 'block' }}>
           {row.subtitle}
         </span>
       )}
@@ -435,7 +525,7 @@ function RowLine({ row, onClose }: { row: RowItem; onClose: () => void }) {
         href={row.href}
         onClick={onClose}
         style={{
-          display: 'block', padding: '7px 10px', borderRadius: 7,
+          display: 'block', padding: '6px 9px', borderRadius: 6,
           backgroundColor: C.card, border: `1px solid ${C.border}`,
           textDecoration: 'none',
         }}
@@ -446,7 +536,7 @@ function RowLine({ row, onClose }: { row: RowItem; onClose: () => void }) {
   }
   return (
     <div style={{
-      padding: '7px 10px', borderRadius: 7,
+      padding: '6px 9px', borderRadius: 6,
       backgroundColor: C.card, border: `1px solid ${C.border}`,
     }}>
       {inner}
@@ -459,8 +549,8 @@ function ThinkingBubble() {
     <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
       <div style={{
         backgroundColor: C.botBubble, border: `1px solid ${C.border}`,
-        borderRadius: 12, borderEndStartRadius: 4,
-        padding: '10px 14px',
+        borderRadius: 11, borderEndStartRadius: 4,
+        padding: '9px 12px',
         display: 'flex', alignItems: 'center', gap: 4,
       }}>
         {[0, 1, 2].map(i => (
@@ -494,7 +584,7 @@ function SparkleIcon({ size = 22 }: { size?: number }) {
   );
 }
 
-function CloseIcon({ size = 16 }: { size?: number }) {
+function CloseIcon({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -504,9 +594,28 @@ function CloseIcon({ size = 16 }: { size?: number }) {
   );
 }
 
-function SendIcon({ size = 15 }: { size?: number }) {
-  // Arrow points to the right in LTR; in RTL the natural read of the icon
-  // is "send" regardless of direction since it's symmetric in intent.
+function MinimizeIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="5" y1="18" x2="19" y2="18"/>
+    </svg>
+  );
+}
+
+function BroomIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6M14 11v6"/>
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>
+  );
+}
+
+function SendIcon({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
