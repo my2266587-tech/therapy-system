@@ -1,12 +1,25 @@
 /**
- * Read-only tools the assistant can call. Every function:
- *   - Takes a Supabase client (server-side, service-role) injected by the caller.
- *   - Returns { answer, links?, rows? } — the shape the API forwards to the UI.
- *   - NEVER writes, deletes, or mutates anything.
+ * Read-only tools the assistant can call.
  *
- * This file is the only allowed surface for the assistant's data access. If
- * the parser routes to an intent that has no tool, the API returns "I don't
- * know" rather than improvising.
+ * READ-ONLY CONTRACT — DO NOT BREAK
+ * ─────────────────────────────────
+ * Every function below:
+ *   - Takes a Supabase client (server-side, service-role) injected by the caller.
+ *   - Calls only SELECT-style supabase methods (`.select`, `.from(...).select`).
+ *   - Returns { answer, links?, rows? } — the shape the API forwards to the UI.
+ *   - NEVER inserts, updates, deletes, signs URLs, sends emails, or otherwise
+ *     mutates state. No `.insert`, `.update`, `.delete`, `.upsert`, `.rpc`
+ *     against a write-side function — none of it.
+ *
+ * Reviewing a PR that touches this file? If it adds any non-SELECT call,
+ * the answer is no. Write tools live in a separate file with their own
+ * dispatcher and a per-call confirmation token (see toolSchemas.ts header).
+ *
+ * Adding a NEW read-only tool:
+ *   1. Implement it here (signature: `(supabase, ...args) => Promise<ToolResult>`).
+ *   2. Add it to dispatch.ts (`TOOL_NAMES` + the dispatcher switch).
+ *   3. Add a Claude schema entry in toolSchemas.ts.
+ *   4. (Optional) extend parser.ts so the heuristic fallback finds it.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
