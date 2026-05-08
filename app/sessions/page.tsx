@@ -7,7 +7,8 @@ import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
-import { hebrewDay, hebrewDayMonth } from '@/lib/dateUtils';
+import DateDisplay from '@/components/ui/DateDisplay';
+import { hebrewDay } from '@/lib/dateUtils';
 import type { Session } from '@/types';
 
 const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
@@ -27,17 +28,6 @@ const SESSION_EXPORT_COLUMNS: Column<Session>[] = [
   { header: 'סטטוס',  accessor: r => SESSION_STATUS[r.status]?.label ?? r.status, width: 14 },
   { header: 'הערות',  accessor: r => r.notes ?? '', width: 30 },
 ];
-
-function formatDate(dateStr: string) {
-  const today = new Date().toISOString().slice(0, 10);
-  const tom   = new Date(); tom.setDate(tom.getDate() + 1);
-  const greg  = (() => {
-    if (dateStr === today)                          return 'היום';
-    if (dateStr === tom.toISOString().slice(0, 10)) return 'מחר';
-    return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
-  })();
-  return `${greg} · ${hebrewDayMonth(dateStr)}`;
-}
 
 export default function SessionsPage() {
   return (
@@ -176,9 +166,13 @@ function SessionsInner() {
                   </div>
 
                   {/* Day label */}
-                  <span style={{ fontSize: 12, color: '#64748B', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    {formatDate(r.date)}
-                  </span>
+                  <DateDisplay
+                    date={r.date}
+                    variant="line"
+                    size="sm"
+                    smartToday
+                    style={{ flexShrink: 0 }}
+                  />
 
                   {/* Status */}
                   <span style={{

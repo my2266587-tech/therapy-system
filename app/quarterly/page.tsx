@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import QuarterlyForm from '@/components/quarterly/QuarterlyForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
-import { formatGregorian, hebrewLong, hebrewDayMonth, PRESETS } from '@/lib/dateUtils';
+import { hebrewLong, formatDateLine } from '@/lib/dateUtils';
+import DateDisplay from '@/components/ui/DateDisplay';
 import type { QuarterlySummary } from '@/types';
 
 const C = {
@@ -136,11 +137,15 @@ export default function QuarterlyPage() {
                     <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
                       {(r.patient as any)?.full_name ?? '—'}
                     </p>
-                    <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0' }}>
-                      {r.date} · {hebrewDayMonth(r.date)}
-                      {r.duration_minutes ? ` · ${r.duration_minutes} דק'` : ''}
-                      {r.participants ? ` · ${r.participants}` : ''}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
+                      <DateDisplay date={r.date} variant="line" size="sm" />
+                      {r.duration_minutes ? (
+                        <span style={{ fontSize: 12, color: C.muted }}>· {r.duration_minutes} דק'</span>
+                      ) : null}
+                      {r.participants ? (
+                        <span style={{ fontSize: 12, color: C.muted }}>· {r.participants}</span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <span style={{
@@ -227,7 +232,7 @@ function QuarterlyDetail({ record }: { record: QuarterlySummary }) {
       }}>
         <MetaItem label="מטופלת" value={(record.patient as any)?.full_name ?? '—'} />
         <MetaItem label="רבעון" value={quarterOf(record.date)} />
-        <MetaItem label="תאריך" value={`${formatGregorian(record.date, PRESETS.long)} · ${hebrewLong(record.date)}`} />
+        <MetaItem label="תאריך" value={`${formatDateLine(record.date)} · ${hebrewLong(record.date)}`} />
         {record.duration_minutes && <MetaItem label="משך" value={`${record.duration_minutes} דק'`} />}
       </div>
 

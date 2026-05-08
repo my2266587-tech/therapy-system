@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { formatGregorian, hebrewLong, hebrewDayMonth, PRESETS } from '@/lib/dateUtils';
+import { formatGregorian, hebrewLong, PRESETS } from '@/lib/dateUtils';
+import DateDisplay from '@/components/ui/DateDisplay';
 
 interface UpcomingSession {
   id: string;
@@ -33,26 +34,9 @@ function getGreeting() {
   return 'ערב טוב';
 }
 
-function formatDate() {
+function topBarDate() {
   const now = new Date();
   return `${formatGregorian(now, PRESETS.weekday)} · ${hebrewLong(now)}`;
-}
-
-function labelDate(dateStr: string) {
-  const today = new Date().toISOString().slice(0, 10);
-  const tom   = new Date(); tom.setDate(tom.getDate() + 1);
-  const head  = (() => {
-    if (dateStr === today) return 'היום';
-    if (dateStr === tom.toISOString().slice(0, 10)) return 'מחר';
-    return new Date(dateStr).toLocaleDateString('he-IL', { weekday: 'short', month: 'short', day: 'numeric' });
-  })();
-  return `${head} · ${hebrewDayMonth(dateStr)}`;
-}
-
-function labelRecDate(iso: string) {
-  const d = new Date(iso);
-  const greg = d.toLocaleDateString('he-IL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  return `${greg} · ${hebrewDayMonth(d)}`;
 }
 
 const C = {
@@ -121,7 +105,7 @@ export default function DashboardPage() {
         {/* ── Header ── */}
         <div style={{ marginBottom: 36 }}>
           <p style={{ fontSize: 13, color: C.muted, margin: '0 0 6px' }}>
-            {getGreeting()} · {formatDate()}
+            {getGreeting()} · {topBarDate()}
           </p>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-0.4px' }}>
             מחר אחר – שדה חמד
@@ -201,10 +185,11 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <span style={{
-                  fontSize: 12, color: C.sub, backgroundColor: C.bg,
-                  padding: '3px 11px', borderRadius: 20, border: `1px solid ${C.border}`,
+                  display: 'inline-flex', alignItems: 'center',
+                  backgroundColor: C.bg,
+                  padding: '4px 11px', borderRadius: 20, border: `1px solid ${C.border}`,
                 }}>
-                  {labelDate(s.date)}
+                  <DateDisplay date={s.date} variant="line" size="sm" smartToday muted={C.sub} strong={C.text} />
                 </span>
               </div>
             ))}
@@ -229,10 +214,11 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <span style={{
-                  fontSize: 12, color: C.sub, backgroundColor: C.bg,
-                  padding: '3px 11px', borderRadius: 20, border: `1px solid ${C.border}`,
+                  display: 'inline-flex', alignItems: 'center',
+                  backgroundColor: C.bg,
+                  padding: '4px 11px', borderRadius: 20, border: `1px solid ${C.border}`,
                 }}>
-                  {labelRecDate(r.recorded_at)}
+                  <DateDisplay date={r.recorded_at} variant="line" size="sm" withTime muted={C.sub} strong={C.text} />
                 </span>
               </div>
             ))}

@@ -144,3 +144,94 @@ export function formatDual(
 ): { greg: string; hebrew: string } {
   return { greg: formatGregorian(d, opts), hebrew: formatHebrew(d, opts) };
 }
+
+/* ── Unified user-facing date formatter ───────────────────────────────────
+ * Single source of truth for the "יום שני | 4 במאי 2026 | 10:31" pattern
+ * used in lists, cards, and modals. Use the parts helper when you need
+ * granular styling; use the line helpers for plain string output.
+ */
+
+export interface DatePartsOpts {
+  /** Include HH:MM. Default: true if input has a time component, false otherwise. */
+  withTime?: boolean;
+  /** Include the year in the gregorian segment. Default: true. */
+  withYear?: boolean;
+  /** "היום" / "מחר" replaces the weekday for the current/next day. Default: false. */
+  smartToday?: boolean;
+}
+
+export interface DateParts {
+  weekday: string;     // "יום שני" — or "היום" / "מחר" when smartToday is on
+  gregorian: string;   // "4 במאי 2026"
+  time: string | null; // "10:31" or null
+  isToday: boolean;
+  isTomorrow: boolean;
+}
+
+const SEP = ' | ';
+
+function hasTimeComponent(d: Date | string): boolean {
+  if (d instanceof Date) return true;
+  // YYYY-MM-DD pure-date strings have no time. Anything with 'T' or ':' does.
+  return /[T :]/.test(d);
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear()
+      && a.getMonth()    === b.getMonth()
+      && a.getDate()     === b.getDate();
+}
+
+/** Granular parts for custom rendering. */
+export function dateParts(
+  d: Date | string | null | undefined,
+  opts: DatePartsOpts = {},
+): DateParts {
+  if (!d) return { weekday: '', gregorian: '', time: null, isToday: false, isTomorrow: false };
+  const date = toDate(d);
+  const withYear = opts.withYear ?? true;
+  const withTime = opts.withTime ?? hasTimeComponent(d);
+
+  const weekdayStr  = fmt('he-IL', { weekday: 'long' }).format(date);
+  const gregorianStr = fmt('he-IL', withYear
+    ? { day: 'numeric', month: 'long', year: 'numeric' }
+    : { day: 'numeric', month: 'long' }
+  ).format(date);
+  const timeStr = withTime
+    ? fmt('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
+    : null;
+
+  const today    = new Date();
+  const tomorrow = new Date(); tomorrow.setDate(today.getDate() + 1);
+  const isToday    = isSameDay(date, today);
+  const isTomorrow = isSameDay(date, tomorrow);
+
+  let weekday = weekdayStr;
+  if (opts.smartToday) {
+    if (isToday)    weekday = 'היום';
+    else if (isTomorrow) weekday = 'מחר';
+  }
+
+  return { weekday, gregorian: gregorianStr, time: timeStr, isToday, isTomorrow };
+}
+
+/** "יום שני | 4 במאי 2026 | 10:31" — flat string for places that need one. */
+export function formatDateLine(
+  d: Date | string | null | undefined,
+  opts: DatePartsOpts = {},
+): string {
+  const p = dateParts(d, opts);
+  if (!p.gregorian) return '';
+  return [p.weekday, p.gregorian, p.time].filter(Boolean).join(SEP);
+}
+
+/** Two strings for a stacked layout — weekday on top, date(+time) below. */
+export function formatDateStacked(
+  d: Date | string | null | undefined,
+  opts: DatePartsOpts = {},
+): { top: string; bottom: string } {
+  const p = dateParts(d, opts);
+  if (!p.gregorian) return { top: '', bottom: '' };
+  const bottom = [p.gregorian, p.time].filter(Boolean).join(SEP);
+  return { top: p.weekday, bottom };
+}

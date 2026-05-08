@@ -6,11 +6,12 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
+import DateDisplay from '@/components/ui/DateDisplay';
 import PatientForm from '@/components/patients/PatientForm';
 import {
   housingTypeLabels, maritalStatusLabels,
 } from '@/lib/labels';
-import { formatGregorian, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
+import { hebrewDay, hebrewLong, formatDateLine } from '@/lib/dateUtils';
 import type {
   Patient, Session, SessionSummary, Recording, PatientDocumentWithUrl,
 } from '@/types';
@@ -377,10 +378,8 @@ function SummariesTab({ summaries, onOpen }: { summaries: SessionSummary[]; onOp
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontWeight: 600, fontSize: 14, color: '#1A2332' }}>
-                {s.date} · {hebrewLong(s.date)}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <DateDisplay date={s.date} variant="line" size="md" strong="#1A2332" muted="#64748B" />
               {s.start_time && (
                 <span style={{ fontSize: 12, color: '#94A3B8' }}>· {s.start_time} – {s.end_time}</span>
               )}
@@ -440,7 +439,7 @@ function SummaryDetail({ summary, recordings }: { summary: SessionSummary; recor
         padding: '14px 16px', marginBottom: 18,
         backgroundColor: '#F8FAFC', borderRadius: 10, border: '1px solid #E8ECF0',
       }}>
-        <MetaItem label="תאריך" value={`${formatGregorian(summary.date, PRESETS.long)} · ${hebrewLong(summary.date)}`} />
+        <MetaItem label="תאריך" value={`${formatDateLine(summary.date)} · ${hebrewLong(summary.date)}`} />
         {summary.start_time && (
           <MetaItem label="שעות" value={`${summary.start_time} – ${summary.end_time ?? ''}`} />
         )}
@@ -757,10 +756,12 @@ function DocumentsTab({ patientId, patientName }: { patientId: string; patientNa
                   }}>
                     {doc.file_name}
                   </p>
-                  <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
-                    {formatGregorian(doc.uploaded_at, PRESETS.long)}
-                    {doc.file_size != null && ` · ${formatBytes(doc.file_size)}`}
-                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+                    <DateDisplay date={doc.uploaded_at} variant="line" size="sm" withTime />
+                    {doc.file_size != null && (
+                      <span style={{ fontSize: 11, color: '#94A3B8' }}>· {formatBytes(doc.file_size)}</span>
+                    )}
+                  </div>
                 </div>
                 <a
                   href={doc.url || '#'}

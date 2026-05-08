@@ -7,7 +7,7 @@ import Modal from '@/components/ui/Modal';
 import RecordingForm from '@/components/recordings/RecordingForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
-import { hebrewDayMonth } from '@/lib/dateUtils';
+import DateDisplay from '@/components/ui/DateDisplay';
 import type { Recording } from '@/types';
 
 const C = {
@@ -184,10 +184,13 @@ function RecordingsInner() {
                     <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
                       {(r.patient as any)?.full_name ?? '—'}
                     </p>
-                    <p style={{ fontSize: 12, color: C.muted, margin: '4px 0 0' }}>
-                      {new Date(r.recorded_at).toLocaleDateString('he-IL')} · {hebrewDayMonth(r.recorded_at)}
-                      {r.created_at && ` · ${new Date(r.recorded_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`}
-                    </p>
+                    <DateDisplay
+                      date={r.recorded_at}
+                      variant="line"
+                      size="sm"
+                      withTime
+                      style={{ marginTop: 4 }}
+                    />
                   </div>
 
                   {/* Transcript & draft status */}
