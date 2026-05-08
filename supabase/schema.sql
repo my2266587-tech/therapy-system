@@ -156,6 +156,29 @@ create table if not exists patient_documents (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- Safety net for environments where an older version of this table already
+-- exists with fewer columns: `create table if not exists` skips the table
+-- entirely instead of adding new columns. The ALTERs below close that gap.
+alter table patient_documents add column if not exists file_name    text;
+alter table patient_documents add column if not exists storage_path text;
+alter table patient_documents add column if not exists mime_type    text;
+alter table patient_documents add column if not exists file_size    bigint;
+alter table patient_documents add column if not exists uploaded_at  timestamptz not null default now();
+alter table patient_documents add column if not exists created_at   timestamptz not null default now();
+alter table patient_documents add column if not exists updated_at   timestamptz not null default now();
+
+-- Make storage_path unique only if the constraint is missing.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'patient_documents_storage_path_key'
+  ) then
+    alter table patient_documents add constraint patient_documents_storage_path_key unique (storage_path);
+  end if;
+end $$;
+
 create index if not exists idx_patient_documents_patient
   on patient_documents (patient_id, uploaded_at desc);
 
