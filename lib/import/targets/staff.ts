@@ -3,9 +3,10 @@ import type { TargetSpec } from '../types';
 export const STAFF_TARGET: TargetSpec = {
   key:         'staff',
   label:       'אנשי צוות',
-  description: 'ייבוא רשימת אנשי צוות — רכזות, מדריכות, מטפלות.',
+  description: 'ייבוא רשימת אנשי צוות — מדריכות, מטפלות (ולרכזות יש מסך נפרד).',
   tableName:   'staff',
   dedupeKeys:  ['full_name', 'email'],
+  captureUnmappedAsMetadata: true,
   fields: [
     { key: 'full_name', label: 'שם מלא', required: true, kind: 'string',
       aliases: [

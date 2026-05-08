@@ -8,16 +8,20 @@
  */
 
 import type { TargetSpec } from './types';
-import { PATIENTS_TARGET } from './targets/patients';
-import { SESSIONS_TARGET } from './targets/sessions';
-import { STAFF_TARGET    } from './targets/staff';
-import { PAYMENTS_TARGET } from './targets/payments';
-import { EXPENSES_TARGET } from './targets/expenses';
+import { PATIENTS_TARGET     } from './targets/patients';
+import { SESSIONS_TARGET     } from './targets/sessions';
+import { SUMMARIES_TARGET    } from './targets/summaries';
+import { STAFF_TARGET        } from './targets/staff';
+import { COORDINATORS_TARGET } from './targets/coordinators';
+import { PAYMENTS_TARGET     } from './targets/payments';
+import { EXPENSES_TARGET     } from './targets/expenses';
 
 export const TARGETS: TargetSpec[] = [
   PATIENTS_TARGET,
   SESSIONS_TARGET,
+  SUMMARIES_TARGET,
   STAFF_TARGET,
+  COORDINATORS_TARGET,
   PAYMENTS_TARGET,
   EXPENSES_TARGET,
 ];

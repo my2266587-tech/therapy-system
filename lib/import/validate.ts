@@ -48,7 +48,12 @@ function rewriteSheet(sheet: RawSheet): RawSheet {
 /* ── 2. header auto-mapping ─────────────────────────────────────────── */
 
 function normalizeHeader(s: string): string {
-  return s.trim().toLowerCase().replace(/[״׳"'.\-_\s]+/g, '');
+  // Aggressive normalization: keep only Hebrew letters, ASCII letters, and
+  // digits. Everything else (whitespace, punctuation, gershayim, colons,
+  // parentheses, hyphens, the lot) is stripped. So "טלפון " trailing-space,
+  // "שעה:" with a colon, and "סה״כ זמן" with gershayim all collapse to
+  // their content-only form.
+  return s.trim().toLowerCase().replace(/[^֐-׿a-z0-9]+/g, '');
 }
 
 export function autoMapHeaders(
@@ -180,7 +185,16 @@ async function fetchExistingForDedup(
   supabase: SupabaseClient, spec: TargetSpec,
 ): Promise<Array<{ id: string; values: Record<string, unknown> }>> {
   const cols = ['id', ...spec.dedupeKeys];
-  const { data } = await supabase.from(spec.tableName).select(cols.join(','));
+  let q = supabase.from(spec.tableName).select(cols.join(','));
+  // When defaultValues constrain the inserted rows (e.g. role='coordinator'),
+  // dedup only against rows that share those defaults — otherwise importing
+  // "רכזות" would falsely match a "מטפלת" with the same name.
+  if (spec.defaultValues) {
+    for (const [k, v] of Object.entries(spec.defaultValues)) {
+      q = q.eq(k, v as string | number | boolean);
+    }
+  }
+  const { data } = await q;
   return ((data ?? []) as unknown as Array<Record<string, unknown> & { id: string }>).map(r => {
     const values: Record<string, unknown> = {};
     for (const k of spec.dedupeKeys) values[k] = r[k];
@@ -250,12 +264,24 @@ export async function validateRows(
   let emptySkipped = 0;
   const validated: ValidatedRow[] = [];
 
+  // Headers (and column indexes) that no field claimed — used both for
+  // the mapping diagnostics and for stashing values in import_metadata.
+  const mappedHeaderSet = new Set(Object.keys(mapping));
+  const unmappedColIdx: { header: string; idx: number }[] = sheet.headers
+    .map((h, idx) => ({ header: h.trim(), idx }))
+    .filter(({ header }) => header && !mappedHeaderSet.has(header));
+
   sheet.rows.forEach((row, i) => {
     if (isRowEmpty(row)) { emptySkipped++; return; }
 
     const errors:   string[] = [];
     const warnings: string[] = [];
-    const values:   Record<string, string | number | boolean | null> = {};
+    const values:   Record<string, string | number | boolean | null | Record<string, string>> = {};
+
+    // Defaults first (e.g. role='coordinator' for the coordinators target).
+    if (spec.defaultValues) {
+      for (const [k, v] of Object.entries(spec.defaultValues)) values[k] = v;
+    }
 
     for (const field of spec.fields) {
       const col = fieldToCol.get(field.key);
@@ -263,7 +289,7 @@ export async function validateRows(
 
       if (!raw.trim()) {
         if (field.required) errors.push(`חסר: ${field.label}`);
-        values[field.key] = null;
+        if (!(field.key in values)) values[field.key] = null;
         continue;
       }
 
@@ -279,8 +305,33 @@ export async function validateRows(
         default:        coerced = { ok: true, value: raw.trim() }; break;
       }
 
-      if (coerced.ok) values[field.key] = coerced.value;
-      else { errors.push(`${field.label}: ${coerced.reason}`); values[field.key] = null; }
+      if (coerced.ok) {
+        values[field.key] = coerced.value;
+      } else if (field.kind === 'lookup' && field.fallbackTextKey) {
+        // Lookup miss — keep the raw text on the fallback column instead
+        // of failing the whole row. Common case: import a patient whose
+        // coordinator hasn't been added to the staff table yet.
+        values[field.key] = null;
+        values[field.fallbackTextKey] = raw.trim();
+        warnings.push(`${field.label}: ${coerced.reason} — נשמר כטקסט.`);
+      } else if (field.kind === 'lookup' && !field.required) {
+        // Optional lookup, no fallback column — leave it null, warn.
+        values[field.key] = null;
+        warnings.push(`${field.label}: ${coerced.reason} — נשאר ריק.`);
+      } else {
+        errors.push(`${field.label}: ${coerced.reason}`);
+        if (!(field.key in values)) values[field.key] = null;
+      }
+    }
+
+    // Stash unmapped non-empty cells as JSON so the data isn't lost.
+    if (spec.captureUnmappedAsMetadata && unmappedColIdx.length > 0) {
+      const metadata: Record<string, string> = {};
+      for (const { header, idx } of unmappedColIdx) {
+        const cell = (row[idx] ?? '').toString().trim();
+        if (cell) metadata[header] = cell;
+      }
+      if (Object.keys(metadata).length > 0) values.import_metadata = metadata;
     }
 
     let status: RowStatus = errors.length > 0 ? 'error' : 'valid';

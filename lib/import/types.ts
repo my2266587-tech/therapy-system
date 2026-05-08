@@ -33,6 +33,12 @@ export interface FieldSpec {
     table:    'patients' | 'staff';
     matchOn:  'full_name' | 'email';
   };
+  /**
+   * For 'lookup' — when the lookup misses, store the raw text in this
+   * other column instead of failing the row. Lets us import a patient
+   * even when "רכזת אחראית = רחל" doesn't match any staff record yet.
+   */
+  fallbackTextKey?: string;
   /** Help text shown next to the field in the mapping UI. */
   hint?: string;
 }
@@ -48,6 +54,13 @@ export interface TargetSpec {
   fields: FieldSpec[];
   /** Rows are duplicates if all of these field keys match an existing row. */
   dedupeKeys: string[];
+  /** Static values merged into every inserted row (e.g. role='coordinator'
+   *  when importing through the dedicated coordinators target). */
+  defaultValues?: Record<string, string | number | boolean>;
+  /** When true, any unmapped non-empty cells get stashed as JSON in
+   *  `import_metadata` instead of being silently dropped. Requires the
+   *  table to have an `import_metadata jsonb` column. */
+  captureUnmappedAsMetadata?: boolean;
 }
 
 /* ── Raw + validated rows ────────────────────────────────────────────── */
@@ -71,8 +84,10 @@ export interface ValidatedRow {
   errors: string[];
   /** Per-field non-blocking warnings. */
   warnings: string[];
-  /** Normalized values keyed by field.key (these are what we'd insert). */
-  values: Record<string, string | number | boolean | null>;
+  /** Normalized values keyed by field.key (these are what we'd insert).
+   *  Includes synthetic columns (`import_metadata`, fallback text fields).
+   *  Object values are JSON-encoded when sent to the DB. */
+  values: Record<string, string | number | boolean | null | Record<string, string>>;
   /** If duplicate — the existing row's id. */
   duplicateOf?: string;
 }

@@ -39,6 +39,17 @@ create table if not exists patients (
   updated_at         timestamptz not null default now()
 );
 
+-- ── Patients: import-driven additions (idempotent) ──────────────────────────
+-- Denormalized text fields for raw values from imports — used when an FK
+-- lookup fails ("רכזת אחראית" name doesn't match a staff row), so the row
+-- is still saved with the original text instead of being rejected.
+alter table patients add column if not exists team_name        text;
+alter table patients add column if not exists coordinator_name text;
+alter table patients add column if not exists guide_name       text;
+-- jsonb bag for any CSV column we couldn't otherwise map — keeps data
+-- safe rather than silently dropping it.
+alter table patients add column if not exists import_metadata  jsonb;
+
 -- ── Sessions ──────────────────────────────────────────────────────────────────
 create table if not exists sessions (
   id               uuid primary key default gen_random_uuid(),
@@ -74,6 +85,10 @@ create table if not exists session_summaries (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
+
+-- ── Session summaries: import-driven additions (idempotent) ───────────────
+alter table session_summaries add column if not exists recording_reference text;
+alter table session_summaries add column if not exists import_metadata     jsonb;
 
 -- ── Recordings ────────────────────────────────────────────────────────────────
 create table if not exists recordings (
@@ -141,6 +156,11 @@ create table if not exists petty_cash (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- ── Import-metadata bag for the rest of the imported tables (idempotent) ──
+alter table staff            add column if not exists import_metadata jsonb;
+alter table payments         add column if not exists import_metadata jsonb;
+alter table private_expenses add column if not exists import_metadata jsonb;
 
 -- ── Patient Documents ────────────────────────────────────────────────────────
 -- Files (PDF/Word/images) uploaded per patient. Bytes live in Supabase Storage
