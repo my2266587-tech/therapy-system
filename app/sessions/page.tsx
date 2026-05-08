@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import { hebrewDay, hebrewDayMonth } from '@/lib/dateUtils';
 import type { Session } from '@/types';
 
@@ -15,6 +16,17 @@ const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; 
   cancelled: { label: 'בוטלה',    bg: '#FEF2F2', text: '#DC2626', border: '#FECACA', dot: '#DC2626' },
   no_show:   { label: 'לא הגיעה', bg: '#FFFBEB', text: '#92400E', border: '#FDE68A', dot: '#F59E0B' },
 };
+
+const SESSION_EXPORT_COLUMNS: Column<Session>[] = [
+  { header: 'תאריך',   accessor: r => r.date, width: 14 },
+  { header: 'יום',     accessor: r => hebrewDay(r.date), width: 10 },
+  { header: 'מטופלת', accessor: r => (r.patient as { full_name?: string } | null)?.full_name ?? '', width: 22 },
+  { header: 'התחלה',  accessor: r => r.start_time, width: 10 },
+  { header: 'סיום',   accessor: r => r.end_time, width: 10 },
+  { header: 'משך (דק׳)', accessor: r => r.duration_minutes ?? '', width: 12 },
+  { header: 'סטטוס',  accessor: r => SESSION_STATUS[r.status]?.label ?? r.status, width: 14 },
+  { header: 'הערות',  accessor: r => r.notes ?? '', width: 30 },
+];
 
 function formatDate(dateStr: string) {
   const today = new Date().toISOString().slice(0, 10);
@@ -93,7 +105,16 @@ function SessionsInner() {
               {loading ? '' : `${filtered.length} פגישות${filterLabel ? ` · ${filterLabel}` : ''}`}
             </p>
           </div>
-          <AddBtn onClick={() => { setEditing(null); setOpen(true); }} label="+ הוסף פגישה" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ExportButton<Session>
+              rows={filtered}
+              columns={SESSION_EXPORT_COLUMNS}
+              title="יומן פגישות"
+              fileBase="sessions"
+              disabled={loading}
+            />
+            <AddBtn onClick={() => { setEditing(null); setOpen(true); }} label="+ הוסף פגישה" />
+          </div>
         </div>
 
         {/* Filter chips */}

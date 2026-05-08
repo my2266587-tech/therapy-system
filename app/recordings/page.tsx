@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import RecordingForm from '@/components/recordings/RecordingForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import { hebrewDayMonth } from '@/lib/dateUtils';
 import type { Recording } from '@/types';
 
@@ -22,6 +23,14 @@ const RECORDING_STATUS: Record<string, { label: string; bg: string; text: string
   draft_ready:  { label: 'סיכום מוכן',   bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE', dot: '#4F46E5' },
   approved:     { label: 'אושר',         bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0', dot: '#16A34A' },
 };
+
+const RECORDING_EXPORT_COLUMNS: Column<Recording>[] = [
+  { header: 'תאריך הקלטה', accessor: r => r.recorded_at ? new Date(r.recorded_at) : '', width: 16 },
+  { header: 'מטופלת',      accessor: r => (r.patient as { full_name?: string } | null)?.full_name ?? '', width: 22 },
+  { header: 'תמלול',       accessor: r => r.transcript ? 'כן' : 'לא', width: 10 },
+  { header: 'סיכום',       accessor: r => r.draft_summary ? 'כן' : 'לא', width: 10 },
+  { header: 'סטטוס',       accessor: r => RECORDING_STATUS[r.status]?.label ?? r.status, width: 16 },
+];
 
 export default function RecordingsPage() {
   return (
@@ -86,19 +95,28 @@ function RecordingsInner() {
               {loading ? '' : `${filtered.length} הקלטות${statusFilter !== 'all' ? ' · מסונן' : ''}`}
             </p>
           </div>
-          <button
-            onClick={() => { setEditing(null); setOpen(true); }}
-            style={{
-              backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
-              borderRadius: 10, padding: '10px 20px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer',
-              boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-          >
-            + הוסף הקלטה
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ExportButton<Recording>
+              rows={filtered}
+              columns={RECORDING_EXPORT_COLUMNS}
+              title="הקלטות ותמלולים"
+              fileBase="recordings"
+              disabled={loading}
+            />
+            <button
+              onClick={() => { setEditing(null); setOpen(true); }}
+              style={{
+                backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
+                borderRadius: 10, padding: '10px 20px', fontSize: 14,
+                fontWeight: 600, cursor: 'pointer',
+                boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            >
+              + הוסף הקלטה
+            </button>
+          </div>
         </div>
 
         {/* Info banner */}

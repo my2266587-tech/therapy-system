@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import { hebrewDay } from '@/lib/dateUtils';
 import type { PrivateExpense } from '@/types';
 
@@ -14,6 +15,17 @@ const C = {
   text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
   shadow: '0 1px 4px rgba(0,0,0,0.05)',
 };
+
+const EXPENSE_EXPORT_COLUMNS: Column<PrivateExpense>[] = [
+  { header: 'תאריך',       accessor: r => r.date, width: 14 },
+  { header: 'יום',         accessor: r => hebrewDay(r.date), width: 10 },
+  { header: 'סוג טיפול',   accessor: r => r.treatment_type, width: 22 },
+  { header: 'חומרים',      accessor: r => r.materials ?? '', width: 22 },
+  { header: 'פרטים',       accessor: r => r.details ?? '', width: 30 },
+  { header: 'מטופלת',      accessor: r => (r.patient as { full_name?: string } | null)?.full_name ?? '', width: 22 },
+  { header: 'עלות (₪)',     accessor: r => Number(r.cost), width: 14 },
+  { header: 'הערות',       accessor: r => r.notes ?? '', width: 24 },
+];
 
 export default function ExpensesPage() {
   const [records, setRecords] = useState<PrivateExpense[]>([]);
@@ -55,19 +67,28 @@ export default function ExpensesPage() {
               {loading ? '' : `${records.length} הוצאות`}
             </p>
           </div>
-          <button
-            onClick={() => { setEditing(null); setOpen(true); }}
-            style={{
-              backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
-              borderRadius: 10, padding: '10px 20px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer',
-              boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-          >
-            + הוסף הוצאה
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ExportButton<PrivateExpense>
+              rows={records}
+              columns={EXPENSE_EXPORT_COLUMNS}
+              title="הוצאות פרטיות"
+              fileBase="expenses"
+              disabled={loading}
+            />
+            <button
+              onClick={() => { setEditing(null); setOpen(true); }}
+              style={{
+                backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
+                borderRadius: 10, padding: '10px 20px', fontSize: 14,
+                fontWeight: 600, cursor: 'pointer',
+                boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            >
+              + הוסף הוצאה
+            </button>
+          </div>
         </div>
 
         {/* Total card */}

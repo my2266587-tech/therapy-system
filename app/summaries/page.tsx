@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import SummaryForm from '@/components/summaries/SummaryForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import { formatGregorian, hebrewLong, hebrewDayMonth, PRESETS } from '@/lib/dateUtils';
 import type { SessionSummary, Recording } from '@/types';
 
@@ -18,6 +19,19 @@ const C = {
 interface SummaryWithRel extends SessionSummary {
   patient: { full_name: string } | null;
 }
+
+const SUMMARY_EXPORT_COLUMNS: Column<SummaryWithRel>[] = [
+  { header: 'תאריך',           accessor: r => r.date, width: 14 },
+  { header: 'מטופלת',          accessor: r => r.patient?.full_name ?? '', width: 22 },
+  { header: 'התחלה',           accessor: r => r.start_time ?? '', width: 10 },
+  { header: 'סיום',            accessor: r => r.end_time ?? '', width: 10 },
+  { header: 'משך (דק׳)',       accessor: r => r.duration_minutes ?? '', width: 12 },
+  { header: 'נושאים עיקריים', accessor: r => r.main_topics ?? '', width: 30 },
+  { header: 'מה נעשה',         accessor: r => r.treatment_actions ?? '', width: 30 },
+  { header: 'התקדמות',         accessor: r => r.progress ?? '', width: 22 },
+  { header: 'צעדים הבאים',    accessor: r => r.next_steps ?? '', width: 22 },
+  { header: 'הערות',           accessor: r => r.notes ?? '', width: 24 },
+];
 
 /* ── Recording widget ── */
 type RecState = 'idle' | 'recording' | 'done';
@@ -241,19 +255,28 @@ export default function SummariesPage() {
               {loading ? '' : `${records.length} סיכומים`}
             </p>
           </div>
-          <button
-            onClick={() => { setEditing(null); setOpen(true); }}
-            style={{
-              backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
-              borderRadius: 10, padding: '10px 20px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer',
-              boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-          >
-            + הוסף סיכום
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ExportButton<SummaryWithRel>
+              rows={records}
+              columns={SUMMARY_EXPORT_COLUMNS}
+              title="סיכומי פגישות"
+              fileBase="session-summaries"
+              disabled={loading}
+            />
+            <button
+              onClick={() => { setEditing(null); setOpen(true); }}
+              style={{
+                backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
+                borderRadius: 10, padding: '10px 20px', fontSize: 14,
+                fontWeight: 600, cursor: 'pointer',
+                boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            >
+              + הוסף סיכום
+            </button>
+          </div>
         </div>
 
         {/* Recording widget */}

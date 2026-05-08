@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import PaymentForm from '@/components/payments/PaymentForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import { paymentMethodLabels, emailStatusLabels } from '@/lib/labels';
 import type { Payment } from '@/types';
 
@@ -25,6 +26,16 @@ const EMAIL_STATUS: Record<string, { label: string; bg: string; text: string; bo
   sent:     { label: 'נשלח',    bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4' },
   failed:   { label: 'כשל',     bg: '#FEF2F2', text: '#DC2626', border: '#FECACA' },
 };
+
+const PAYMENT_EXPORT_COLUMNS: Column<Payment>[] = [
+  { header: 'חודש',          accessor: r => r.month, width: 14 },
+  { header: 'סכום (₪)',       accessor: r => Number(r.amount), width: 14 },
+  { header: 'שולם',           accessor: r => r.is_paid ? 'שולם' : 'טרם שולם', width: 14 },
+  { header: 'אמצעי תשלום',   accessor: r => r.payment_method ? (paymentMethodLabels[r.payment_method] ?? r.payment_method) : '', width: 18 },
+  { header: 'תאריך קבלה',    accessor: r => r.received_date ?? '', width: 14 },
+  { header: 'רכזת',           accessor: r => (r.coordinator as { full_name?: string } | null)?.full_name ?? '', width: 20 },
+  { header: 'סטטוס מייל',    accessor: r => emailStatusLabels[r.email_status] ?? r.email_status, width: 14 },
+];
 
 export default function PaymentsPage() {
   const [records, setRecords] = useState<Payment[]>([]);
@@ -67,19 +78,28 @@ export default function PaymentsPage() {
               {loading ? '' : `${records.length} תשלומים`}
             </p>
           </div>
-          <button
-            onClick={() => { setEditing(null); setOpen(true); }}
-            style={{
-              backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
-              borderRadius: 10, padding: '10px 20px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer',
-              boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-          >
-            + הוסף תשלום
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ExportButton<Payment>
+              rows={records}
+              columns={PAYMENT_EXPORT_COLUMNS}
+              title="תשלומי שיראל"
+              fileBase="payments"
+              disabled={loading}
+            />
+            <button
+              onClick={() => { setEditing(null); setOpen(true); }}
+              style={{
+                backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
+                borderRadius: 10, padding: '10px 20px', fontSize: 14,
+                fontWeight: 600, cursor: 'pointer',
+                boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            >
+              + הוסף תשלום
+            </button>
+          </div>
         </div>
 
         {/* Summary cards */}

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import PatientForm from '@/components/patients/PatientForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import type { Patient } from '@/types';
 
 const AVATAR_COLORS = [
@@ -26,6 +27,14 @@ const STATUS: Record<string, { label: string; bg: string; text: string; border: 
 function avatarColor(name: string) {
   return AVATAR_COLORS[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
 }
+
+const PATIENT_EXPORT_COLUMNS: Column<Patient>[] = [
+  { header: 'שם מלא',  accessor: r => r.full_name, width: 24 },
+  { header: 'טלפון',   accessor: r => r.phone ?? '', width: 16 },
+  { header: 'אימייל',  accessor: r => r.email ?? '', width: 26 },
+  { header: 'רכזת',    accessor: r => (r.coordinator as { full_name?: string } | null)?.full_name ?? '', width: 20 },
+  { header: 'סטטוס',   accessor: r => STATUS[r.status]?.label ?? r.status, width: 14 },
+];
 
 function initials(name: string) {
   const p = name.trim().split(/\s+/);
@@ -98,20 +107,29 @@ function PatientsInner() {
               {loading ? '' : `${records.length} מטופלות במערכת`}
             </p>
           </div>
-          <button
-            onClick={() => { setEditing(null); setOpen(true); }}
-            style={{
-              backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
-              borderRadius: 10, padding: '10px 20px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
-              transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-          >
-            + הוסף מטופלת
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ExportButton<Patient>
+              rows={filtered}
+              columns={PATIENT_EXPORT_COLUMNS}
+              title="מטופלות"
+              fileBase="patients"
+              disabled={loading}
+            />
+            <button
+              onClick={() => { setEditing(null); setOpen(true); }}
+              style={{
+                backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+                borderRadius: 10, padding: '10px 20px', fontSize: 14,
+                fontWeight: 600, cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            >
+              + הוסף מטופלת
+            </button>
+          </div>
         </div>
 
         {/* ── Search + filter chips ── */}

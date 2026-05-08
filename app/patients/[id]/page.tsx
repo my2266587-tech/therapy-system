@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
+import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import PatientForm from '@/components/patients/PatientForm';
 import {
   housingTypeLabels, maritalStatusLabels,
@@ -234,7 +235,7 @@ export default function PatientDetailPage() {
             {activeTab === 'פרטים'          && <DetailsTab patient={patient} />}
             {activeTab === 'פגישות'         && <SessionsTab sessions={sessions} />}
             {activeTab === 'סיכומי פגישות'  && <SummariesTab summaries={summaries} onOpen={setOpenSummary} />}
-            {activeTab === 'מסמכים'         && <DocumentsTab patientId={patient.id} />}
+            {activeTab === 'מסמכים'         && <DocumentsTab patientId={patient.id} patientName={patient.full_name} />}
             {activeTab === 'משימות'         && <ComingSoon label="משימות" />}
             {activeTab === 'הערות'          && <NotesTab notes={patient.notes} />}
           </div>
@@ -531,7 +532,15 @@ function formatBytes(n: number | null): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function DocumentsTab({ patientId }: { patientId: string }) {
+const DOC_EXPORT_COLUMNS: Column<PatientDocumentWithUrl>[] = [
+  { header: 'שם הקובץ',  accessor: r => r.file_name, width: 32 },
+  { header: 'סוג',        accessor: r => fileKindLabel(r.file_name, r.mime_type), width: 12 },
+  { header: 'תאריך עלייה', accessor: r => r.uploaded_at ? new Date(r.uploaded_at) : '', width: 16 },
+  { header: 'גודל',       accessor: r => formatBytes(r.file_size), width: 12 },
+  { header: 'סוג MIME',   accessor: r => r.mime_type ?? '', width: 24 },
+];
+
+function DocumentsTab({ patientId, patientName }: { patientId: string; patientName: string }) {
   const [docs, setDocs]         = useState<PatientDocumentWithUrl[]>([]);
   const [loading, setLoading]   = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -640,24 +649,33 @@ function DocumentsTab({ patientId }: { patientId: string }) {
             {loading ? 'טוען...' : `${docs.length} מסמכים`}
           </p>
         </div>
-        <button
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 7,
-            backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
-            borderRadius: 9, padding: '9px 16px', fontSize: 13, fontWeight: 600,
-            cursor: uploading ? 'wait' : 'pointer',
-            opacity: uploading ? 0.7 : 1,
-            boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
-            transition: 'opacity 0.15s',
-          }}
-          onMouseEnter={e => { if (!uploading) (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-          onMouseLeave={e => { if (!uploading) (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-        >
-          <UploadIcon />
-          {uploading ? 'מעלה...' : 'העלאת מסמך'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ExportButton<PatientDocumentWithUrl>
+            rows={docs}
+            columns={DOC_EXPORT_COLUMNS}
+            title={`מסמכים – ${patientName}`}
+            fileBase={`patient-documents-${patientId.slice(0, 8)}`}
+            disabled={loading}
+          />
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
+              borderRadius: 9, padding: '9px 16px', fontSize: 13, fontWeight: 600,
+              cursor: uploading ? 'wait' : 'pointer',
+              opacity: uploading ? 0.7 : 1,
+              boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => { if (!uploading) (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+            onMouseLeave={e => { if (!uploading) (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+          >
+            <UploadIcon />
+            {uploading ? 'מעלה...' : 'העלאת מסמך'}
+          </button>
+        </div>
       </div>
 
       <input

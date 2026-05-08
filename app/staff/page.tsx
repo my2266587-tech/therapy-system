@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import StaffForm from '@/components/staff/StaffForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import type { StaffMember } from '@/types';
 
 const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; border: string; av: string }> = {
@@ -13,6 +14,14 @@ const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; bord
   therapist:   { label: 'מטפלת',   bg: '#FDF4FF', text: '#9333EA', border: '#E9D5FF', av: '#9333EA' },
   other:       { label: 'אחר',     bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0', av: '#64748B' },
 };
+
+const STAFF_EXPORT_COLUMNS: Column<StaffMember>[] = [
+  { header: 'שם מלא', accessor: r => r.full_name, width: 24 },
+  { header: 'תפקיד', accessor: r => ROLE_STYLE[r.role]?.label ?? r.role, width: 14 },
+  { header: 'אימייל', accessor: r => r.email ?? '', width: 26 },
+  { header: 'טלפון', accessor: r => r.phone ?? '', width: 16 },
+  { header: 'הערות', accessor: r => r.notes ?? '', width: 30 },
+];
 
 function initials(name: string) {
   const p = name.trim().split(/\s+/);
@@ -54,7 +63,16 @@ export default function StaffPage() {
               {loading ? '' : `${records.length} אנשי צוות`}
             </p>
           </div>
-          <AddBtn onClick={() => { setEditing(null); setOpen(true); }} label="+ הוסף איש צוות" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ExportButton<StaffMember>
+              rows={records}
+              columns={STAFF_EXPORT_COLUMNS}
+              title="אנשי צוות"
+              fileBase="staff"
+              disabled={loading}
+            />
+            <AddBtn onClick={() => { setEditing(null); setOpen(true); }} label="+ הוסף איש צוות" />
+          </div>
         </div>
 
         {loading ? <ListSkeleton /> : records.length === 0 ? (
