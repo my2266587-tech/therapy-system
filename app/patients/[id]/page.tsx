@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, type DragEvent } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -10,7 +10,9 @@ import {
   housingTypeLabels, maritalStatusLabels,
 } from '@/lib/labels';
 import { formatGregorian, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
-import type { Patient, Session, SessionSummary, Recording } from '@/types';
+import type {
+  Patient, Session, SessionSummary, Recording, PatientDocumentWithUrl,
+} from '@/types';
 
 const C = {
   bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
@@ -232,7 +234,7 @@ export default function PatientDetailPage() {
             {activeTab === 'פרטים'          && <DetailsTab patient={patient} />}
             {activeTab === 'פגישות'         && <SessionsTab sessions={sessions} />}
             {activeTab === 'סיכומי פגישות'  && <SummariesTab summaries={summaries} onOpen={setOpenSummary} />}
-            {activeTab === 'מסמכים'         && <DocumentsTab />}
+            {activeTab === 'מסמכים'         && <DocumentsTab patientId={patient.id} />}
             {activeTab === 'משימות'         && <ComingSoon label="משימות" />}
             {activeTab === 'הערות'          && <NotesTab notes={patient.notes} />}
           </div>
@@ -500,7 +502,131 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DocumentsTab() {
+const ACCEPT_ATTR =
+  '.pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,' +
+  'application/pdf,application/msword,' +
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
+  'image/*';
+
+function fileKindLabel(name: string, mime: string | null): string {
+  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
+  if (ext === 'pdf' || mime === 'application/pdf') return 'PDF';
+  if (ext === 'doc' || ext === 'docx' || (mime && mime.includes('word'))) return 'Word';
+  if (mime && mime.startsWith('image/')) return 'תמונה';
+  if (['jpg','jpeg','png','gif','webp','heic','heif'].includes(ext)) return 'תמונה';
+  return ext ? ext.toUpperCase() : 'קובץ';
+}
+
+function fileKindColors(kind: string): { bg: string; text: string; border: string } {
+  if (kind === 'PDF')    return { bg: '#FEF2F2', text: '#DC2626', border: '#FECACA' };
+  if (kind === 'Word')   return { bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE' };
+  if (kind === 'תמונה') return { bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0' };
+  return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0' };
+}
+
+function formatBytes(n: number | null): string {
+  if (!n && n !== 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DocumentsTab({ patientId }: { patientId: string }) {
+  const [docs, setDocs]         = useState<PatientDocumentWithUrl[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const getToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    const token = await getToken();
+    if (!token) { setLoading(false); setError('יש להתחבר מחדש'); return; }
+    const res = await fetch(`/api/patients/${patientId}/documents`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setError(json?.error ?? 'שגיאה בטעינת מסמכים');
+      setLoading(false);
+      return;
+    }
+    setDocs(json as PatientDocumentWithUrl[]);
+    setLoading(false);
+  }, [patientId, getToken]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const upload = useCallback(async (file: File) => {
+    setError(null);
+    if (file.size > 10 * 1024 * 1024) {
+      setError('הקובץ גדול מ-10MB');
+      return;
+    }
+    const token = await getToken();
+    if (!token) { setError('יש להתחבר מחדש'); return; }
+
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/patients/${patientId}/documents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(json?.error ?? 'שגיאה בהעלאה');
+      } else {
+        setDocs(prev => [json as PatientDocumentWithUrl, ...prev]);
+      }
+    } finally {
+      setUploading(false);
+    }
+  }, [patientId, getToken]);
+
+  const handleFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    for (const f of Array.from(files)) {
+      // sequential — easier error UX, and avoids hammering the function
+      // eslint-disable-next-line no-await-in-loop
+      await upload(f);
+    }
+  }, [upload]);
+
+  const onDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
+
+  const remove = useCallback(async (doc: PatientDocumentWithUrl) => {
+    if (!window.confirm(`למחוק את "${doc.file_name}"? פעולה זו אינה הפיכה.`)) return;
+    const token = await getToken();
+    if (!token) { setError('יש להתחבר מחדש'); return; }
+    setDeletingId(doc.id);
+    setError(null);
+    const res = await fetch(`/api/patients/${patientId}/documents/${doc.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setError(json?.error ?? 'שגיאה במחיקה');
+    } else {
+      setDocs(prev => prev.filter(d => d.id !== doc.id));
+    }
+    setDeletingId(null);
+  }, [patientId, getToken]);
+
   return (
     <div>
       {/* Upload header */}
@@ -510,40 +636,63 @@ function DocumentsTab() {
       }}>
         <div>
           <p style={{ fontSize: 14, fontWeight: 600, color: '#1A2332', margin: 0 }}>מסמכים</p>
-          <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>0 מסמכים</p>
+          <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
+            {loading ? 'טוען...' : `${docs.length} מסמכים`}
+          </p>
         </div>
         <button
-          onClick={() => alert('העלאת מסמכים תופעל בקרוב')}
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
             backgroundColor: '#0D9488', color: '#FFFFFF', border: 'none',
             borderRadius: 9, padding: '9px 16px', fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
+            cursor: uploading ? 'wait' : 'pointer',
+            opacity: uploading ? 0.7 : 1,
+            boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
             transition: 'opacity 0.15s',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+          onMouseEnter={e => { if (!uploading) (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+          onMouseLeave={e => { if (!uploading) (e.currentTarget as HTMLElement).style.opacity = '1'; }}
         >
           <UploadIcon />
-          העלאת מסמך
+          {uploading ? 'מעלה...' : 'העלאת מסמך'}
         </button>
       </div>
 
-      {/* Empty state — drop zone */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT_ATTR}
+        multiple
+        style={{ display: 'none' }}
+        onChange={e => {
+          handleFiles(e.target.files);
+          if (inputRef.current) inputRef.current.value = '';
+        }}
+      />
+
+      {error && (
+        <div style={{
+          padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+          backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
+          color: '#DC2626', fontSize: 13,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* Drop zone */}
       <div
-        onClick={() => alert('העלאת מסמכים תופעל בקרוב')}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
         style={{
-          borderRadius: 14, padding: '48px 24px', textAlign: 'center',
-          backgroundColor: '#F8FAFC', border: '2px dashed #CBD5E1',
-          cursor: 'pointer', transition: 'all 0.15s',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = '#F0FDF9';
-          e.currentTarget.style.borderColor = '#99F6E4';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.backgroundColor = '#F8FAFC';
-          e.currentTarget.style.borderColor = '#CBD5E1';
+          borderRadius: 14, padding: '32px 24px', textAlign: 'center',
+          backgroundColor: dragOver ? '#F0FDF9' : '#F8FAFC',
+          border: `2px dashed ${dragOver ? '#99F6E4' : '#CBD5E1'}`,
+          cursor: 'pointer', transition: 'all 0.15s', marginBottom: docs.length ? 16 : 0,
         }}
       >
         <div style={{
@@ -561,6 +710,77 @@ function DocumentsTab() {
           PDF · Word · תמונות · עד 10MB
         </p>
       </div>
+
+      {/* Documents list */}
+      {!loading && docs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {docs.map(doc => {
+            const kind = fileKindLabel(doc.file_name, doc.mime_type);
+            const kc = fileKindColors(kind);
+            const isDeleting = deletingId === doc.id;
+            return (
+              <div key={doc.id} style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '12px 14px', borderRadius: 10,
+                backgroundColor: '#FFFFFF', border: '1px solid #E8ECF0',
+                opacity: isDeleting ? 0.5 : 1,
+              }}>
+                <span style={{
+                  flexShrink: 0, minWidth: 48, textAlign: 'center',
+                  padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                  backgroundColor: kc.bg, color: kc.text, border: `1px solid ${kc.border}`,
+                }}>
+                  {kind}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{
+                    fontSize: 14, fontWeight: 500, color: '#1A2332', margin: 0,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {doc.file_name}
+                  </p>
+                  <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
+                    {formatGregorian(doc.uploaded_at, PRESETS.long)}
+                    {doc.file_size != null && ` · ${formatBytes(doc.file_size)}`}
+                  </p>
+                </div>
+                <a
+                  href={doc.url || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => { if (!doc.url) e.preventDefault(); }}
+                  style={{
+                    flexShrink: 0, padding: '7px 12px', borderRadius: 8,
+                    fontSize: 12, fontWeight: 600, color: '#0D9488',
+                    backgroundColor: '#F0FDF9', border: '1px solid #99F6E4',
+                    textDecoration: 'none', cursor: doc.url ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  פתח
+                </a>
+                <button
+                  onClick={() => remove(doc)}
+                  disabled={isDeleting}
+                  style={{
+                    flexShrink: 0, padding: '7px 12px', borderRadius: 8,
+                    fontSize: 12, fontWeight: 600, color: '#DC2626',
+                    backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
+                    cursor: isDeleting ? 'wait' : 'pointer',
+                  }}
+                >
+                  {isDeleting ? '...' : 'מחיקה'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!loading && docs.length === 0 && !error && (
+        <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', margin: '8px 0 0' }}>
+          עדיין לא הועלו מסמכים
+        </p>
+      )}
     </div>
   );
 }

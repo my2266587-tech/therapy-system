@@ -122,6 +122,22 @@ export interface PrivateExpense {
   patient?: { full_name: string } | null;
 }
 
+export interface PatientDocument {
+  id: string;
+  patient_id: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string | null;
+  file_size: number | null;
+  uploaded_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PatientDocumentWithUrl extends PatientDocument {
+  url: string;
+}
+
 export interface PettyCash {
   id: string;
   date: string;

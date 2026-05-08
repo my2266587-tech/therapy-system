@@ -142,6 +142,29 @@ create table if not exists petty_cash (
   updated_at timestamptz not null default now()
 );
 
+-- ── Patient Documents ────────────────────────────────────────────────────────
+-- Files (PDF/Word/images) uploaded per patient. Bytes live in Supabase Storage
+-- bucket "patient-documents" (private). This table holds the metadata.
+create table if not exists patient_documents (
+  id           uuid primary key default gen_random_uuid(),
+  patient_id   uuid not null references patients(id) on delete cascade,
+  file_name    text not null,
+  storage_path text not null unique,
+  mime_type    text,
+  file_size    bigint,
+  uploaded_at  timestamptz not null default now(),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists idx_patient_documents_patient
+  on patient_documents (patient_id, uploaded_at desc);
+
+-- Private storage bucket. We never expose the service_role key on the client;
+-- the API route signs short-lived URLs for download/preview.
+insert into storage.buckets (id, name, public)
+values ('patient-documents', 'patient-documents', false)
+on conflict (id) do nothing;
+
 -- ── Authorized Users (login access control) ──────────────────────────────────
 -- Run this block in Supabase SQL Editor if the table does not exist yet.
 create table if not exists authorized_users (
@@ -168,7 +191,7 @@ begin
   foreach t in array array[
     'staff','patients','sessions','session_summaries','recordings',
     'quarterly_summaries','payments','private_expenses','petty_cash',
-    'authorized_users'
+    'authorized_users','patient_documents'
   ] loop
     execute format(
       'create trigger trg_%s_updated_at before update on %s for each row execute function update_updated_at();',
