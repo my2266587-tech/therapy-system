@@ -53,6 +53,17 @@ export interface Patient {
   home_address: string | null;
   marital_status: string | null;
   notes: string | null;
+  /** Free-text fallbacks added by the import flow when a CSV's
+   *  "רכזת" / "מדריכה" / "צוות" name didn't resolve to an existing
+   *  staff row. Display these alongside the FK-resolved name when the
+   *  FK is null but the text is set. */
+  coordinator_name: string | null;
+  guide_name:       string | null;
+  team_name:        string | null;
+  /** Catch-all jsonb populated by the importer when the CSV had columns
+   *  we couldn't otherwise map. Surfaced as an "extra fields" section
+   *  in the patient details so nothing is invisible. */
+  import_metadata:  Record<string, string> | null;
   created_at: string;
   updated_at: string;
   coordinator?: { full_name: string } | null;

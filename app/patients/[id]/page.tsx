@@ -309,37 +309,208 @@ export default function PatientDetailPage() {
 
 /* ── Tab components ── */
 
+/**
+ * Read-only patient summary, broken into sections so the clinician can
+ * scan the whole record without opening the edit modal. Empty fields
+ * are dropped — never shown as "—". An empty section disappears
+ * entirely. Notes get a 4-line clamp with a "הצג עוד / הצג פחות"
+ * toggle so a long history doesn't dominate the tab.
+ */
 function DetailsTab({ patient }: { patient: Patient }) {
-  const rows: [string, string | null | undefined][] = [
-    ['שם מלא',       patient.full_name],
-    ['טלפון',        patient.phone],
-    ['מייל',         patient.email],
-    ['סוג דירה',     patient.housing_type ? housingTypeLabels[patient.housing_type] : null],
-    ['כתובת דירה',   patient.apartment_address],
-    ['כתובת מגורים', patient.home_address],
-    ['מצב משפחתי',   patient.marital_status ? (maritalStatusLabels[patient.marital_status] ?? patient.marital_status) : null],
-    ['שם אבא',       patient.father_name],
-    ['שם אמא',       patient.mother_name],
-    ['מקום במשפחה',  patient.family_position],
+  // FK-resolved name wins over the import fallback text. When the FK
+  // is null but the text was set by the importer, surface it with a
+  // small "לא מקושר" hint so the user knows it's not a real linkage.
+  const coordinatorDisplay = patient.coordinator?.full_name
+    ? { value: patient.coordinator.full_name, linked: true }
+    : patient.coordinator_name
+      ? { value: patient.coordinator_name, linked: false }
+      : null;
+
+  const guideDisplay = patient.staff_member?.full_name
+    ? { value: patient.staff_member.full_name, linked: true }
+    : patient.guide_name
+      ? { value: patient.guide_name, linked: false }
+      : null;
+
+  const family: { label: string; value: string | null }[] = [
+    { label: 'שם אבא',       value: patient.father_name },
+    { label: 'שם אמא',       value: patient.mother_name },
+    { label: 'מצב משפחתי',
+      value: patient.marital_status
+        ? (maritalStatusLabels[patient.marital_status] ?? patient.marital_status)
+        : null },
+    { label: 'מיקום במשפחה', value: patient.family_position },
   ];
 
-  const visible = rows.filter(([, v]) => !!v);
-  if (visible.length === 0) return <Empty msg="אין פרטים להצגה" />;
+  const team: { label: string; value: React.ReactNode | null }[] = [
+    { label: 'רכזת אחראית',
+      value: coordinatorDisplay
+        ? <NameWithHint text={coordinatorDisplay.value} hint={coordinatorDisplay.linked ? null : 'לא מקושר'} />
+        : null },
+    { label: 'איש צוות אחראי',
+      value: guideDisplay
+        ? <NameWithHint text={guideDisplay.value} hint={guideDisplay.linked ? null : 'לא מקושר'} />
+        : null },
+    { label: 'צוות',          value: patient.team_name },
+  ];
+
+  const contact: { label: string; value: string | null }[] = [
+    { label: 'טלפון', value: patient.phone },
+    { label: 'אימייל', value: patient.email },
+  ];
+
+  const housing: { label: string; value: string | null }[] = [
+    { label: 'סוג דירה',
+      value: patient.housing_type ? housingTypeLabels[patient.housing_type] : null },
+    { label: 'כתובת דירה',   value: patient.apartment_address },
+    { label: 'כתובת מגורים', value: patient.home_address },
+  ];
+
+  // Surface anything the importer stashed but the schema doesn't model
+  // (e.g. ת"ז, תאריך לידה) so it's not invisible.
+  const extras: { label: string; value: string | null }[] =
+    Object.entries(patient.import_metadata ?? {})
+      .filter(([, v]) => typeof v === 'string' && v.trim().length > 0)
+      .map(([label, value]) => ({ label, value: String(value) }));
+
+  const sections: { title: string; rows: { label: string; value: React.ReactNode | null }[] }[] = [
+    { title: 'פרטי קשר',          rows: contact },
+    { title: 'פרטי משפחה',         rows: family },
+    { title: 'שיוך לצוות',         rows: team },
+    { title: 'כתובות ודיור',       rows: housing },
+    ...(extras.length ? [{ title: 'פרטים נוספים', rows: extras }] : []),
+  ];
+
+  const visibleSections = sections
+    .map(s => ({ ...s, rows: s.rows.filter(r => !!r.value) }))
+    .filter(s => s.rows.length > 0);
+
+  const hasNotes = !!patient.notes && patient.notes.trim().length > 0;
+
+  if (visibleSections.length === 0 && !hasNotes) {
+    return <Empty msg="אין פרטים להצגה" />;
+  }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-      {visible.map(([label, value]) => (
-        <div key={label} style={{
-          borderRadius: 10, padding: '14px 16px',
-          backgroundColor: '#F8FAFC', border: '1px solid #E8ECF0',
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>
-            {label}
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: '#1A2332' }}>{value}</div>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {visibleSections.map(s => (
+        <DetailSection key={s.title} title={s.title} rows={s.rows} />
       ))}
+
+      {hasNotes && <NotesPreview text={patient.notes!} />}
     </div>
+  );
+}
+
+function DetailSection({
+  title, rows,
+}: {
+  title: string;
+  rows: { label: string; value: React.ReactNode | null }[];
+}) {
+  return (
+    <section style={{
+      backgroundColor: '#FFFFFF', borderRadius: 12,
+      border: '1px solid #E8ECF0', boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
+      padding: '18px 20px',
+    }}>
+      <h3 style={{
+        margin: '0 0 14px', fontSize: 11, fontWeight: 700, color: '#0D9488',
+        letterSpacing: '0.08em', textTransform: 'uppercase',
+      }}>
+        {title}
+      </h3>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 10,
+      }}>
+        {rows.map(r => (
+          <div key={r.label} style={{
+            borderRadius: 10, padding: '12px 14px',
+            backgroundColor: '#F8FAFC', border: '1px solid #ECF0F4',
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 600, color: '#94A3B8',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              marginBottom: 5,
+            }}>
+              {r.label}
+            </div>
+            <div style={{
+              fontSize: 14, fontWeight: 500, color: '#1A2332', lineHeight: 1.45,
+              wordBreak: 'break-word',
+            }}>
+              {r.value}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NameWithHint({ text, hint }: { text: string; hint: string | null }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      {text}
+      {hint && (
+        <span style={{
+          fontSize: 10.5, fontWeight: 600, color: '#92400E',
+          backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
+          padding: '1px 6px', borderRadius: 10, lineHeight: 1.3,
+        }}>
+          {hint}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function NotesPreview({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  // Show the toggle only if the content actually overflows. Cheap proxy:
+  // long char count or a multi-paragraph note.
+  const isLong = text.length > 240 || (text.match(/\n/g)?.length ?? 0) >= 4;
+
+  return (
+    <section style={{
+      backgroundColor: '#FFFFFF', borderRadius: 12,
+      border: '1px solid #E8ECF0', boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
+      padding: '18px 20px',
+      borderInlineEnd: '3px solid #FBBF24',
+    }}>
+      <h3 style={{
+        margin: '0 0 12px', fontSize: 11, fontWeight: 700, color: '#92400E',
+        letterSpacing: '0.08em', textTransform: 'uppercase',
+      }}>
+        הערות
+      </h3>
+      <div style={{
+        fontSize: 14, color: '#1A2332', lineHeight: 1.65,
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        ...(isLong && !expanded ? {
+          display: '-webkit-box',
+          WebkitLineClamp: 4,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        } : null),
+      }}>
+        {text}
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          style={{
+            marginTop: 10, padding: 0, background: 'none', border: 'none',
+            color: '#0D9488', fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          {expanded ? '← הצג פחות' : 'הצג עוד →'}
+        </button>
+      )}
+    </section>
   );
 }
 
