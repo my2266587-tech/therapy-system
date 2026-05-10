@@ -103,6 +103,41 @@ create table if not exists recordings (
   updated_at    timestamptz not null default now()
 );
 
+-- ── Recordings: AI pipeline + summary linkage (idempotent) ────────────────
+-- These columns prepare the recordings table for the transcription/AI flow:
+--   transcript_text     full Whisper output (longer than the legacy `transcript` field)
+--   ai_summary_raw      structured AI output before clinician edits (jsonb)
+--   processing_status   granular pipeline state: idle / queued / transcribing /
+--                       summarizing / completed / failed
+--   processing_error    last error message from the pipeline (for retries)
+--   summary_id          FK to session_summaries when the clinician approves
+--   duration_seconds    audio length, for the recordings list
+alter table recordings add column if not exists transcript_text   text;
+alter table recordings add column if not exists ai_summary_raw    jsonb;
+alter table recordings add column if not exists processing_status text default 'idle';
+alter table recordings add column if not exists processing_error  text;
+alter table recordings add column if not exists summary_id        uuid;
+alter table recordings add column if not exists duration_seconds  integer;
+
+-- Expand the high-level status enum to include 'transcribing' and 'failed'.
+-- Existing rows ('pending'/'transcribed'/'draft_ready'/'approved') stay valid.
+alter table recordings drop constraint if exists recordings_status_check;
+alter table recordings add constraint recordings_status_check
+  check (status in ('pending','transcribing','transcribed','draft_ready','approved','failed'));
+
+-- Optional FK from recording → its created summary. Only attached if not
+-- already present, so the migration can be re-run safely.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'recordings_summary_id_fkey'
+  ) then
+    alter table recordings
+      add constraint recordings_summary_id_fkey
+      foreign key (summary_id) references session_summaries(id) on delete set null;
+  end if;
+end $$;
+
 -- ── Quarterly Summaries ───────────────────────────────────────────────────────
 create table if not exists quarterly_summaries (
   id               uuid primary key default gen_random_uuid(),

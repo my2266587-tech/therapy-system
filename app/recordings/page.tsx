@@ -2,9 +2,11 @@
 
 import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import RecordingForm from '@/components/recordings/RecordingForm';
+import RecordingWidget from '@/components/recordings/RecordingWidget';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
@@ -19,9 +21,11 @@ const C = {
 
 const RECORDING_STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
   pending:      { label: 'ממתין לתמלול', bg: '#FFFBEB', text: '#92400E', border: '#FDE68A', dot: '#F59E0B' },
+  transcribing: { label: 'בתמלול',       bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8' },
   transcribed:  { label: 'תומלל',        bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4', dot: '#0D9488' },
-  draft_ready:  { label: 'סיכום מוכן',   bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE', dot: '#4F46E5' },
+  draft_ready:  { label: 'נוצר סיכום',   bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE', dot: '#4F46E5' },
   approved:     { label: 'אושר',         bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0', dot: '#16A34A' },
+  failed:       { label: 'שגיאה',        bg: '#FEF2F2', text: '#DC2626', border: '#FECACA', dot: '#DC2626' },
 };
 
 const RECORDING_EXPORT_COLUMNS: Column<Recording>[] = [
@@ -74,12 +78,46 @@ function RecordingsInner() {
   }, [records, statusFilter]);
 
   const STATUS_FILTERS = [
-    { value: 'all',         label: 'הכל' },
-    { value: 'pending',     label: 'ממתין לתמלול' },
-    { value: 'transcribed', label: 'תומלל' },
-    { value: 'draft_ready', label: 'סיכום מוכן' },
-    { value: 'approved',    label: 'אושר' },
+    { value: 'all',          label: 'הכל' },
+    { value: 'pending',      label: 'ממתין לתמלול' },
+    { value: 'transcribing', label: 'בתמלול' },
+    { value: 'transcribed',  label: 'תומלל' },
+    { value: 'draft_ready',  label: 'נוצר סיכום' },
+    { value: 'approved',     label: 'אושר' },
+    { value: 'failed',       label: 'שגיאה' },
   ];
+
+  /* ── create-summary action ──────────────────────────────────────── */
+  const router2 = router; // captured for navigation after summary creation
+  const [creatingFor, setCreatingFor] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  async function handleCreateSummary(rec: Recording) {
+    if (creatingFor) return;
+    setCreatingFor(rec.id);
+    setCreateError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setCreateError('יש להתחבר מחדש'); setCreatingFor(null); return; }
+
+      const res = await fetch(`/api/recordings/${rec.id}/create-summary`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setCreateError(json?.error ?? 'שגיאה ביצירת סיכום');
+        setCreatingFor(null);
+        return;
+      }
+      router2.push('/summaries');
+    } catch (e) {
+      setCreateError(`שגיאת רשת: ${(e as Error).message}`);
+    } finally {
+      setCreatingFor(null);
+    }
+  }
 
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
@@ -119,17 +157,34 @@ function RecordingsInner() {
           </div>
         </div>
 
-        {/* Info banner */}
+        {/* Recording widget — primary capture entry. The rest of the
+            pipeline (upload → transcribe → AI → draft) hooks in later. */}
+        <div style={{ marginBottom: 16 }}>
+          <RecordingWidget />
+        </div>
+
+        {/* Pipeline note */}
         <div style={{
           backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE',
           borderRadius: 12, padding: '12px 16px', marginBottom: 16,
-          display: 'flex', alignItems: 'center', gap: 10,
+          display: 'flex', alignItems: 'flex-start', gap: 10,
         }}>
-          <span style={{ fontSize: 14, color: '#1E40AF', flexShrink: 0 }}>ℹ</span>
-          <p style={{ fontSize: 13, color: '#1E40AF', margin: 0 }}>
-            הקלטה זוהתמלול — הקלטות ממתינות יהפכו לסיכומי פגישות אוטומטית.
+          <span style={{ fontSize: 14, color: '#1E40AF', flexShrink: 0, lineHeight: 1.4 }}>ℹ</span>
+          <p style={{ fontSize: 13, color: '#1E40AF', margin: 0, lineHeight: 1.55 }}>
+            <strong>תהליך:</strong> הקלטה → תמלול → עיבוד AI → טיוטת סיכום → אישור מטפלת → סיכום פגישה.
+            כשתופיע הקלטה עם תמלול, יופיע כפתור "צור סיכום פגישה" ליצירת טיוטה.
           </p>
         </div>
+
+        {createError && (
+          <div style={{
+            padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+            backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
+            color: '#DC2626', fontSize: 13,
+          }}>
+            {createError}
+          </div>
+        )}
 
         {/* Filter chips */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
@@ -156,89 +211,149 @@ function RecordingsInner() {
           }}>
             {filtered.map((r, i) => {
               const st = RECORDING_STATUS[r.status] ?? RECORDING_STATUS.pending;
+              const transcript = r.transcript_text ?? r.transcript ?? null;
+              const hasTranscript = !!transcript;
+              const canCreateSummary = hasTranscript && !r.summary_id && r.status !== 'draft_ready' && r.status !== 'approved';
+              const isBusy = creatingFor === r.id;
+
               return (
                 <div
                   key={r.id}
-                  onClick={() => { setEditing(r); setOpen(true); }}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 18,
-                    padding: '16px 24px', cursor: 'pointer',
+                    padding: '16px 24px',
                     borderBottom: i < filtered.length - 1 ? `1px solid #F1F5F9` : 'none',
                     transition: 'background-color 0.1s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
                 >
-                  {/* Recording icon */}
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                    backgroundColor: '#F0FDF9', border: '1px solid #99F6E4',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: C.accent, fontSize: 18,
-                  }}>
-                    🎙
-                  </div>
-
-                  {/* Patient name + date */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
-                      {(r.patient as any)?.full_name ?? '—'}
-                    </p>
-                    <DateDisplay
-                      date={r.recorded_at}
-                      size="sm"
-                      style={{ marginTop: 4 }}
-                    />
-                  </div>
-
-                  {/* Transcript & draft status */}
-                  <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>תמלול</div>
-                      <span style={{
-                        width: 20, height: 20, borderRadius: 6,
-                        backgroundColor: r.transcript ? '#F0FDF9' : '#F8FAFC',
-                        border: `1px solid ${r.transcript ? '#99F6E4' : C.border}`,
-                        color: r.transcript ? C.accent : C.muted,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 12, fontWeight: 700,
-                      }}>
-                        {r.transcript ? '✓' : '—'}
-                      </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+                    {/* Recording icon */}
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+                      backgroundColor: '#F0FDF9', border: '1px solid #99F6E4',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: C.accent, fontSize: 18,
+                    }}>
+                      🎙
                     </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>סיכום</div>
+
+                    {/* Patient name + date */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
+                        {(r.patient as { full_name?: string } | null)?.full_name ?? '—'}
+                      </p>
+                      <DateDisplay date={r.recorded_at} size="sm" style={{ marginTop: 4 }} />
+                    </div>
+
+                    {/* Duration */}
+                    {r.duration_seconds != null && (
                       <span style={{
-                        width: 20, height: 20, borderRadius: 6,
-                        backgroundColor: r.draft_summary ? '#EEF2FF' : '#F8FAFC',
-                        border: `1px solid ${r.draft_summary ? '#C7D2FE' : C.border}`,
-                        color: r.draft_summary ? '#4F46E5' : C.muted,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 12, fontWeight: 700,
+                        fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums',
+                        flexShrink: 0,
                       }}>
-                        {r.draft_summary ? '✓' : '—'}
+                        {Math.floor(r.duration_seconds / 60)}:{String(r.duration_seconds % 60).padStart(2, '0')}
                       </span>
+                    )}
+
+                    {/* Status */}
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                      padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+                      backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
+                    }}>
+                      <span style={{
+                        width: 5, height: 5, borderRadius: '50%',
+                        backgroundColor: st.dot, display: 'inline-block',
+                        animation: r.status === 'transcribing' ? 'recPulse 1.5s ease-in-out infinite' : undefined,
+                      }} />
+                      {st.label}
+                    </span>
+
+                    {/* Linked summary indicator */}
+                    {r.summary_id && (
+                      <Link
+                        href="/summaries"
+                        style={{
+                          fontSize: 11.5, fontWeight: 600,
+                          color: '#4F46E5', textDecoration: 'none',
+                          backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE',
+                          padding: '3px 9px', borderRadius: 14, flexShrink: 0,
+                        }}
+                      >
+                        סיכום מקושר ←
+                      </Link>
+                    )}
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                      <IconBtn onClick={() => { setEditing(r); setOpen(true); }} icon={<PencilIcon />} hoverColor={C.accent} title="ערוך" />
+                      <IconBtn onClick={() => handleDelete(r.id)} icon={<TrashIcon />} hoverColor="#DC2626" title="מחק" />
                     </div>
                   </div>
 
-                  {/* Status */}
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
-                    padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-                    backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
-                  }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: st.dot, display: 'inline-block' }} />
-                    {st.label}
-                  </span>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 5 }} onClick={e => e.stopPropagation()}>
-                    <IconBtn onClick={() => { setEditing(r); setOpen(true); }} icon={<PencilIcon />} hoverColor={C.accent} title="ערוך" />
-                    <IconBtn onClick={() => handleDelete(r.id)} icon={<TrashIcon />} hoverColor="#DC2626" title="מחק" />
-                  </div>
+                  {/* Transcript preview + create-summary action */}
+                  {(hasTranscript || r.processing_error) && (
+                    <div style={{
+                      marginTop: 12, paddingTop: 12,
+                      borderTop: `1px dashed ${C.border}`,
+                      display: 'flex', alignItems: 'flex-start', gap: 14,
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {hasTranscript && (
+                          <>
+                            <p style={{
+                              fontSize: 11, fontWeight: 600, color: C.muted,
+                              margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em',
+                            }}>
+                              תמלול
+                            </p>
+                            <p style={{
+                              fontSize: 13, color: C.sub, margin: 0,
+                              lineHeight: 1.5, display: '-webkit-box',
+                              WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                            }}>
+                              {transcript}
+                            </p>
+                          </>
+                        )}
+                        {r.processing_error && (
+                          <p style={{
+                            fontSize: 12, color: '#DC2626', margin: hasTranscript ? '8px 0 0' : '0',
+                          }}>
+                            ⚠ {r.processing_error}
+                          </p>
+                        )}
+                      </div>
+                      {canCreateSummary && (
+                        <button
+                          onClick={() => handleCreateSummary(r)}
+                          disabled={isBusy}
+                          style={{
+                            flexShrink: 0,
+                            padding: '8px 16px', borderRadius: 9,
+                            fontSize: 13, fontWeight: 600,
+                            backgroundColor: isBusy ? C.border : C.accent,
+                            color: '#FFFFFF', border: 'none',
+                            cursor: isBusy ? 'wait' : 'pointer',
+                            boxShadow: '0 2px 6px rgba(13,148,136,0.18)',
+                          }}
+                        >
+                          {isBusy ? 'יוצר...' : 'צור סיכום פגישה ←'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
+            <style>{`
+              @keyframes recPulse {
+                0%,100% { box-shadow: 0 0 0 0 rgba(29,78,216,0.45); }
+                50%      { box-shadow: 0 0 0 5px rgba(29,78,216,0); }
+              }
+            `}</style>
             <div style={{
               padding: '10px 24px', fontSize: 12, color: C.muted,
               backgroundColor: '#F8FAFC', borderTop: `1px solid #F1F5F9`,

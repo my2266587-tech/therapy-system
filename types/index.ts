@@ -67,6 +67,33 @@ export interface SessionSummary {
   patient?: { full_name: string } | null;
 }
 
+/**
+ * Recording lifecycle, with AI fields added for the transcription pipeline.
+ *
+ *   status            high-level state shown to the user
+ *   processing_status granular pipeline state used by the (future) worker
+ *   transcript_text   long-form Whisper output (preferred over `transcript`,
+ *                     which stays for legacy short manual entries)
+ *   ai_summary_raw    structured AI output BEFORE clinician edits, e.g.
+ *                     `{ main_topics, treatment_actions, progress, ... }`
+ *   summary_id        FK to session_summaries once a draft has been created
+ */
+export type RecordingStatus =
+  | 'pending'
+  | 'transcribing'
+  | 'transcribed'
+  | 'draft_ready'
+  | 'approved'
+  | 'failed';
+
+export type RecordingProcessingStatus =
+  | 'idle'
+  | 'queued'
+  | 'transcribing'
+  | 'summarizing'
+  | 'completed'
+  | 'failed';
+
 export interface Recording {
   id: string;
   patient_id: string;
@@ -74,7 +101,14 @@ export interface Recording {
   audio_url: string | null;
   transcript: string | null;
   draft_summary: string | null;
-  status: 'pending' | 'transcribed' | 'draft_ready' | 'approved';
+  status: RecordingStatus;
+  /* ── AI pipeline fields ── */
+  transcript_text:    string | null;
+  ai_summary_raw:     Record<string, unknown> | null;
+  processing_status:  RecordingProcessingStatus;
+  processing_error:   string | null;
+  summary_id:         string | null;
+  duration_seconds:   number | null;
   created_at: string;
   updated_at: string;
   patient?: { full_name: string } | null;
