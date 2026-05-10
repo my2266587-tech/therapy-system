@@ -261,6 +261,10 @@ alter table staff drop constraint if exists staff_role_check;
 alter table staff add constraint staff_role_check
   check (role in ('coordinator','instructor','therapist','manager','kabas','social_worker','other'));
 
+-- Optional employee number for the monthly hours report (cell G2 of
+-- the template). Free text — some institutions use letter prefixes.
+alter table staff add column if not exists employee_number text;
+
 -- Many-to-many staff ↔ patients. We never store an array on staff or
 -- patients — this is the only place the relationship lives.
 create table if not exists staff_patients (

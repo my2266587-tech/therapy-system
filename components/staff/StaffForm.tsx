@@ -12,11 +12,12 @@ interface Props { initial: StaffMember | null; onSave: () => void; onCancel: () 
 
 export default function StaffForm({ initial, onSave, onCancel }: Props) {
   const [form, setForm] = useState({
-    full_name: initial?.full_name ?? '',
-    phone:     initial?.phone     ?? '',
-    email:     initial?.email     ?? '',
-    role:      initial?.role      ?? 'other',
-    notes:     initial?.notes     ?? '',
+    full_name:       initial?.full_name       ?? '',
+    phone:           initial?.phone           ?? '',
+    email:           initial?.email           ?? '',
+    role:            initial?.role            ?? 'other',
+    employee_number: initial?.employee_number ?? '',
+    notes:           initial?.notes           ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
@@ -43,6 +44,7 @@ export default function StaffForm({ initial, onSave, onCancel }: Props) {
         <SelectField label="תפקיד" value={form.role} onChange={v => set('role', v)} options={ROLE_OPTIONS} />
         <Field label="טלפון" type="tel" value={form.phone} onChange={v => set('phone', v)} />
         <Field label="מייל" type="email" value={form.email} onChange={v => set('email', v)} />
+        <Field label="מס׳ עובד" value={form.employee_number} onChange={v => set('employee_number', v)} />
       </div>
       <TextareaField label="הערות" value={form.notes} onChange={v => set('notes', v)} rows={2} />
       <div className="flex gap-3 pt-2 border-t border-slate-100">

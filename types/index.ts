@@ -13,6 +13,9 @@ export interface StaffMember {
   phone: string | null;
   email: string | null;
   role: StaffRole;
+  /** Optional employee number for the monthly hours report (G2 in
+   *  public/templates/monthly-report-template.xlsx). */
+  employee_number: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
