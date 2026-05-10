@@ -1,19 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import StaffForm from '@/components/staff/StaffForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
+import { STAFF_ROLE_STYLE as ROLE_STYLE } from '@/lib/staffRoles';
 import type { StaffMember } from '@/types';
-
-const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; border: string; av: string }> = {
-  coordinator: { label: 'רכזת',    bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4', av: '#0D9488' },
-  instructor:  { label: 'מדריכה',  bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE', av: '#4F46E5' },
-  therapist:   { label: 'מטפלת',   bg: '#FDF4FF', text: '#9333EA', border: '#E9D5FF', av: '#9333EA' },
-  other:       { label: 'אחר',     bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0', av: '#64748B' },
-};
 
 const STAFF_EXPORT_COLUMNS: Column<StaffMember>[] = [
   { header: 'שם מלא', accessor: r => r.full_name, width: 24 },
@@ -29,6 +24,7 @@ function initials(name: string) {
 }
 
 export default function StaffPage() {
+  const router = useRouter();
   const [records, setRecords] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [open,    setOpen]    = useState(false);
@@ -88,7 +84,7 @@ export default function StaffPage() {
               return (
                 <div
                   key={r.id}
-                  onClick={() => { setEditing(r); setOpen(true); }}
+                  onClick={() => router.push(`/staff/${r.id}`)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 16,
                     padding: '14px 24px', cursor: 'pointer',

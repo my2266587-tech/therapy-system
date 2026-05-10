@@ -6,10 +6,13 @@ import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
 import type { StaffMember } from '@/types';
 
 const ROLE_OPTIONS = [
-  { value: 'coordinator', label: 'רכזת' },
-  { value: 'instructor',  label: 'מדריכה' },
-  { value: 'therapist',   label: 'מטפלת' },
-  { value: 'other',       label: 'אחר' },
+  { value: 'coordinator',   label: 'רכזת' },
+  { value: 'instructor',    label: 'מדריכה' },
+  { value: 'therapist',     label: 'מטפלת' },
+  { value: 'manager',       label: 'מנהל' },
+  { value: 'kabas',         label: 'קב"ס' },
+  { value: 'social_worker', label: 'עו"ס' },
+  { value: 'other',         label: 'אחר' },
 ];
 
 interface Props { initial: StaffMember | null; onSave: () => void; onCancel: () => void; }

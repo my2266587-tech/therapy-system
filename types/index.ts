@@ -1,12 +1,37 @@
+export type StaffRole =
+  | 'coordinator'    // רכזת
+  | 'instructor'     // מדריכה
+  | 'therapist'      // מטפלת
+  | 'manager'        // מנהל
+  | 'kabas'          // קב"ס
+  | 'social_worker'  // עו"ס
+  | 'other';
+
 export interface StaffMember {
   id: string;
   full_name: string;
   phone: string | null;
   email: string | null;
-  role: 'coordinator' | 'instructor' | 'therapist' | 'other';
+  role: StaffRole;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface StaffDocument {
+  id: string;
+  staff_id: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string | null;
+  file_size: number | null;
+  uploaded_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StaffDocumentWithUrl extends StaffDocument {
+  url: string;
 }
 
 export interface Patient {

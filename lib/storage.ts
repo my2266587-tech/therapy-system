@@ -8,6 +8,8 @@
 export const BUCKETS = {
   /** Per-patient documents (PDF, Word, images). Private. */
   patientDocuments: 'patient-documents',
+  /** Per-staff documents (PDF, Word, images). Private. */
+  staffDocuments: 'staff-documents',
   /** Audio captured by RecordingWidget. Private. */
   recordings: 'recordings',
 } as const;

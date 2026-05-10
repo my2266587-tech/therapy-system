@@ -254,6 +254,112 @@ alter table staff            add column if not exists import_metadata jsonb;
 alter table payments         add column if not exists import_metadata jsonb;
 alter table private_expenses add column if not exists import_metadata jsonb;
 
+-- ── Staff: expand role enum + many-to-many with patients + documents ──
+-- Role enum gets 'manager' (מנהל), 'kabas' (קב"ס) and 'social_worker' (עו"ס).
+-- Existing rows keep their role; the constraint is dropped + recreated.
+alter table staff drop constraint if exists staff_role_check;
+alter table staff add constraint staff_role_check
+  check (role in ('coordinator','instructor','therapist','manager','kabas','social_worker','other'));
+
+-- Many-to-many staff ↔ patients. We never store an array on staff or
+-- patients — this is the only place the relationship lives.
+create table if not exists staff_patients (
+  staff_id   uuid not null references staff(id)    on delete cascade,
+  patient_id uuid not null references patients(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (staff_id, patient_id)
+);
+
+-- Indexes for the two natural query directions.
+create index if not exists idx_staff_patients_by_staff   on staff_patients (staff_id);
+create index if not exists idx_staff_patients_by_patient on staff_patients (patient_id);
+
+-- Per-staff documents. Mirror of patient_documents — same shape, same
+-- pattern (private storage + signed URLs).
+create table if not exists staff_documents (
+  id           uuid primary key default gen_random_uuid(),
+  staff_id     uuid not null references staff(id) on delete cascade,
+  file_name    text not null,
+  storage_path text not null unique,
+  mime_type    text,
+  file_size    bigint,
+  uploaded_at  timestamptz not null default now(),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists idx_staff_documents_staff
+  on staff_documents (staff_id, uploaded_at desc);
+
+-- updated_at auto-bump (the function update_updated_at exists from
+-- the patients block at the bottom of this file — wrap in a guard
+-- so re-runs don't error).
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'trg_staff_documents_updated_at'
+  ) then
+    create trigger trg_staff_documents_updated_at
+      before update on staff_documents
+      for each row execute function update_updated_at();
+  end if;
+end $$;
+
+-- Storage bucket for staff documents. Same shape + cap as
+-- patient-documents so the API can reuse the friendlyStorageError map.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'staff-documents',
+  'staff-documents',
+  false,
+  10485760,  -- 10 MB
+  array[
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/jpeg','image/png','image/gif','image/webp','image/heic','image/heif'
+  ]
+)
+on conflict (id) do update
+set public             = excluded.public,
+    file_size_limit    = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+-- Defense-in-depth RLS for the bucket. The API uses service_role so it
+-- bypasses these, but they ensure direct anon/authenticated access can't
+-- leak private files.
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and policyname='staff_documents_authenticated_read'
+  ) then
+    create policy staff_documents_authenticated_read
+      on storage.objects for select to authenticated
+      using (bucket_id = 'staff-documents');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and policyname='staff_documents_authenticated_write'
+  ) then
+    create policy staff_documents_authenticated_write
+      on storage.objects for insert to authenticated
+      with check (bucket_id = 'staff-documents');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and policyname='staff_documents_authenticated_delete'
+  ) then
+    create policy staff_documents_authenticated_delete
+      on storage.objects for delete to authenticated
+      using (bucket_id = 'staff-documents');
+  end if;
+end $$;
+
 -- ── Patient Documents ────────────────────────────────────────────────────────
 -- Files (PDF/Word/images) uploaded per patient. Bytes live in Supabase Storage
 -- bucket "patient-documents" (private). This table holds the metadata.
@@ -381,7 +487,7 @@ begin
   foreach t in array array[
     'staff','patients','sessions','session_summaries','recordings',
     'quarterly_summaries','payments','private_expenses','petty_cash',
-    'authorized_users','patient_documents'
+    'authorized_users','patient_documents','staff_documents'
   ] loop
     execute format(
       'create trigger trg_%s_updated_at before update on %s for each row execute function update_updated_at();',

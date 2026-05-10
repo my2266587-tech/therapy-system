@@ -61,6 +61,7 @@ export default function PatientDetailPage() {
   const [sessions,   setSessions]   = useState<Session[]>([]);
   const [summaries,  setSummaries]  = useState<SessionSummary[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [linkedStaff, setLinkedStaff] = useState<Array<{ id: string; full_name: string; role: string }>>([]);
   const [activeTab,  setActiveTab]  = useState<Tab>('פרטים');
   const [loading,    setLoading]    = useState(true);
   const [editOpen,   setEditOpen]   = useState(false);
@@ -68,16 +69,25 @@ export default function PatientDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [p, s, sum, rec] = await Promise.all([
+    const [p, s, sum, rec, sp] = await Promise.all([
       supabase.from('patients').select('*, coordinator:coordinator_id(full_name), staff_member:staff_id(full_name)').eq('id', id).single(),
       supabase.from('sessions').select('*').eq('patient_id', id).order('date', { ascending: false }),
       supabase.from('session_summaries').select('*').eq('patient_id', id).order('date', { ascending: false }),
       supabase.from('recordings').select('*').eq('patient_id', id).order('recorded_at', { ascending: false }),
+      // Reverse direction of staff_patients — show every staff member
+      // explicitly linked to this patient so the relationship is visible
+      // from both pages.
+      supabase.from('staff_patients').select('staff:staff_id(id, full_name, role)').eq('patient_id', id),
     ]);
     setPatient(p.data as Patient);
     setSessions((s.data ?? []) as Session[]);
     setSummaries((sum.data ?? []) as SessionSummary[]);
     setRecordings((rec.data ?? []) as Recording[]);
+    type StaffJoin = { staff: { id: string; full_name: string; role: string } | null };
+    const staffRows = ((sp.data ?? []) as unknown as StaffJoin[])
+      .map(r => r.staff)
+      .filter((s): s is NonNullable<typeof s> => s !== null);
+    setLinkedStaff(staffRows);
     setLoading(false);
   }, [id]);
 
@@ -157,6 +167,26 @@ export default function PatientDetailPage() {
                     <span>רכזת: {(patient.coordinator as any).full_name}</span>
                   )}
                 </div>
+                {linkedStaff.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                    {linkedStaff.map(s => (
+                      <Link
+                        key={s.id}
+                        href={`/staff/${s.id}`}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                          padding: '3px 10px', borderRadius: 14,
+                          fontSize: 11.5, fontWeight: 500,
+                          backgroundColor: '#F8FAFC', color: C.sub,
+                          border: `1px solid ${C.border}`,
+                          textDecoration: 'none',
+                        }}
+                      >
+                        {s.full_name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
