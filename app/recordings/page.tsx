@@ -87,10 +87,40 @@ function RecordingsInner() {
     { value: 'failed',       label: 'שגיאה' },
   ];
 
-  /* ── create-summary action ──────────────────────────────────────── */
+  /* ── per-row actions: transcribe + create-summary ────────────────── */
   const router2 = router; // captured for navigation after summary creation
-  const [creatingFor, setCreatingFor] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [creatingFor,    setCreatingFor]    = useState<string | null>(null);
+  const [transcribingFor, setTranscribingFor] = useState<string | null>(null);
+  const [createError,    setCreateError]    = useState<string | null>(null);
+
+  async function handleTranscribe(rec: Recording) {
+    if (transcribingFor || creatingFor) return;
+    setTranscribingFor(rec.id);
+    setCreateError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setCreateError('יש להתחבר מחדש'); setTranscribingFor(null); return; }
+
+      const res = await fetch(`/api/recordings/${rec.id}/transcribe`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setCreateError(json?.error ?? 'שגיאה בתמלול');
+        setTranscribingFor(null);
+        await load();   // refresh so the row reflects 'failed' / processing_error
+        return;
+      }
+      await load();
+    } catch (e) {
+      setCreateError(`שגיאת רשת: ${(e as Error).message}`);
+      await load();
+    } finally {
+      setTranscribingFor(null);
+    }
+  }
 
   async function handleCreateSummary(rec: Recording) {
     if (creatingFor) return;
@@ -214,7 +244,18 @@ function RecordingsInner() {
               const transcript = r.transcript_text ?? r.transcript ?? null;
               const hasTranscript = !!transcript;
               const canCreateSummary = hasTranscript && !r.summary_id && r.status !== 'draft_ready' && r.status !== 'approved';
-              const isBusy = creatingFor === r.id;
+              // Manual-transcribe button: only when the row was uploaded
+              // through the new flow (storage path in audio_url) and is
+              // still queued. Lives next to "create summary" in the same
+              // action cluster so the user sees one place for all per-row
+              // pipeline actions.
+              const canTranscribe =
+                r.status === 'pending' &&
+                r.processing_status === 'queued' &&
+                !!r.audio_url &&
+                !/^https?:\/\//i.test(r.audio_url);
+              const isBusy           = creatingFor === r.id;
+              const isTranscribing   = transcribingFor === r.id;
 
               return (
                 <div
@@ -269,6 +310,34 @@ function RecordingsInner() {
                       }} />
                       {st.label}
                     </span>
+
+                    {/* Transcribe-now (manual trigger, no Cron yet) */}
+                    {canTranscribe && (
+                      <button
+                        onClick={() => handleTranscribe(r)}
+                        disabled={isTranscribing}
+                        style={{
+                          flexShrink: 0,
+                          padding: '6px 12px', borderRadius: 8,
+                          fontSize: 12, fontWeight: 600,
+                          backgroundColor: isTranscribing ? C.border : '#FFFFFF',
+                          color: isTranscribing ? C.muted : C.accent,
+                          border: `1px solid ${C.accentRim}`,
+                          cursor: isTranscribing ? 'wait' : 'pointer',
+                          transition: 'all 0.12s',
+                        }}
+                        onMouseEnter={e => {
+                          if (isTranscribing) return;
+                          (e.currentTarget as HTMLElement).style.backgroundColor = C.accentSub;
+                        }}
+                        onMouseLeave={e => {
+                          if (isTranscribing) return;
+                          (e.currentTarget as HTMLElement).style.backgroundColor = '#FFFFFF';
+                        }}
+                      >
+                        {isTranscribing ? 'מתמלל...' : '✨ תמלל עכשיו'}
+                      </button>
+                    )}
 
                     {/* Linked summary indicator */}
                     {r.summary_id && (
