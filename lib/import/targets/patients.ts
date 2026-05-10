@@ -70,6 +70,10 @@ export const PATIENTS_TARGET: TargetSpec = {
         { value: 'divorced', labels: ['גרושה', 'גרוש', 'divorced'] },
         { value: 'widowed',  labels: ['אלמנה', 'אלמן', 'widowed'] },
       ],
+      // Real CSVs sometimes carry a free-form paragraph in this column
+      // (history of the patient's family situation). Route those to
+      // notes rather than failing the row.
+      overflowToKey: 'notes',
     },
     { key: 'team_name', label: 'צוות', kind: 'string', maxLength: 80,
       aliases: ['team', 'קבוצה', 'שם צוות'],

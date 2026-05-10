@@ -46,6 +46,15 @@ export interface FieldSpec {
    * genuinely multi-line fields like notes/details/main_topics.
    */
   maxLength?: number;
+  /**
+   * When the value can't fit this column — enum mismatch, string longer
+   * than maxLength, etc. — append it to the named free-text column
+   * (typically 'notes') instead of failing the row. The receiving column
+   * gets "<label>: <raw value>" appended on its own line. Used for
+   * marital_status, where Excel files in the wild carry free-form
+   * paragraphs in a column we expected to hold one of four enum values.
+   */
+  overflowToKey?: string;
   /** Help text shown next to the field in the mapping UI. */
   hint?: string;
 }
