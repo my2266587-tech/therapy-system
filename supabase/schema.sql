@@ -138,6 +138,63 @@ begin
   end if;
 end $$;
 
+-- ── Storage bucket: recordings (private) ───────────────────────────────────
+-- Audio files captured from the in-browser RecordingWidget land here. We
+-- never expose the service_role key on the client; the API route signs
+-- short-lived URLs for playback. 100 MB cap is generous for a typical
+-- 60-minute therapy session in compressed webm/m4a/mp3.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'recordings',
+  'recordings',
+  false,
+  104857600,  -- 100 MB
+  array[
+    'audio/webm','audio/mp4','audio/x-m4a','audio/mpeg',
+    'audio/mp3','audio/wav','audio/x-wav','audio/ogg'
+  ]
+)
+on conflict (id) do update
+set public             = excluded.public,
+    file_size_limit    = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+-- Defense-in-depth policies. The API route uses service_role which bypasses
+-- RLS, so these are not strictly required. They ensure that even direct
+-- access with an anon/authenticated key won't leak audio files.
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and policyname='recordings_authenticated_read'
+  ) then
+    create policy recordings_authenticated_read
+      on storage.objects for select to authenticated
+      using (bucket_id = 'recordings');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and policyname='recordings_authenticated_write'
+  ) then
+    create policy recordings_authenticated_write
+      on storage.objects for insert to authenticated
+      with check (bucket_id = 'recordings');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and policyname='recordings_authenticated_delete'
+  ) then
+    create policy recordings_authenticated_delete
+      on storage.objects for delete to authenticated
+      using (bucket_id = 'recordings');
+  end if;
+end $$;
+
 -- ── Quarterly Summaries ───────────────────────────────────────────────────────
 create table if not exists quarterly_summaries (
   id               uuid primary key default gen_random_uuid(),

@@ -160,7 +160,7 @@ function RecordingsInner() {
         {/* Recording widget — primary capture entry. The rest of the
             pipeline (upload → transcribe → AI → draft) hooks in later. */}
         <div style={{ marginBottom: 16 }}>
-          <RecordingWidget />
+          <RecordingWidget onSaved={() => load()} />
         </div>
 
         {/* Pipeline note */}

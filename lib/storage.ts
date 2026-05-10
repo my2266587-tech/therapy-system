@@ -8,9 +8,20 @@
 export const BUCKETS = {
   /** Per-patient documents (PDF, Word, images). Private. */
   patientDocuments: 'patient-documents',
+  /** Audio captured by RecordingWidget. Private. */
+  recordings: 'recordings',
 } as const;
 
 export const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
+
+/** Audio MIME types accepted by the recordings upload API. Mirrors the
+ *  allowed_mime_types set on the storage bucket. */
+export const RECORDING_AUDIO_MIME = [
+  'audio/webm', 'audio/mp4', 'audio/x-m4a', 'audio/mpeg',
+  'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg',
+] as const;
+
+export const RECORDING_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /**
  * Translate a raw Supabase Storage / Postgres error message into a
