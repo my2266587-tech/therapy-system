@@ -3,17 +3,10 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
+import { STAFF_ROLE_OPTIONS } from '@/lib/staffRoles';
 import type { StaffMember } from '@/types';
 
-const ROLE_OPTIONS = [
-  { value: 'coordinator',   label: 'רכזת' },
-  { value: 'instructor',    label: 'מדריכה' },
-  { value: 'therapist',     label: 'מטפלת' },
-  { value: 'manager',       label: 'מנהל' },
-  { value: 'kabas',         label: 'קב"ס' },
-  { value: 'social_worker', label: 'עו"ס' },
-  { value: 'other',         label: 'אחר' },
-];
+const ROLE_OPTIONS = STAFF_ROLE_OPTIONS;
 
 interface Props { initial: StaffMember | null; onSave: () => void; onCancel: () => void; }
 

@@ -1,9 +1,10 @@
 import type { TargetSpec } from '../types';
+import { STAFF_ROLE_ENUM_VALUES } from '@/lib/staffRoles';
 
 export const STAFF_TARGET: TargetSpec = {
   key:         'staff',
   label:       'אנשי צוות',
-  description: 'ייבוא רשימת אנשי צוות — מדריכות, מטפלות (ולרכזות יש מסך נפרד).',
+  description: 'ייבוא רשימת אנשי צוות — רכזות, מדריכות, מטפלות, מנהלים, קב"ס, עו"ס.',
   tableName:   'staff',
   dedupeKeys:  ['full_name', 'email'],
   captureUnmappedAsMetadata: true,
@@ -15,12 +16,10 @@ export const STAFF_TARGET: TargetSpec = {
       ] },
     { key: 'role', label: 'תפקיד', required: true, kind: 'enum',
       aliases: ['role', 'משרה', 'תפקיד במערכת'],
-      enumValues: [
-        { value: 'coordinator', labels: ['רכזת', 'רכז', 'coordinator', 'מרכזת'] },
-        { value: 'instructor',  labels: ['מדריכה', 'מדריך', 'instructor'] },
-        { value: 'therapist',   labels: ['מטפלת', 'מטפל', 'therapist'] },
-        { value: 'other',       labels: ['אחר', 'אחרת', 'other'] },
-      ],
+      // Single source of truth — see lib/staffRoles.ts. Adding a new
+      // role or alias there flows to the form, the badges, and this
+      // import target in one go.
+      enumValues: STAFF_ROLE_ENUM_VALUES,
     },
     { key: 'email', label: 'אימייל', kind: 'string', maxLength: 150,
       aliases: ['מייל', 'דואר אלקטרוני', 'דוא״ל', 'דואל', 'דוא"ל', 'email', 'e-mail', 'mail'] },

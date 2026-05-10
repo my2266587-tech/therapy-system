@@ -41,3 +41,22 @@ export const STAFF_ROLE_OPTIONS: { value: StaffRole; label: string }[] = [
 export function roleLabel(role: string): string {
   return STAFF_ROLE_STYLE[role as StaffRole]?.label ?? role;
 }
+
+/**
+ * Source of truth for the enum-shaped role mapping used by the import
+ * pipeline. Each entry has the canonical DB `value` and every Hebrew /
+ * English label that should map to it. Updating this list updates both
+ * the staff and coordinators import targets at once.
+ *
+ * "רב\"ס" is intentionally listed as an alias for `kabas` — staff in the
+ * field write the abbreviation either way.
+ */
+export const STAFF_ROLE_ENUM_VALUES: { value: StaffRole; labels: string[] }[] = [
+  { value: 'coordinator',   labels: ['רכזת', 'רכז', 'מרכזת', 'coordinator'] },
+  { value: 'instructor',    labels: ['מדריכה', 'מדריך', 'instructor'] },
+  { value: 'therapist',     labels: ['מטפלת', 'מטפל', 'therapist'] },
+  { value: 'manager',       labels: ['מנהל', 'מנהלת', 'manager', 'admin'] },
+  { value: 'kabas',         labels: ['קב"ס', 'קב״ס', 'קבס', 'רב"ס', 'רב״ס', 'רבס', 'kabas'] },
+  { value: 'social_worker', labels: ['עו"ס', 'עו״ס', 'עוס', 'עובדת סוציאלית', 'עובד סוציאלי', 'social_worker', 'social worker'] },
+  { value: 'other',         labels: ['אחר', 'אחרת', 'other'] },
+];
