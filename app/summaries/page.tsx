@@ -7,6 +7,7 @@ import SummaryForm from '@/components/summaries/SummaryForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
+import SummaryDetailCard from '@/components/summaries/SummaryDetailCard';
 import type { SessionSummary, Recording } from '@/types';
 
 const C = {
@@ -374,17 +375,21 @@ export default function SummariesPage() {
         <SummaryForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} />
       </Modal>
 
-      {/* Detail modal */}
+      {/* Detail modal — chromeless: SummaryDetailCard owns the chrome */}
       <Modal
         open={openDetail !== null}
         onClose={() => setOpenDetail(null)}
         title="סיכום פגישה"
-        size="xl"
+        size="2xl"
+        chromeless
       >
         {openDetail && (
-          <SummaryDetail
+          <SummaryDetailCard
             summary={openDetail}
-            recording={openDetail.session_id ? recordingsById.get(openDetail.session_id) : undefined}
+            patientName={openDetail.patient?.full_name ?? undefined}
+            patientHref={openDetail.patient_id ? `/patients/${openDetail.patient_id}` : undefined}
+            recording={openDetail.session_id ? recordingsById.get(openDetail.session_id) ?? null : null}
+            onClose={() => setOpenDetail(null)}
             onEdit={() => {
               const s = openDetail;
               setOpenDetail(null);
@@ -398,171 +403,9 @@ export default function SummariesPage() {
   );
 }
 
-/* ── Detail view ── */
-function SummaryDetail({ summary, recording, onEdit }: {
-  summary: SummaryWithRel;
-  recording: Recording | undefined;
-  onEdit: () => void;
-}) {
-  const fromRecording = !!recording;
-
-  const sections: { label: string; value: string | null | undefined; tone?: 'accent' }[] = [
-    { label: 'נושאים עיקריים',  value: summary.main_topics },
-    { label: 'מה עשינו בפגישה', value: summary.treatment_actions },
-    { label: 'מצב נוכחי',        value: summary.current_state },
-    { label: 'התקדמות',          value: summary.progress, tone: 'accent' },
-    { label: 'צעדים הבאים',      value: summary.next_steps },
-    { label: 'משימות שניתנו',    value: summary.tasks_given },
-    { label: 'קשיים',            value: summary.difficulties },
-    { label: 'הערות',            value: summary.notes },
-  ];
-  const visible = sections.filter(s => s.value && s.value.trim());
-
-  return (
-    <div style={{ direction: 'rtl' }}>
-      {/* Header */}
-      <div style={{
-        padding: '14px 16px', marginBottom: 18,
-        backgroundColor: '#F8FAFC', borderRadius: 10, border: `1px solid ${C.border}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h3 style={{ fontSize: 17, fontWeight: 700, color: C.text, margin: 0 }}>
-            {summary.patient?.full_name ?? '—'}
-          </h3>
-          <button
-            onClick={onEdit}
-            style={{
-              padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-              border: `1px solid ${C.border}`, color: C.sub, backgroundColor: C.card,
-              cursor: 'pointer', transition: 'all 0.12s',
-            }}
-            onMouseEnter={e => {
-              const el = e.currentTarget as HTMLElement;
-              el.style.borderColor = C.accentRim; el.style.color = C.accent;
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget as HTMLElement;
-              el.style.borderColor = C.border; el.style.color = C.sub;
-            }}
-          >
-            ערוך סיכום
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center' }}>
-          <MetaItem label="תאריך" value={<DateDisplay date={summary.date} size="sm" />} />
-          {summary.start_time && (
-            <MetaItem label="שעות" value={`${summary.start_time}${summary.end_time ? ` – ${summary.end_time}` : ''}`} />
-          )}
-          {summary.duration_minutes && (
-            <MetaItem label="משך" value={`${summary.duration_minutes} דק'`} />
-          )}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              מקור
-            </div>
-            <div style={{ marginTop: 3 }}>
-              {fromRecording ? <SourceBadge label="🎙 נוצר מהקלטה" /> : <SourceBadge label="הוזן ידנית" muted />}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Sections */}
-      {visible.length === 0 ? (
-        <p style={{ fontSize: 13, color: C.muted, textAlign: 'center', padding: '20px 0' }}>
-          אין תוכן בסיכום זה
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {visible.map(s => (
-            <Section key={s.label} label={s.label} value={s.value!} accent={s.tone === 'accent'} />
-          ))}
-        </div>
-      )}
-
-      {/* Recording attachment */}
-      {recording && (
-        <div style={{
-          marginTop: 16, padding: '14px 16px',
-          borderRadius: 10, backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE',
-        }}>
-          <div style={{
-            fontSize: 11, fontWeight: 700, color: '#4F46E5',
-            letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8,
-          }}>
-            הקלטה מקורית
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: C.text }}>
-              {new Date(recording.recorded_at).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </span>
-            {recording.audio_url && (
-              <audio controls src={recording.audio_url} style={{ height: 32, flex: 1, minWidth: 200 }} />
-            )}
-          </div>
-        </div>
-      )}
-
-      {summary.attachment_url && (
-        <div style={{
-          marginTop: 12, padding: '12px 14px',
-          borderRadius: 10, backgroundColor: '#F8FAFC', border: `1px solid ${C.border}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-        }}>
-          <div>
-            <div style={{
-              fontSize: 11, fontWeight: 700, color: C.muted,
-              letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 4,
-            }}>
-              קובץ מצורף
-            </div>
-            <a href={summary.attachment_url} target="_blank" rel="noreferrer" style={{
-              fontSize: 13, color: C.accent, textDecoration: 'none', fontWeight: 500,
-            }}>
-              פתח קובץ ←
-            </a>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Section({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div style={{
-      borderRadius: 10, padding: '14px 16px',
-      backgroundColor: accent ? '#F0FDF9' : C.card,
-      border: `1px solid ${accent ? '#99F6E4' : C.border}`,
-    }}>
-      <div style={{
-        fontSize: 11, fontWeight: 700, color: accent ? '#0D9488' : '#94A3B8',
-        letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8,
-      }}>
-        {label}
-      </div>
-      <div style={{
-        fontSize: 14, color: '#1A2332', lineHeight: 1.6, whiteSpace: 'pre-wrap',
-      }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function MetaItem({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginTop: 3 }}>
-        {value}
-      </div>
-    </div>
-  );
-}
+/* SummaryDetail moved to components/summaries/SummaryDetailCard.tsx —
+ * shared with the patient detail page so the same redesigned card
+ * serves both views. SourceBadge is kept here for the list-row chip. */
 
 function SourceBadge({ label, muted }: { label: string; muted?: boolean }) {
   return (

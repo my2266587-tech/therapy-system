@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
+import SummaryDetailCard from '@/components/summaries/SummaryDetailCard';
 import PatientForm from '@/components/patients/PatientForm';
 import {
   housingTypeLabels, maritalStatusLabels,
@@ -256,9 +257,21 @@ export default function PatientDetailPage() {
         open={openSummary !== null}
         onClose={() => setOpenSummary(null)}
         title="סיכום פגישה"
-        size="xl"
+        size="2xl"
+        chromeless
       >
-        {openSummary && <SummaryDetail summary={openSummary} recordings={recordings} />}
+        {openSummary && (
+          <SummaryDetailCard
+            summary={openSummary}
+            patientName={patient.full_name}
+            recording={
+              openSummary.session_id
+                ? recordings.find(r => r.id === openSummary.session_id) ?? null
+                : null
+            }
+            onClose={() => setOpenSummary(null)}
+          />
+        )}
       </Modal>
     </div>
   );
@@ -414,81 +427,8 @@ function SummariesTab({ summaries, onOpen }: { summaries: SessionSummary[]; onOp
   );
 }
 
-function SummaryDetail({ summary, recordings }: { summary: SessionSummary; recordings: Recording[] }) {
-  const fromRecording = summary.session_id
-    ? recordings.find(r => r.id === summary.session_id)
-    : null;
-
-  const sections: { label: string; value: string | null | undefined; tone?: 'accent' }[] = [
-    { label: 'נושאים עיקריים', value: summary.main_topics },
-    { label: 'מה עשינו בפגישה', value: summary.treatment_actions },
-    { label: 'מצב נוכחי', value: summary.current_state },
-    { label: 'התקדמות', value: summary.progress, tone: 'accent' },
-    { label: 'צעדים הבאים', value: summary.next_steps },
-    { label: 'משימות שניתנו', value: summary.tasks_given },
-    { label: 'קשיים', value: summary.difficulties },
-    { label: 'הערות', value: summary.notes },
-  ];
-
-  const visible = sections.filter(s => s.value && s.value.trim());
-
-  return (
-    <div style={{ direction: 'rtl' }}>
-      {/* Meta header */}
-      <div style={{
-        display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center',
-        padding: '14px 16px', marginBottom: 18,
-        backgroundColor: '#F8FAFC', borderRadius: 10, border: '1px solid #E8ECF0',
-      }}>
-        <MetaItem label="תאריך" value={<DateDisplay date={summary.date} size="sm" />} />
-        {summary.start_time && (
-          <MetaItem label="שעות" value={`${summary.start_time} – ${summary.end_time ?? ''}`} />
-        )}
-        {summary.duration_minutes && (
-          <MetaItem label="משך" value={`${summary.duration_minutes} דק'`} />
-        )}
-        {fromRecording && (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500,
-            backgroundColor: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE',
-            marginRight: 'auto',
-          }}>
-            🎙 נוצר מהקלטה
-          </span>
-        )}
-      </div>
-
-      {visible.length === 0 ? (
-        <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '20px 0' }}>
-          אין תוכן בסיכום זה
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {visible.map(s => (
-            <div key={s.label} style={{
-              borderRadius: 10, padding: '14px 16px',
-              backgroundColor: s.tone === 'accent' ? '#F0FDF9' : '#FFFFFF',
-              border: `1px solid ${s.tone === 'accent' ? '#99F6E4' : '#E8ECF0'}`,
-            }}>
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: s.tone === 'accent' ? '#0D9488' : '#94A3B8',
-                letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8,
-              }}>
-                {s.label}
-              </div>
-              <div style={{
-                fontSize: 14, color: '#1A2332', lineHeight: 1.6, whiteSpace: 'pre-wrap',
-              }}>
-                {s.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+/* SummaryDetail moved to components/summaries/SummaryDetailCard.tsx —
+ * shared with the summaries list page. */
 
 function MetaItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
