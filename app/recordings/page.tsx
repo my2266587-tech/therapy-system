@@ -87,11 +87,38 @@ function RecordingsInner() {
     { value: 'failed',       label: 'שגיאה' },
   ];
 
-  /* ── per-row actions: transcribe + create-summary ────────────────── */
+  /* ── per-row actions: transcribe + structure + create-summary ───── */
   const router2 = router; // captured for navigation after summary creation
-  const [creatingFor,    setCreatingFor]    = useState<string | null>(null);
-  const [transcribingFor, setTranscribingFor] = useState<string | null>(null);
-  const [createError,    setCreateError]    = useState<string | null>(null);
+  const [creatingFor,     setCreatingFor]      = useState<string | null>(null);
+  const [transcribingFor, setTranscribingFor]  = useState<string | null>(null);
+  const [structuringFor,  setStructuringFor]   = useState<string | null>(null);
+  const [createError,     setCreateError]      = useState<string | null>(null);
+
+  async function handleStructure(rec: Recording) {
+    if (structuringFor || transcribingFor || creatingFor) return;
+    setStructuringFor(rec.id);
+    setCreateError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setCreateError('יש להתחבר מחדש'); setStructuringFor(null); return; }
+
+      const res = await fetch(`/api/recordings/${rec.id}/structure-summary`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setCreateError(json?.error ?? 'שגיאה בעיבוד AI');
+      }
+      await load();
+    } catch (e) {
+      setCreateError(`שגיאת רשת: ${(e as Error).message}`);
+      await load();
+    } finally {
+      setStructuringFor(null);
+    }
+  }
 
   async function handleTranscribe(rec: Recording) {
     if (transcribingFor || creatingFor) return;
@@ -243,6 +270,7 @@ function RecordingsInner() {
               const st = RECORDING_STATUS[r.status] ?? RECORDING_STATUS.pending;
               const transcript = r.transcript_text ?? r.transcript ?? null;
               const hasTranscript = !!transcript;
+              const hasAi         = !!r.ai_summary_raw && Object.keys(r.ai_summary_raw).length > 0;
               const canCreateSummary = hasTranscript && !r.summary_id && r.status !== 'draft_ready' && r.status !== 'approved';
               // Manual-transcribe button: only when the row was uploaded
               // through the new flow (storage path in audio_url) and is
@@ -254,8 +282,13 @@ function RecordingsInner() {
                 r.processing_status === 'queued' &&
                 !!r.audio_url &&
                 !/^https?:\/\//i.test(r.audio_url);
+              // AI-structure button: transcript exists, no AI output yet,
+              // and we're not in the middle of running it.
+              const canStructure =
+                hasTranscript && !hasAi && r.processing_status !== 'summarizing';
               const isBusy           = creatingFor === r.id;
               const isTranscribing   = transcribingFor === r.id;
+              const isStructuring    = structuringFor === r.id || r.processing_status === 'summarizing';
 
               return (
                 <div
@@ -310,6 +343,19 @@ function RecordingsInner() {
                       }} />
                       {st.label}
                     </span>
+
+                    {/* AI-ready badge */}
+                    {hasAi && !r.summary_id && (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '3px 9px', borderRadius: 14,
+                        fontSize: 11, fontWeight: 600,
+                        backgroundColor: '#FAF5FF', color: '#7E22CE',
+                        border: '1px solid #E9D5FF', flexShrink: 0,
+                      }}>
+                        ✨ AI מוכן
+                      </span>
+                    )}
 
                     {/* Transcribe-now (manual trigger, no Cron yet) */}
                     {canTranscribe && (
@@ -395,23 +441,51 @@ function RecordingsInner() {
                           </p>
                         )}
                       </div>
-                      {canCreateSummary && (
-                        <button
-                          onClick={() => handleCreateSummary(r)}
-                          disabled={isBusy}
-                          style={{
-                            flexShrink: 0,
-                            padding: '8px 16px', borderRadius: 9,
-                            fontSize: 13, fontWeight: 600,
-                            backgroundColor: isBusy ? C.border : C.accent,
-                            color: '#FFFFFF', border: 'none',
-                            cursor: isBusy ? 'wait' : 'pointer',
-                            boxShadow: '0 2px 6px rgba(13,148,136,0.18)',
-                          }}
-                        >
-                          {isBusy ? 'יוצר...' : 'צור סיכום פגישה ←'}
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, alignItems: 'flex-end' }}>
+                        {canStructure && (
+                          <button
+                            onClick={() => handleStructure(r)}
+                            disabled={isStructuring}
+                            title="הפעלת AI לפיצול התמלול לסעיפי הסיכום"
+                            style={{
+                              padding: '7px 14px', borderRadius: 8,
+                              fontSize: 12.5, fontWeight: 600,
+                              backgroundColor: isStructuring ? '#F1F5F9' : '#FAF5FF',
+                              color: isStructuring ? C.muted : '#7E22CE',
+                              border: `1px solid ${isStructuring ? C.border : '#E9D5FF'}`,
+                              cursor: isStructuring ? 'wait' : 'pointer',
+                              transition: 'all 0.12s',
+                            }}
+                            onMouseEnter={e => {
+                              if (isStructuring) return;
+                              (e.currentTarget as HTMLElement).style.backgroundColor = '#F3E8FF';
+                            }}
+                            onMouseLeave={e => {
+                              if (isStructuring) return;
+                              (e.currentTarget as HTMLElement).style.backgroundColor = '#FAF5FF';
+                            }}
+                          >
+                            {isStructuring ? 'מעבד עם AI...' : '✨ סדר לסיכום AI'}
+                          </button>
+                        )}
+                        {canCreateSummary && (
+                          <button
+                            onClick={() => handleCreateSummary(r)}
+                            disabled={isBusy}
+                            title={hasAi ? 'יצירת טיוטת סיכום מהפלט של ה-AI' : 'יצירת טיוטה — ייפול חזרה לתמלול גולמי'}
+                            style={{
+                              padding: '8px 16px', borderRadius: 9,
+                              fontSize: 13, fontWeight: 600,
+                              backgroundColor: isBusy ? C.border : C.accent,
+                              color: '#FFFFFF', border: 'none',
+                              cursor: isBusy ? 'wait' : 'pointer',
+                              boxShadow: '0 2px 6px rgba(13,148,136,0.18)',
+                            }}
+                          >
+                            {isBusy ? 'יוצר...' : 'צור סיכום פגישה ←'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
