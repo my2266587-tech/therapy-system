@@ -207,9 +207,10 @@ function RecordingsInner() {
           display: 'flex', alignItems: 'flex-start', gap: 10,
         }}>
           <span style={{ fontSize: 14, color: '#1E40AF', flexShrink: 0, lineHeight: 1.4 }}>ℹ</span>
-          <p style={{ fontSize: 13, color: '#1E40AF', margin: 0, lineHeight: 1.55 }}>
-            <strong>תהליך:</strong> הקלטה → תמלול → עיבוד AI → טיוטת סיכום → אישור מטפלת → סיכום פגישה.
-            כשתופיע הקלטה עם תמלול, יופיע כפתור "צור סיכום פגישה" ליצירת טיוטה.
+          <p style={{ fontSize: 13, color: '#1E40AF', margin: 0, lineHeight: 1.6 }}>
+            <strong>איך זה עובד:</strong> מקליטות, לוחצות על
+            {' '}<strong>"✨ הפק סיכום מהקלטה"</strong>, והמערכת מתמללת ומסדרת את הסיכום.
+            נוצרת טיוטה לבדיקת המטפלת — לעריכה ושמירה.
           </p>
         </div>
 
