@@ -45,11 +45,20 @@ const SUMMARY_FIELDS = [
 
 type SummaryField = (typeof SUMMARY_FIELDS)[number];
 
-const SYSTEM_PROMPT =
-  'את עוזרת קלינית מנוסה. תפקידך לקרוא תמלול של פגישה טיפולית בעברית ' +
-  'ולפצל אותו לסעיפים מובנים של סיכום פגישה. החזירי תמיד JSON תקין ' +
-  'במבנה שיוגדר בהודעת המשתמשת. אל תמציאי מידע שלא נמצא בתמלול. ' +
-  'אם נושא לא דובר עליו — החזירי מחרוזת ריקה לאותו שדה.';
+const SYSTEM_PROMPT = [
+  'את עוזרת קלינית מנוסה. תפקידך לקרוא תמלול של פגישה טיפולית בעברית',
+  'ולפצל אותו לסעיפי סיכום פגישה מובנים. החזירי תמיד JSON תקין במבנה',
+  'שיוגדר בהודעת המשתמשת.',
+  '',
+  'עקרונות מנחים:',
+  '- אל תמציאי מידע שלא נמצא בתמלול.',
+  '- אם לא נאמר מידע על נושא — החזירי מחרוזת ריקה לאותו שדה.',
+  '- שמות הסעיפים ("נושאים עיקריים", "מצב נוכחי", "התקדמות", "צעדים',
+  '  הבאים", "משימות", "הערות" וכד׳) הם תוויות לפיצול בלבד — הם אינם',
+  '  חלק מהתוכן ואסור שיופיעו בערך של אף שדה.',
+  '- אם המטפלת השתמשה בכותרות אלה בדיבורה ("נושאים עיקריים: ..."),',
+  '  השמיטי את הכותרת והכניסי רק את התוכן שאחריה.',
+].join(' ');
 
 function buildUserPrompt(transcript: string): string {
   return [
@@ -70,6 +79,19 @@ function buildUserPrompt(transcript: string): string {
     '- אל תמציאי מידע שלא נמצא בתמלול.',
     '- אל תוסיפי שדות שאינם ברשימה.',
     '- אורך כל שדה: עד 1500 תווים, פסקאות מופרדות בשורה חדשה.',
+    '- אסור להכניס את שמות הסעיפים לתוך התוכן. שמות כמו "נושאים',
+    '  עיקריים", "מצב נוכחי", "התקדמות", "צעדים הבאים", "משימות"',
+    '  ו-"הערות" משמשים אך ורק לפיצול. אם הם מופיעים בתמלול בתור',
+    '  קידומת — השמיטי אותם והכניסי רק את התוכן שאחריהם.',
+    '',
+    'דוגמה תקינה:',
+    '  תמלול: "נושאים עיקריים: דיברנו על המעבר לעבודה חדשה.',
+    '          מצב נוכחי: היא קצת מוצפת אבל מתפקדת."',
+    '  JSON:  { "main_topics": "דיברנו על המעבר לעבודה חדשה",',
+    '           "current_state": "היא קצת מוצפת אבל מתפקדת", ... }',
+    '',
+    'דוגמה שגויה (אסור להחזיר כך):',
+    '  { "main_topics": "נושאים עיקריים: דיברנו על המעבר לעבודה חדשה" }',
     '',
     'התמלול:',
     '"""',
@@ -78,7 +100,39 @@ function buildUserPrompt(transcript: string): string {
   ].join('\n');
 }
 
-/* ── Validation of the model's response ──────────────────────────── */
+/* ── Validation + sanitation of the model's response ─────────────── */
+
+/** Header phrases the model sometimes parrots back as a prefix inside
+ *  the value, even though the prompt says not to. We strip any of these
+ *  when they appear at the very start of a field, possibly followed by
+ *  ":" / "-" / "—". Belt-and-suspenders behind the prompt. */
+const HEADER_PHRASES = [
+  'נושאים עיקריים', 'נושאים', 'נושאים שעלו',
+  'מה עשינו', 'מה עשינו בפגישה', 'פעולות טיפול', 'פעולות',
+  'מצב נוכחי', 'מצב', 'סטטוס נוכחי',
+  'התקדמות', 'התקדמות שנצפתה',
+  'צעדים הבאים', 'צעדים', 'המשך', 'התחלה הבאה', 'עם מה מתחילים',
+  'משימות', 'משימות שניתנו', 'משימות שקיבלה', 'שיעורי בית',
+  'קשיים', 'קושי', 'קושי בהתקדמות',
+  'הערות', 'הערה', 'הערות נוספות',
+];
+
+const HEADER_RE = new RegExp(
+  `^\\s*(?:${HEADER_PHRASES.map(s => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})\\s*[:\\-–—]\\s*`,
+  'u',
+);
+
+function stripLeadingHeader(value: string): string {
+  let s = value;
+  // Run the regex up to two passes — the model occasionally nests two
+  // headers ("הערות: נושאים עיקריים: …").
+  for (let i = 0; i < 2; i++) {
+    const next = s.replace(HEADER_RE, '');
+    if (next === s) break;
+    s = next;
+  }
+  return s.trim();
+}
 
 function pickSummaryFields(obj: unknown): Record<SummaryField, string> {
   if (!obj || typeof obj !== 'object') {
@@ -88,9 +142,11 @@ function pickSummaryFields(obj: unknown): Record<SummaryField, string> {
   const out = {} as Record<SummaryField, string>;
   for (const key of SUMMARY_FIELDS) {
     const v = src[key];
-    if (v == null)              out[key] = '';
-    else if (typeof v === 'string') out[key] = v.trim();
-    else                            out[key] = String(v);
+    let str: string;
+    if (v == null)                  str = '';
+    else if (typeof v === 'string') str = v.trim();
+    else                            str = String(v);
+    out[key] = stripLeadingHeader(str);
   }
   // The response must contain at least ONE non-empty field; otherwise
   // we suspect the model failed to parse the transcript.
