@@ -1,16 +1,24 @@
 /**
- * Monthly hours report generator — template-based.
+ * Monthly hours report generator — template-based, bundled output.
  *
- * Loads `public/templates/monthly-report-template.xlsx` once, clones it
- * per call, fills the dynamic cells, and returns the bytes. The template
- * already carries every formula, every merged cell, every border, every
- * font — we only write VALUES into seven categories of cells:
+ * Loads `public/templates/monthly-report-template.xlsx` once, clones the
+ * main "ינואר" sheet once per staff member, fills the dynamic cells, and
+ * returns a SINGLE xlsx with one main sheet per staff plus the shared
+ * `גיליון1` lookup sheet that all VLOOKUP-by-weekday formulas reference.
+ *
+ * The legacy `buildMonthlyReport` (one staff → one file) is gone — both
+ * the on-demand UI and the monthly cron consume `buildMonthlyReportBundle`
+ * and the cron emails ONE attachment.
+ *
+ * For each main sheet we only write VALUES into these cells; everything
+ * else (formulas, merged cells, borders, fonts, column widths, the
+ * lookup sheet) is preserved by the template clone:
  *
  *   C1            month anchor (1st-of-month Date)            ← drives all date formulas
  *   G1            staff first name (first whitespace token)
  *   J1            staff last name (rest of full_name)
  *   G2            employee_number (free text, may be empty)
- *   J2            role label in Hebrew (from STAFF_ROLE_STYLE)
+ *   J2            role label in Hebrew (from staffRoles.ts)
  *   C..H {row}    up to 3 (start, end) time pairs per day
  *   K {row}       patient names joined by '/'
  *   L {row}       per-session notes joined by ' \\ '
@@ -18,8 +26,8 @@
  * Day rows live at row = 3 + day_of_month, so day 1 → row 4 … day 31 →
  * row 34. The template's B-column formulas figure out which days exist
  * in the chosen month (28/29/30/31), and rows that don't get values
- * from us simply stay blank — the COUNTIF / SUM formulas in row 35 / 37
- * pick up the totals automatically.
+ * from us stay blank — COUNTIF / SUM in row 35 / 37 pick up the totals
+ * automatically.
  */
 
 import fs from 'node:fs/promises';
@@ -41,6 +49,9 @@ const HEB_MONTHS: Record<number, string> = {
   9: 'ספטמבר', 10: 'אוקטובר', 11: 'נובמבר', 12: 'דצמבר',
 };
 
+/** Excel forbids these in sheet names; also caps at 31 chars. */
+const SHEET_NAME_FORBIDDEN = /[\\\/?*\[\]:]/g;
+
 export interface SessionSlot {
   /** ISO date 'YYYY-MM-DD'. */
   date:        string;
@@ -51,29 +62,34 @@ export interface SessionSlot {
   notes:       string | null;
 }
 
-export interface BuildOptions {
+export interface StaffEntry {
   staff: {
     full_name:       string;
     role:            StaffRole | string;
     employee_number: string | null;
   };
-  /** Sessions for this staff member during the chosen month, any order. */
   sessions: SessionSlot[];
+}
+
+export interface BundleOptions {
+  staff: StaffEntry[];
   /** 4-digit year. */
   year:  number;
   /** 1-12. */
   month: number;
 }
 
-export interface BuildResult {
+export interface BundleResult {
   buffer:   Buffer;
   fileName: string;
-  /** Diagnostics — useful when debugging "report is empty". */
-  stats: {
-    sessionCount:        number;
-    daysCovered:         number;
-    daysSkippedExtra:    number; // count of sessions dropped because >3 on a single day
-  };
+  /** One entry per staff sheet — useful for logs and audit. */
+  perStaff: Array<{
+    full_name:        string;
+    sheet_name:       string;
+    sessionCount:     number;
+    daysCovered:      number;
+    daysSkippedExtra: number;
+  }>;
 }
 
 /* ── helpers ───────────────────────────────────────────────────────── */
@@ -100,16 +116,10 @@ async function loadTemplate(): Promise<ArrayBuffer> {
   if (cachedTemplate) return cachedTemplate;
   const abs = path.join(process.cwd(), TEMPLATE_REL);
   const buf = await fs.readFile(abs);
-  // Detach the slice so the cached object doesn't share memory with
-  // Node's pooled Buffer.
   cachedTemplate = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
   return cachedTemplate;
 }
 
-/** Group sessions by their YYYY-MM-DD date. Each bucket retains arrival
- *  order from the input array — caller is expected to feed sessions
- *  sorted by date,start_time so the first three slots per day are the
- *  three earliest. */
 function groupByDate(sessions: SessionSlot[]): Map<string, SessionSlot[]> {
   const out = new Map<string, SessionSlot[]>();
   for (const s of sessions) {
@@ -127,39 +137,120 @@ const TIME_PAIR_COLS: ReadonlyArray<readonly [string, string]> = [
   ['G', 'H'],   // slot 3
 ];
 
-/* ── main entry ────────────────────────────────────────────────────── */
+/**
+ * Make `desired` safe + unique within `taken`. Sheet names are capped
+ * at 31 chars and may not contain `\ / ? * [ ]` or ':'. Empty names are
+ * replaced with a fallback. Collisions get " (2)", " (3)", …
+ */
+function sanitizeSheetName(desired: string, taken: Set<string>, fallback: string): string {
+  let base = desired.trim().replace(SHEET_NAME_FORBIDDEN, ' ').replace(/\s+/g, ' ').trim();
+  if (!base) base = fallback;
+  if (base.length > 31) base = base.slice(0, 31);
+  if (!taken.has(base)) {
+    taken.add(base);
+    return base;
+  }
+  for (let i = 2; i < 1000; i++) {
+    const suffix = ` (${i})`;
+    const trimmed = base.length + suffix.length > 31
+      ? base.slice(0, 31 - suffix.length) + suffix
+      : base + suffix;
+    if (!taken.has(trimmed)) {
+      taken.add(trimmed);
+      return trimmed;
+    }
+  }
+  // Pathological — fall back to fallback + random.
+  const last = `${fallback}-${Date.now() % 10000}`;
+  taken.add(last);
+  return last;
+}
 
-export async function buildMonthlyReport(opts: BuildOptions): Promise<BuildResult> {
-  const { staff, sessions, year, month } = opts;
-  if (month < 1 || month > 12)  throw new Error('month must be 1..12');
-  if (year < 2000 || year > 2100) throw new Error('year out of range');
+/**
+ * Deep-copy a worksheet's structure (formulas, values, styles, merges,
+ * column widths, row heights) from `source` to `target`. Both worksheets
+ * must belong to ExcelJS workbooks loaded from the same template, so the
+ * style numFmt strings line up — the target workbook's style table
+ * de-duplicates internally when we assign each cell's style object back.
+ *
+ * Used so we can clone the template's main sheet N times within ONE
+ * output workbook without re-loading the template into N separate files.
+ * The shared `גיליון1` lookup sheet stays in the target workbook once;
+ * every cloned main sheet's VLOOKUP keeps resolving to it.
+ */
+function copyWorksheetStructure(source: ExcelJS.Worksheet, target: ExcelJS.Worksheet): void {
+  // Column widths + hidden state
+  source.columns?.forEach((col, idx) => {
+    if (!col) return;
+    const tgt = target.getColumn(idx + 1);
+    if (col.width  != null) tgt.width  = col.width;
+    if (col.hidden != null) tgt.hidden = col.hidden;
+  });
 
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await loadTemplate());
+  // Sheet-wide properties + page setup (RTL, print area, margins).
+  if (source.views)         target.views        = JSON.parse(JSON.stringify(source.views));
+  if (source.pageSetup)     target.pageSetup    = JSON.parse(JSON.stringify(source.pageSetup));
+  if (source.properties)    target.properties   = JSON.parse(JSON.stringify(source.properties));
+  if (source.headerFooter)  target.headerFooter = JSON.parse(JSON.stringify(source.headerFooter));
 
-  const ws = wb.worksheets[0];
-  if (!ws) throw new Error('template missing primary worksheet');
+  // Cells: walk all defined rows (including empty ones so row heights
+  // and any blank-but-styled cells survive).
+  source.eachRow({ includeEmpty: true }, (srcRow, rowNumber) => {
+    const tgtRow = target.getRow(rowNumber);
+    if (srcRow.height != null) tgtRow.height = srcRow.height;
 
-  // 1. Sheet name — month label in Hebrew
-  ws.name = HEB_MONTHS[month] ?? String(month);
+    srcRow.eachCell({ includeEmpty: true }, (srcCell, colNumber) => {
+      const tgtCell = tgtRow.getCell(colNumber);
+      // Assigning cell.value with a {formula,result} object preserves
+      // both the formula text AND the cached calculated value — Excel
+      // will recompute anyway thanks to fullCalcOnLoad, but cached
+      // result is what other tools (and our harness) read back.
+      tgtCell.value = srcCell.value;
+      if (srcCell.numFmt)     tgtCell.numFmt    = srcCell.numFmt;
+      if (srcCell.font)       tgtCell.font      = { ...srcCell.font };
+      if (srcCell.alignment)  tgtCell.alignment = { ...srcCell.alignment };
+      if (srcCell.border)     tgtCell.border    = JSON.parse(JSON.stringify(srcCell.border));
+      if (srcCell.fill)       tgtCell.fill      = JSON.parse(JSON.stringify(srcCell.fill));
+      if (srcCell.protection) tgtCell.protection = { ...srcCell.protection };
+    });
+    tgtRow.commit?.();
+  });
 
-  // 2. C1 — first-of-month anchor. Every date formula in column B and
-  //    every weekday formula in column A flows from this one cell.
-  const monthAnchor = new Date(year, month - 1, 1);
-  ws.getCell('C1').value = monthAnchor;
+  // Merges. ExcelJS stores them at the worksheet model.
+  const merges = ((source.model as { merges?: string[] }).merges ?? []).slice();
+  for (const range of merges) {
+    try { target.mergeCells(range); } catch { /* already merged */ }
+  }
+}
 
-  // 3. Identity (G1 first name, J1 last name, G2 employee#, J2 role).
+/**
+ * Populate one staff's sheet. Pure mutation — no workbook I/O. Returns
+ * per-staff stats for the bundle audit.
+ */
+function fillStaffSheet(
+  ws:       ExcelJS.Worksheet,
+  entry:    StaffEntry,
+  year:     number,
+  month:    number,
+): { sessionCount: number; daysCovered: number; daysSkippedExtra: number } {
+  const { staff, sessions } = entry;
+
+  // C1 — first-of-month anchor. Every date formula in column B and
+  // every weekday formula in column A flows from this one cell.
+  ws.getCell('C1').value = new Date(year, month - 1, 1);
+
+  // G1/J1/G2/J2 — identity block.
   const { first, last } = splitName(staff.full_name);
   ws.getCell('G1').value = first;
   ws.getCell('J1').value = last;
   ws.getCell('G2').value = (staff.employee_number ?? '').trim() || null;
   ws.getCell('J2').value = roleLabel(staff.role);
 
-  // 4. Per-day rows.
+  // Per-day rows.
   const byDate = groupByDate(sessions);
   let daysCovered = 0;
   let daysSkippedExtra = 0;
-  const lastDay = new Date(year, month, 0).getDate(); // 28/29/30/31
+  const lastDay = new Date(year, month, 0).getDate();
 
   for (let day = 1; day <= lastDay; day++) {
     const ymd = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -170,10 +261,8 @@ export async function buildMonthlyReport(opts: BuildOptions): Promise<BuildResul
     const slots = slotsAll.slice(0, 3);
     if (slotsAll.length > 3) daysSkippedExtra += slotsAll.length - 3;
 
-    const row = 3 + day; // day 1 → row 4 … day 31 → row 34
+    const row = 3 + day;
 
-    // Time pairs — write only when the time parses cleanly. Cells stay
-    // empty otherwise so the I-column overflow formula keeps working.
     for (let i = 0; i < slots.length; i++) {
       const [colStart, colEnd] = TIME_PAIR_COLS[i];
       const start = timeToFraction(slots[i].start_time);
@@ -190,19 +279,15 @@ export async function buildMonthlyReport(opts: BuildOptions): Promise<BuildResul
       }
     }
 
-    // K — patient names joined by '/' (matches the convention seen in
-    // hand-filled reports).
     const patientNames = slotsAll
       .map(s => (s.patient_name ?? '').trim())
       .filter(Boolean);
     if (patientNames.length > 0) {
-      // De-dup while preserving order.
       const seen = new Set<string>();
       const unique = patientNames.filter(n => seen.has(n) ? false : (seen.add(n), true));
       ws.getCell(`K${row}`).value = unique.join('/');
     }
 
-    // L — notes joined by ' \\ ' (also from the hand-filled convention).
     const notes = slotsAll
       .map(s => (s.notes ?? '').trim())
       .filter(Boolean);
@@ -211,25 +296,90 @@ export async function buildMonthlyReport(opts: BuildOptions): Promise<BuildResul
     }
   }
 
-  // 5. Force Excel to recalc all formulas on first open. Without this,
-  //    Excel might cache stale results from when the template was saved.
-  //
-  //    The `if (wb.calcProperties)` form here was a no-op when ExcelJS
-  //    doesn't pre-allocate the object on workbook load — overwriting
-  //    unconditionally is what actually flips the bit in the saved file.
-  wb.calcProperties = { ...(wb.calcProperties ?? {}), fullCalcOnLoad: true };
-
-  const arrayBuffer = await wb.xlsx.writeBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  const fileName = `monthly-report-${first || 'staff'}-${last || ''}-${year}-${String(month).padStart(2, '0')}.xlsx`
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
-
-  return {
-    buffer,
-    fileName,
-    stats: { sessionCount: sessions.length, daysCovered, daysSkippedExtra },
-  };
+  return { sessionCount: sessions.length, daysCovered, daysSkippedExtra };
 }
 
+/* ── main entry ────────────────────────────────────────────────────── */
+
+/**
+ * Build the single monthly report file — one workbook with one main
+ * sheet per staff member plus the shared lookup sheet (`גיליון1`).
+ *
+ * Empty staff list → throws. Caller should decide what "no data" means
+ * (the cron treats it as a no-op and returns 200 with a message).
+ */
+export async function buildMonthlyReportBundle(opts: BundleOptions): Promise<BundleResult> {
+  const { staff: staffEntries, year, month } = opts;
+  if (month < 1 || month > 12)     throw new Error('month must be 1..12');
+  if (year < 2000 || year > 2100)  throw new Error('year out of range');
+  if (staffEntries.length === 0)   throw new Error('staff list is empty');
+
+  const templateAb = await loadTemplate();
+
+  // Output workbook starts as a fresh load of the template — this
+  // gives us the empty main sheet + the lookup sheet.
+  const outWb = new ExcelJS.Workbook();
+  await outWb.xlsx.load(templateAb);
+  const baseMainSheet   = outWb.worksheets[0];   // ינואר (to be reused for staff #0)
+  const baseLookupSheet = outWb.worksheets[1];   // גיליון1 (stays as-is, shared)
+  if (!baseMainSheet)   throw new Error('template missing primary worksheet');
+  if (!baseLookupSheet) throw new Error('template missing lookup worksheet');
+
+  // Hold on to a SOURCE workbook we never mutate — needed because once
+  // we fill the first sheet, we can't re-read the template structure
+  // from it; we re-read from a pristine copy each time we need to clone.
+  // Loading happens lazily inside the loop.
+  let pristineSource: ExcelJS.Worksheet | null = null;
+  async function getPristineMainSheet(): Promise<ExcelJS.Worksheet> {
+    if (pristineSource) return pristineSource;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(templateAb);
+    pristineSource = wb.worksheets[0];
+    return pristineSource;
+  }
+
+  const takenSheetNames = new Set<string>([baseLookupSheet.name]);
+  const perStaff: BundleResult['perStaff'] = [];
+
+  for (let i = 0; i < staffEntries.length; i++) {
+    const entry = staffEntries[i];
+
+    let target: ExcelJS.Worksheet;
+    if (i === 0) {
+      // Reuse the template's main sheet.
+      target = baseMainSheet;
+    } else {
+      // Add a new sheet and clone the template's main-sheet structure
+      // (formulas, merges, styles, column widths) into it.
+      const source = await getPristineMainSheet();
+      const placeholderName = `__staff_${i}__`;
+      target = outWb.addWorksheet(placeholderName);
+      copyWorksheetStructure(source, target);
+    }
+
+    const stats     = fillStaffSheet(target, entry, year, month);
+    const finalName = sanitizeSheetName(entry.staff.full_name, takenSheetNames, `איש צוות ${i + 1}`);
+    target.name = finalName;
+
+    perStaff.push({
+      full_name:        entry.staff.full_name,
+      sheet_name:       finalName,
+      sessionCount:     stats.sessionCount,
+      daysCovered:      stats.daysCovered,
+      daysSkippedExtra: stats.daysSkippedExtra,
+    });
+  }
+
+  // Force recalc on first open — Excel might otherwise show cached
+  // results from when the template was originally saved.
+  outWb.calcProperties = { ...(outWb.calcProperties ?? {}), fullCalcOnLoad: true };
+
+  const arrayBuffer = await outWb.xlsx.writeBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const monthLabel = HEB_MONTHS[month] ?? String(month);
+  const fileName = `monthly-report-${year}-${String(month).padStart(2, '0')}-${monthLabel}.xlsx`
+    .replace(/\s+/g, '-');
+
+  return { buffer, fileName, perStaff };
+}
