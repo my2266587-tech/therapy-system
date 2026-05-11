@@ -213,7 +213,11 @@ export async function buildMonthlyReport(opts: BuildOptions): Promise<BuildResul
 
   // 5. Force Excel to recalc all formulas on first open. Without this,
   //    Excel might cache stale results from when the template was saved.
-  if (wb.calcProperties) wb.calcProperties.fullCalcOnLoad = true;
+  //
+  //    The `if (wb.calcProperties)` form here was a no-op when ExcelJS
+  //    doesn't pre-allocate the object on workbook load — overwriting
+  //    unconditionally is what actually flips the bit in the saved file.
+  wb.calcProperties = { ...(wb.calcProperties ?? {}), fullCalcOnLoad: true };
 
   const arrayBuffer = await wb.xlsx.writeBuffer();
   const buffer = Buffer.from(arrayBuffer);
