@@ -9,33 +9,23 @@
  * The assistant CAN ONLY run tools registered in lib/assistant/dispatch.ts,
  * which CAN ONLY call SELECT functions in lib/assistant/tools.ts. There is
  * no write path. There is no "general" SQL endpoint. There is no "do
- * anything" fallback. If the parser cannot classify the question, the help
- * payload is returned — the model never improvises against the database.
+ * anything" fallback. The model has NO database access — it only chooses
+ * which registered tool to call.
  *
  * Adding a write capability later requires:
  *   1. A separate dispatcher (`dispatchWriteTool`) with its own auth scope.
  *   2. A double-confirm UX in the drawer.
  *   3. A per-deployment env flag, opt-in.
  *
- * PIPELINE TODAY
- * ──────────────
- *   question → parseQuestion (Hebrew NL → intent + range + name)
- *            → INTENT_TO_TOOL → dispatchTool(name, input)
- *            → tools.getXxx() (SELECT)
- *            → { answer, links, rows } back to drawer
- *
- * PIPELINE — FUTURE AI MODE (not wired)
- * ─────────────────────────────────────
- * The same dispatchTool() is also what a Claude tool-use loop will call.
- * Wiring it up means:
- *   1. Add ANTHROPIC_API_KEY to env.
- *   2. Replace the parser branch below with a call to anthropic.messages.create
- *      passing tools=TOOL_SCHEMAS (already defined in lib/assistant/toolSchemas.ts).
- *   3. For each tool_use block in the response, call dispatchTool(name, input)
- *      and feed the result back as tool_result.
- *   4. Keep the parser branch as a cheap offline fallback when the API key
- *      is absent or rate-limited.
- * No change to dispatch.ts or tools.ts is required to flip the switch.
+ * PIPELINE
+ * ────────
+ *   question
+ *     → runAssistantAi (OpenAI tool-use; the model picks a tool)
+ *         ↳ null on any failure (no API key, network, malformed call)
+ *     → parseQuestion (Hebrew NL heuristic — offline fallback)
+ *     → dispatchTool(name, input)  ← single SELECT-only gate
+ *     → tools.getXxx() (SELECT)
+ *     → { answer, links, rows } back to drawer
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -44,6 +34,7 @@ import { getAuthorizedUser } from '@/lib/getAdminUser';
 import { parseQuestion } from '@/lib/assistant/parser';
 import { dispatchTool, INTENT_TO_TOOL } from '@/lib/assistant/dispatch';
 import { EXAMPLE_QUESTIONS } from '@/lib/assistant/tools';
+import { runAssistantAi } from '@/lib/assistant/ai';
 
 export async function POST(req: NextRequest) {
   const user = await getAuthorizedUser(req);
@@ -54,20 +45,45 @@ export async function POST(req: NextRequest) {
   if (!question)               return NextResponse.json({ error: 'שאלה חסרה' },     { status: 400 });
   if (question.length > 500)   return NextResponse.json({ error: 'השאלה ארוכה מדי' }, { status: 400 });
 
+  const supabase = createServerClient();
+
+  // ── AI mode (primary path) ─────────────────────────────────────────
+  // The model only picks a tool name + arguments; the actual data access
+  // still goes through dispatchTool(). null = any failure → fall through
+  // to the heuristic parser below.
+  try {
+    const ai = await runAssistantAi(supabase, question);
+    if (ai) {
+      console.log('[assistant]', JSON.stringify({
+        q: question, mode: 'ai', tool: ai.tool,
+      }));
+      return NextResponse.json({
+        intent: 'ai',
+        tool:   ai.tool,
+        answer: ai.result.answer,
+        links:  ai.result.links ?? [],
+        rows:   ai.result.rows  ?? [],
+      });
+    }
+  } catch (e) {
+    // dispatchTool() failed AFTER the model picked a tool — log and
+    // fall through to the parser. The parser may classify the question
+    // differently and succeed (or surface the same friendly error).
+    console.warn('[assistant/query] AI tool dispatch failed, falling back:', e);
+  }
+
+  // ── Parser fallback ────────────────────────────────────────────────
   const parsed   = parseQuestion(question);
   const toolName = INTENT_TO_TOOL[parsed.intent];
 
-  // Server-side debug — we want to see in logs what the parser decided
-  // and which candidates it considered. Useful when iterating on phrasing.
   console.log('[assistant]', JSON.stringify({
     q:      question,
+    mode:   'parser',
     intent: parsed.intent,
     range:  parsed.range?.label ?? null,
     name:   parsed.name ?? null,
     debug:  parsed.debug ?? [],
   }));
-
-  const supabase = createServerClient();
 
   // Intent the parser couldn't classify — return help, never invoke a tool.
   if (!toolName) {
