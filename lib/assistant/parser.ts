@@ -29,6 +29,10 @@ export type Intent =
   | 'openPayments'
   | 'unprocessedRecordings'
   | 'patientDocuments'
+  | 'patientResponsible'
+  | 'latestSessionSummary'
+  | 'patientOverview'
+  | 'openPatient'
   | 'patientTimeline'
   | 'listPatients'
   | 'help'
@@ -79,6 +83,15 @@ const SYN: Record<string, string[]> = {
 
   // ── help phrasing ──
   help:       ['עזרה', 'דוגמאות', 'מה_אפשר_לשאול'],
+
+  // ── responsibility / "who handles X" ──
+  responsible: ['אחראי*', 'אחראית', 'מטפל*', 'מטפלת', 'רכז*', 'רכזת', 'מדריכ*', 'צוות', 'אצל'],
+  // ── explicit "open card" command ──
+  openCmd:     ['פתח*', 'תפתח*', 'הכנס*', 'תכנס*', 'הצג_כרטיס'],
+  // ── latest session summary ──
+  last:        ['אחרונ*', 'האחרונ*'],
+  card:        ['כרטיס', 'תיק'],
+  overview:    ['סקירה', 'סטטוס', 'מצב', 'מי_זאת', 'ספרי_לי_על'],
 };
 
 /* ── 2. Word-boundary matching ─────────────────────────────────────── */
@@ -142,8 +155,9 @@ function extractPatientName(text: string): string | undefined {
   const quoted = stripped.match(/["']([^"']{2,})["']/);
   if (quoted) return quoted[1].trim();
 
-  // After "של" / "עבור" / "למטופלת" / "למטופל" / "ספרי לי על"
-  const m = stripped.match(/(?:של|עבור|למטופלת|למטופל|ספרי\s+לי\s+על|ספר\s+לי\s+על)\s+([֐-׿\s'״׳]+?)(?=[?,.!]|$)/);
+  // After "של" / "עבור" / "למטופלת" / "למטופל" / "ספרי לי על" /
+  // "אחראי(ת/ם/ות) על" — covers "מי אחראי על שירן" and similar.
+  const m = stripped.match(/(?:של|עבור|למטופלת|למטופל|ספרי\s+לי\s+על|ספר\s+לי\s+על|אחראי(?:ת|ם|ות)?\s+על)\s+([֐-׿\s'״׳]+?)(?=[?,.!]|$)/);
   if (!m) return undefined;
 
   // If the captured phrase IS a date phrase, this isn't a name.
@@ -275,6 +289,53 @@ const RULES: IntentRule[] = [
       if (hasGroup(text, 'exists'))     s += 1;
       if (hasGroup(text, 'registered')) s += 1;
       return s;
+    },
+  },
+
+  // ── Open patient card (explicit navigation command)
+  {
+    intent: 'openPatient',
+    score: ({ text, hasName }) => {
+      const isOpen = hasGroup(text, 'openCmd');
+      const targetsCard =
+        hasGroup(text, 'card') || hasGroup(text, 'patient');
+      if (isOpen && targetsCard) return hasName ? 6 : 5;
+      return 0;
+    },
+  },
+
+  // ── Who is responsible for patient X
+  {
+    intent: 'patientResponsible',
+    score: ({ text, hasName }) => {
+      if (!hasName) return 0;
+      if (hasGroup(text, 'responsible')) return 5;
+      // "מי [מטפל/רכזת] של X" without an explicit "אחראי" group hit
+      if (hasGroup(text, 'who')) return 3;
+      return 0;
+    },
+  },
+
+  // ── Most recent session summary
+  {
+    intent: 'latestSessionSummary',
+    score: ({ text, hasName }) => {
+      if (!hasName) return 0;
+      if (hasGroup(text, 'summary') && hasGroup(text, 'last')) return 5;
+      if (hasGroup(text, 'session') && hasGroup(text, 'last')) return 4;
+      // "מה היה בפגישה האחרונה" pattern
+      if (/(מה\s+היה|מה\s+קרה).*(פגיש|סיכומ|אחרונ)/.test(text)) return 5;
+      return 0;
+    },
+  },
+
+  // ── Patient overview ("סקירה", "סטטוס", "מצב של X")
+  {
+    intent: 'patientOverview',
+    score: ({ text, hasName }) => {
+      if (!hasName) return 0;
+      if (hasGroup(text, 'overview')) return 5;
+      return 0;
     },
   },
 

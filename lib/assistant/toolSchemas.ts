@@ -114,6 +114,54 @@ export const TOOL_SCHEMAS: ClaudeToolSchema[] = [
     },
   },
   {
+    name: 'openPatient',
+    description:
+      'Open a specific patient\'s card (real navigation, not a passive link). Use whenever the user says "פתח/תפתח/הכנס לכרטיס של [שם]" or similar explicit command. The drawer will router.push to the patient page.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Hebrew full name (or partial). Matched ILIKE.' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'getPatientResponsibleStaff',
+    description:
+      'Who is responsible for a patient — coordinator (רכזת), therapist/instructor (מטפלת/מדריכה), team, and any other staff linked via staff_patients. Use for "מי אחראי על [שם]?", "מי המטפלת של [שם]?", "מי הרכזת של [שם]?".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Hebrew full name (or partial). Matched ILIKE.' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'getLatestSessionSummary',
+    description:
+      'Return the contents of the MOST RECENT session_summary for a patient — main topics, current state, progress, next steps, etc. Use for "מה היה בפגישה האחרונה של [שם]?", "סיכום אחרון של [שם]". Do NOT use this for activity counts; use getPatientOverview / getPatientTimeline for that.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Hebrew full name (or partial). Matched ILIKE.' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'getPatientOverview',
+    description:
+      'Compact human-readable overview of one patient: status, coordinator, therapist, last session, next session, last summary topics. Use for "ספרי לי על [שם]", "מה המצב של [שם]?", "סקירה על [שם]". Prefer this over getPatientTimeline when the user asks an open-ended question about a specific patient — Timeline is counter-heavy.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Hebrew full name (or partial). Matched ILIKE.' },
+      },
+      required: ['name'],
+    },
+  },
+  {
     name: 'help',
     description: 'Return the list of example questions the assistant can answer. Use only when the user explicitly asks for help or examples — not as a fallback.',
     input_schema: { type: 'object', properties: {} },

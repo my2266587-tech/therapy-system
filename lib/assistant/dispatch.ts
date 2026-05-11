@@ -38,6 +38,8 @@ import * as tools from './tools';
 import type { ToolResult } from './tools';
 import type { Intent } from './parser';
 
+const NEEDS_PATIENT_NAME = 'לא ציינת שם של מטופלת.';
+
 /* ── Canonical tool names (must match toolSchemas.ts) ────────────────── */
 
 export const TOOL_NAMES = [
@@ -49,6 +51,10 @@ export const TOOL_NAMES = [
   'getPatientTimeline',
   'getPatientDocuments',
   'getPatientList',
+  'openPatient',
+  'getPatientResponsibleStaff',
+  'getLatestSessionSummary',
+  'getPatientOverview',
   'help',
 ] as const;
 
@@ -68,6 +74,10 @@ export const INTENT_TO_TOOL: Record<Intent, ToolName | null> = {
   unprocessedRecordings: 'getUnprocessedRecordings',
   patientTimeline:       'getPatientTimeline',
   patientDocuments:      'getPatientDocuments',
+  patientResponsible:    'getPatientResponsibleStaff',
+  latestSessionSummary:  'getLatestSessionSummary',
+  patientOverview:       'getPatientOverview',
+  openPatient:           'openPatient',
   listPatients:          'getPatientList',
   help:                  'help',
   unknown:               null,
@@ -132,6 +142,30 @@ export async function dispatchTool(
     case 'getPatientList': {
       const statusFilter = typeof input.statusFilter === 'string' ? input.statusFilter : undefined;
       return tools.getPatientList(supabase, { statusFilter });
+    }
+
+    case 'openPatient': {
+      const name = typeof input.name === 'string' ? input.name : null;
+      if (!name) return { answer: NEEDS_PATIENT_NAME };
+      return tools.openPatient(supabase, name);
+    }
+
+    case 'getPatientResponsibleStaff': {
+      const name = typeof input.name === 'string' ? input.name : null;
+      if (!name) return { answer: NEEDS_PATIENT_NAME };
+      return tools.getPatientResponsibleStaff(supabase, name);
+    }
+
+    case 'getLatestSessionSummary': {
+      const name = typeof input.name === 'string' ? input.name : null;
+      if (!name) return { answer: NEEDS_PATIENT_NAME };
+      return tools.getLatestSessionSummary(supabase, name);
+    }
+
+    case 'getPatientOverview': {
+      const name = typeof input.name === 'string' ? input.name : null;
+      if (!name) return { answer: NEEDS_PATIENT_NAME };
+      return tools.getPatientOverview(supabase, name);
     }
 
     case 'help':

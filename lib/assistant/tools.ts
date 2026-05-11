@@ -31,10 +31,28 @@ export interface RowItem {
   subtitle?: string;       // secondary line
   href?:    string;        // optional deep link
 }
+
+/**
+ * Real navigation directive the drawer should ACT on (not just render).
+ * Today the only one is open_patient. Add more (open_session, …) here
+ * when needed — keep the union closed so the drawer can switch on it.
+ */
+export type AssistantAction =
+  | { type: 'open_patient'; patient_id: string; patient_name: string };
+
 export interface ToolResult {
   answer: string;
   links?: Link[];
   rows?:  RowItem[];
+  /** When set, the drawer performs the action (e.g. router.push). */
+  action?: AssistantAction;
+  /**
+   * "Who are we talking about now." When the tool resolved a specific
+   * patient, set this so the drawer can remember her across follow-up
+   * questions ("יש לה מסמכים?"). The drawer echoes it back on the next
+   * request as context.lastPatient.
+   */
+  patient_focus?: { id: string; name: string };
 }
 
 const SESSION_STATUS_HE: Record<string, string> = {
@@ -328,6 +346,7 @@ export async function getPatientTimeline(
     answer: `סיכום פעילות עבור ${patient.full_name}:`,
     rows: lines.map(l => ({ title: l })),
     links: [{ label: 'פתח כרטיס מטופלת', href: `/patients/${patient.id}` }],
+    patient_focus: { id: patient.id, name: patient.full_name },
   };
 }
 
@@ -364,6 +383,7 @@ export async function getPatientDocuments(
     return {
       answer: `אין מסמכים עבור ${found.full_name}.`,
       links: [{ label: 'פתח כרטיס מטופלת', href: `/patients/${found.id}` }],
+      patient_focus: { id: found.id, name: found.full_name },
     };
   }
 
@@ -374,6 +394,7 @@ export async function getPatientDocuments(
       subtitle: new Date(d.uploaded_at).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' }),
     })),
     links: [{ label: 'פתח כרטיס מטופלת', href: `/patients/${found.id}` }],
+    patient_focus: { id: found.id, name: found.full_name },
   };
 }
 
@@ -423,17 +444,288 @@ export async function getPatientList(
   };
 }
 
-/* ── 10. Help / examples ───────────────────────────────────────────────── */
+/* ── 10. Open a patient card (navigation action) ───────────────────────── */
+
+/**
+ * Returns an action the drawer must execute (router.push). Differs from
+ * the "פתח כרטיס מטופלת" links the other tools sometimes attach: those
+ * are passive chips the user can click; this is the model EXPLICITLY
+ * being asked to open a card and it should happen without an extra tap.
+ */
+export async function openPatient(
+  supabase: SupabaseClient, name: string,
+): Promise<ToolResult> {
+  const found = await findPatient(supabase, name);
+  if (!found) return { answer: `לא נמצאה מטופלת בשם "${name}".` };
+  if ('ambiguous' in found) {
+    return {
+      answer: `נמצאו כמה מטופלות עם השם "${name}". איזו לפתוח?`,
+      rows: found.ambiguous.map(p => ({
+        title: p.full_name,
+        href:  `/patients/${p.id}`,
+      })),
+    };
+  }
+  return {
+    answer: `פותחת את הכרטיס של ${found.full_name}.`,
+    action: { type: 'open_patient', patient_id: found.id, patient_name: found.full_name },
+    patient_focus: { id: found.id, name: found.full_name },
+  };
+}
+
+/* ── 11. Who is responsible for a patient (coordinator + therapist + team) */
+
+export async function getPatientResponsibleStaff(
+  supabase: SupabaseClient, name: string,
+): Promise<ToolResult> {
+  const found = await findPatient(supabase, name);
+  if (!found) return { answer: `לא נמצאה מטופלת בשם "${name}".` };
+  if ('ambiguous' in found) {
+    return {
+      answer: `נמצאו כמה מטופלות עם השם "${name}". איזו התכוונת?`,
+      rows: found.ambiguous.map(p => ({
+        title: p.full_name,
+        href:  `/patients/${p.id}`,
+      })),
+    };
+  }
+
+  // Pull FK names + free-text fallbacks the importer wrote when no FK
+  // resolved (coordinator_name / guide_name / team_name).
+  const { data: pData, error: pErr } = await supabase
+    .from('patients')
+    .select(`
+      coordinator_name, guide_name, team_name,
+      coordinator:coordinator_id(full_name),
+      staff_member:staff_id(full_name, role)
+    `)
+    .eq('id', found.id)
+    .maybeSingle();
+
+  if (pErr) return { answer: `שגיאה: ${pErr.message}` };
+
+  const p = (pData ?? {}) as {
+    coordinator_name: string | null;
+    guide_name:       string | null;
+    team_name:        string | null;
+    coordinator:      { full_name: string } | null;
+    staff_member:     { full_name: string; role: string } | null;
+  };
+
+  // Also pull every staff_patients link so additional therapists /
+  // instructors not on patients.staff_id still show up.
+  const { data: spData } = await supabase
+    .from('staff_patients')
+    .select('staff:staff_id(full_name, role)')
+    .eq('patient_id', found.id);
+
+  const ROLE_HE: Record<string, string> = {
+    coordinator: 'רכזת', instructor: 'מדריכה', therapist: 'מטפלת',
+    manager:     'מנהל',  kabas:      'קב"ס',    ravas:    'רב"ס',
+  };
+
+  const rows: RowItem[] = [];
+
+  const coordinator = p.coordinator?.full_name ?? p.coordinator_name ?? null;
+  if (coordinator) {
+    rows.push({ title: `רכזת: ${coordinator}` });
+  } else {
+    rows.push({ title: 'רכזת: לא הוגדרה' });
+  }
+
+  const therapist = p.staff_member;
+  if (therapist) {
+    rows.push({
+      title: `${ROLE_HE[therapist.role] ?? 'איש צוות'}: ${therapist.full_name}`,
+    });
+  } else if (p.guide_name) {
+    rows.push({ title: `מדריכה: ${p.guide_name}` });
+  } else {
+    rows.push({ title: 'מטפלת/מדריכה: לא הוגדרה' });
+  }
+
+  if (p.team_name) {
+    rows.push({ title: `צוות: ${p.team_name}` });
+  }
+
+  type StaffJoin = { staff: { full_name: string; role: string } | null };
+  const extras = ((spData ?? []) as unknown as StaffJoin[])
+    .map(r => r.staff)
+    .filter((s): s is NonNullable<typeof s> => s !== null)
+    // Drop the therapist we already printed to avoid duplication.
+    .filter(s => s.full_name !== therapist?.full_name);
+
+  for (const s of extras) {
+    rows.push({ title: `${ROLE_HE[s.role] ?? 'איש צוות'}: ${s.full_name}` });
+  }
+
+  return {
+    answer: `אחראים על ${found.full_name}:`,
+    rows,
+    links: [{ label: 'פתח כרטיס מטופלת', href: `/patients/${found.id}` }],
+    patient_focus: { id: found.id, name: found.full_name },
+  };
+}
+
+/* ── 12. Most recent session summary contents ──────────────────────────── */
+
+export async function getLatestSessionSummary(
+  supabase: SupabaseClient, name: string,
+): Promise<ToolResult> {
+  const found = await findPatient(supabase, name);
+  if (!found) return { answer: `לא נמצאה מטופלת בשם "${name}".` };
+  if ('ambiguous' in found) {
+    return {
+      answer: `נמצאו כמה מטופלות עם השם "${name}". איזו התכוונת?`,
+      rows: found.ambiguous.map(p => ({
+        title: p.full_name,
+        href:  `/patients/${p.id}`,
+      })),
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('session_summaries')
+    .select('date, main_topics, treatment_actions, current_state, next_steps, tasks_given, progress, difficulties, notes')
+    .eq('patient_id', found.id)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return { answer: `שגיאה: ${error.message}` };
+  if (!data) {
+    return {
+      answer: `אין סיכומי פגישה עבור ${found.full_name}.`,
+      links: [{ label: 'פתח כרטיס מטופלת', href: `/patients/${found.id}` }],
+      patient_focus: { id: found.id, name: found.full_name },
+    };
+  }
+
+  const sec: { label: string; value: string | null }[] = [
+    { label: 'נושאים עיקריים',  value: data.main_topics },
+    { label: 'מצב נוכחי',       value: data.current_state },
+    { label: 'פעולות טיפוליות', value: data.treatment_actions },
+    { label: 'התקדמות',         value: data.progress },
+    { label: 'קשיים',           value: data.difficulties },
+    { label: 'צעדים הבאים',     value: data.next_steps },
+    { label: 'משימות',          value: data.tasks_given },
+    { label: 'הערות',           value: data.notes },
+  ];
+
+  const rows: RowItem[] = sec
+    .filter(s => s.value && s.value.trim())
+    .map(s => ({ title: s.label, subtitle: s.value as string }));
+
+  const dateLabel = new Date(data.date).toLocaleDateString('he-IL', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
+
+  return {
+    answer: `סיכום הפגישה האחרונה של ${found.full_name} (${dateLabel}):`,
+    rows: rows.length > 0 ? rows : [{ title: 'הסיכום ריק.' }],
+    links: [{ label: 'פתח כרטיס מטופלת', href: `/patients/${found.id}` }],
+    patient_focus: { id: found.id, name: found.full_name },
+  };
+}
+
+/* ── 13. Compact patient overview (status + key people + last/next) ────── */
+
+export async function getPatientOverview(
+  supabase: SupabaseClient, name: string,
+): Promise<ToolResult> {
+  const found = await findPatient(supabase, name);
+  if (!found) return { answer: `לא נמצאה מטופלת בשם "${name}".` };
+  if ('ambiguous' in found) {
+    return {
+      answer: `נמצאו כמה מטופלות עם השם "${name}". איזו התכוונת?`,
+      rows: found.ambiguous.map(p => ({
+        title: p.full_name,
+        href:  `/patients/${p.id}`,
+      })),
+    };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [pRes, lastSess, nextSess, lastSum] = await Promise.all([
+    supabase.from('patients')
+      .select(`
+        status, coordinator_name, guide_name, team_name,
+        coordinator:coordinator_id(full_name),
+        staff_member:staff_id(full_name)
+      `)
+      .eq('id', found.id)
+      .maybeSingle(),
+    supabase.from('sessions')
+      .select('date, start_time, status')
+      .eq('patient_id', found.id)
+      .lte('date', today)
+      .order('date', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('sessions')
+      .select('date, start_time')
+      .eq('patient_id', found.id)
+      .gt('date', today)
+      .eq('status', 'planned')
+      .order('date', { ascending: true }).limit(1).maybeSingle(),
+    supabase.from('session_summaries')
+      .select('date, main_topics')
+      .eq('patient_id', found.id)
+      .order('date', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+
+  const p = (pRes.data ?? {}) as {
+    status: string | null;
+    coordinator_name: string | null;
+    guide_name: string | null;
+    team_name: string | null;
+    coordinator:  { full_name: string } | null;
+    staff_member: { full_name: string } | null;
+  };
+
+  const rows: RowItem[] = [];
+  if (p.status) rows.push({ title: `סטטוס: ${PATIENT_STATUS_HE[p.status] ?? p.status}` });
+
+  const coord = p.coordinator?.full_name ?? p.coordinator_name;
+  if (coord) rows.push({ title: `רכזת: ${coord}` });
+
+  const therapist = p.staff_member?.full_name ?? p.guide_name;
+  if (therapist) rows.push({ title: `מטפלת/מדריכה: ${therapist}` });
+
+  if (p.team_name) rows.push({ title: `צוות: ${p.team_name}` });
+
+  if (lastSess.data) {
+    rows.push({
+      title: `פגישה אחרונה: ${lastSess.data.date} · ${lastSess.data.start_time} (${SESSION_STATUS_HE[lastSess.data.status] ?? lastSess.data.status})`,
+    });
+  }
+  if (nextSess.data) {
+    rows.push({ title: `פגישה הבאה: ${nextSess.data.date} · ${nextSess.data.start_time}` });
+  }
+  if (lastSum.data?.main_topics) {
+    rows.push({
+      title: 'נושאי הפגישה האחרונה',
+      subtitle: lastSum.data.main_topics,
+    });
+  }
+
+  return {
+    answer: `סקירה על ${found.full_name}:`,
+    rows: rows.length > 0 ? rows : [{ title: 'אין עדיין נתונים על המטופלת.' }],
+    links: [{ label: 'פתח כרטיס מטופלת', href: `/patients/${found.id}` }],
+    patient_focus: { id: found.id, name: found.full_name },
+  };
+}
+
+/* ── 14. Help / examples ───────────────────────────────────────────────── */
 
 export const EXAMPLE_QUESTIONS = [
-  'מי מגיעה מחר?',
-  'אילו פגישות יש השבוע?',
-  'מה היה ביום שני?',
-  'כמה מטופלות יש?',
+  'מי אחראי על שירן?',
+  'מה היה בפגישה האחרונה של שירן?',
+  'פתח כרטיס של שירן',
+  'אילו פגישות יש היום?',
   'למי חסר סיכום פגישה?',
   'אילו תשלומים עדיין פתוחים?',
   'אילו הקלטות לא עובדו?',
-  'סיכום פעילות של [שם מטופלת]',
 ] as const;
 
 export function helpResult(): ToolResult {

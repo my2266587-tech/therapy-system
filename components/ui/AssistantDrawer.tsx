@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -23,6 +24,8 @@ import { supabase } from '@/lib/supabase';
 
 interface RowItem  { title: string; subtitle?: string; href?: string }
 interface LinkItem { label: string; href: string }
+type AssistantAction =
+  | { type: 'open_patient'; patient_id: string; patient_name: string };
 
 interface AssistantMessage {
   id:     string;
@@ -31,14 +34,21 @@ interface AssistantMessage {
   rows?:  RowItem[];
   links?: LinkItem[];
   error?: boolean;
+  /**
+   * Some assistant responses are pure side-effects (router.push). When set,
+   * we suppress the rows/links UI — the navigation IS the answer.
+   */
+  isAction?: boolean;
 }
 
+interface PatientFocus { id: string; name: string }
+
 const EXAMPLES = [
+  'מי אחראי על שירן?',
+  'מה היה בפגישה האחרונה של שירן?',
+  'פתח כרטיס של שירן',
   'אילו פגישות יש היום?',
-  'מי המטופלות למחר?',
   'למי חסר סיכום פגישה?',
-  'אילו תשלומים עדיין פתוחים?',
-  'אילו הקלטות לא עובדו?',
 ] as const;
 
 const C = {
@@ -59,13 +69,27 @@ const C = {
 };
 
 export default function AssistantDrawer() {
+  const router = useRouter();
   const [open, setOpen]       = useState(false);
   const [input, setInput]     = useState('');
   const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [focus, setFocus]       = useState<PatientFocus | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef  = useRef<HTMLTextAreaElement | null>(null);
+
+  /**
+   * The focus has to be readable at send-time from inside the callback,
+   * but the callback closes over the state from the render where it was
+   * created. Mirror it into a ref so the latest focus is always sent.
+   */
+  const focusRef = useRef<PatientFocus | null>(null);
+  useEffect(() => { focusRef.current = focus; }, [focus]);
+
+  /** Same for messages — needed to assemble the conversation history. */
+  const messagesRef = useRef<AssistantMessage[]>([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   /* ── Responsive: detect mobile breakpoint ──────────────────────── */
 
@@ -120,11 +144,22 @@ export default function AssistantDrawer() {
       return;
     }
 
+    // Build context payload from refs (latest values, not the render
+    // where this callback was created).
+    const history = messagesRef.current
+      .slice(-6)
+      .map(m => ({ role: m.role, text: m.text }));
+    const ctxFocus = focusRef.current;
+
     try {
       const res = await fetch('/api/assistant/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({
+          question,
+          history,
+          context: ctxFocus ? { lastPatient: ctxFocus } : {},
+        }),
       });
       const json = await res.json().catch(() => null);
 
@@ -133,14 +168,38 @@ export default function AssistantDrawer() {
           id: `a-${Date.now()}`, role: 'assistant', error: true,
           text: json?.error ?? 'שגיאה בעיבוד השאלה.',
         }]);
-      } else {
+        return;
+      }
+
+      const action: AssistantAction | null = json?.action ?? null;
+      const newFocus: PatientFocus | null  = json?.patient_focus ?? null;
+
+      // Update conversation focus before showing the message so the next
+      // user turn already has it.
+      if (newFocus && (!ctxFocus || ctxFocus.id !== newFocus.id)) {
+        setFocus(newFocus);
+      }
+
+      // Pure navigation action: don't render rows/links — just announce
+      // and push. The drawer also auto-closes so the patient page
+      // becomes the focus.
+      if (action && action.type === 'open_patient') {
         setMessages(prev => [...prev, {
           id: `a-${Date.now()}`, role: 'assistant',
-          text:  json.answer ?? '',
-          rows:  json.rows  ?? [],
-          links: json.links ?? [],
+          text:     json.answer ?? `פותחת את הכרטיס של ${action.patient_name}.`,
+          isAction: true,
         }]);
+        router.push(`/patients/${action.patient_id}`);
+        setOpen(false);
+        return;
       }
+
+      setMessages(prev => [...prev, {
+        id: `a-${Date.now()}`, role: 'assistant',
+        text:  json.answer ?? '',
+        rows:  json.rows  ?? [],
+        links: json.links ?? [],
+      }]);
     } catch (e) {
       setMessages(prev => [...prev, {
         id: `a-${Date.now()}`, role: 'assistant', error: true,
@@ -149,12 +208,13 @@ export default function AssistantDrawer() {
     } finally {
       setSending(false);
     }
-  }, [sending]);
+  }, [sending, router]);
 
   const clearChat = useCallback(() => {
     if (messages.length === 0) return;
     if (!window.confirm('למחוק את היסטוריית השיחה?')) return;
     setMessages([]);
+    setFocus(null);
   }, [messages.length]);
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -267,7 +327,11 @@ export default function AssistantDrawer() {
             <div style={{ minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.text }}>עוזר חכם</p>
               <p style={{ margin: '1px 0 0', fontSize: 10.5, color: C.muted }}>
-                {messages.length === 0 ? 'מוכן לשאלות' : `${messages.length} הודעות`}
+                {focus
+                  ? `בשיחה על ${focus.name}`
+                  : messages.length === 0
+                    ? 'מוכן לשאלות'
+                    : `${messages.length} הודעות`}
               </p>
             </div>
           </div>
@@ -475,7 +539,7 @@ function MessageBubble({ msg, onClose }: { msg: AssistantMessage; onClose: () =>
       }}>
         <p style={{ margin: 0 }}>{msg.text}</p>
 
-        {msg.rows && msg.rows.length > 0 && (
+        {!msg.isAction && msg.rows && msg.rows.length > 0 && (
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {msg.rows.map((r, i) => (
               <RowLine key={i} row={r} onClose={onClose} />
@@ -483,7 +547,7 @@ function MessageBubble({ msg, onClose }: { msg: AssistantMessage; onClose: () =>
           </div>
         )}
 
-        {msg.links && msg.links.length > 0 && (
+        {!msg.isAction && msg.links && msg.links.length > 0 && (
           <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {msg.links.map((l, i) => (
               <Link
