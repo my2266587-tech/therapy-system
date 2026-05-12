@@ -42,6 +42,12 @@ const buildMonthlyReport: typeof import('../lib/reports/buildFromTemplate.ts').b
     : (_mod.buildMonthlyReport as typeof import('../lib/reports/buildFromTemplate.ts').buildMonthlyReport);
 type SessionSlot = import('../lib/reports/buildFromTemplate.ts').SessionSlot;
 
+const _prevMod = await import('../lib/reports/previousMonth.ts');
+const getPreviousMonth: typeof import('../lib/reports/previousMonth.ts').getPreviousMonth =
+  (_prevMod as { default?: { getPreviousMonth: unknown } }).default
+    ? ((_prevMod as { default: { getPreviousMonth: unknown } }).default.getPreviousMonth as typeof import('../lib/reports/previousMonth.ts').getPreviousMonth)
+    : (_prevMod.getPreviousMonth as typeof import('../lib/reports/previousMonth.ts').getPreviousMonth);
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
@@ -269,6 +275,38 @@ const SCENARIOS: Scenario[] = [
 
 /* ── runner ──────────────────────────────────────────────────────────── */
 
+/* ── getPreviousMonth boundary tests ────────────────────────────────── */
+
+function runPreviousMonthTests(): { name: string; ok: boolean; detail?: string }[] {
+  const results: { name: string; ok: boolean; detail?: string }[] = [];
+
+  type Case = { today: Date; expY: number; expM: number; note: string };
+  const cases: Case[] = [
+    // January 1 — the critical case. Must yield December of the prior year.
+    { today: new Date(2027, 0, 1),  expY: 2026, expM: 12, note: '2027-01-01 → דצמבר 2026' },
+    // Mid-year — sanity baseline.
+    { today: new Date(2026, 3, 1),  expY: 2026, expM: 3,  note: '2026-04-01 → מרץ 2026' },
+    // December — yields November same year.
+    { today: new Date(2026, 11, 1), expY: 2026, expM: 11, note: '2026-12-01 → נובמבר 2026' },
+    // March 31 — the day=1 normalization in the helper protects against
+    // setMonth's overflow trap. Without it, March 31 - 1 month would
+    // land on "March 3" of the same year.
+    { today: new Date(2026, 2, 31), expY: 2026, expM: 2,  note: '2026-03-31 → פברואר 2026 (day-overflow trap)' },
+  ];
+
+  for (const c of cases) {
+    const got = getPreviousMonth(c.today);
+    const ok  = got.year === c.expY && got.month === c.expM;
+    results.push({
+      name:   c.note,
+      ok,
+      detail: ok ? undefined : `got year=${got.year}, month=${got.month}`,
+    });
+  }
+
+  return results;
+}
+
 async function run(): Promise<number> {
   console.log('━'.repeat(72));
   console.log('Monthly report — verification harness');
@@ -350,6 +388,11 @@ async function run(): Promise<number> {
     totalFail += results.filter(a => !a.ok).length;
   }
 
+  // Previous-month boundary tests — pure date math, no xlsx involved.
+  const prevTests = runPreviousMonthTests();
+  const prevFail  = prevTests.filter(a => !a.ok).length;
+  totalFail += prevFail;
+
   for (const sc of all) {
     const pass = sc.assertions.filter(a => a.ok).length;
     const fail = sc.assertions.length - pass;
@@ -360,9 +403,15 @@ async function run(): Promise<number> {
     }
   }
 
+  console.log(`\n${prevFail === 0 ? '✓' : '✗'} getPreviousMonth boundary cases  (${prevTests.length - prevFail}/${prevTests.length})`);
+  for (const t of prevTests) {
+    const mark = t.ok ? '  ✓' : '  ✗';
+    console.log(`${mark} ${t.name}${t.detail ? ` — ${t.detail}` : ''}`);
+  }
+
   console.log('\n' + '━'.repeat(72));
   console.log(totalFail === 0
-    ? `ALL CHECKS PASSED across ${SCENARIOS.length} scenarios.`
+    ? `ALL CHECKS PASSED across ${SCENARIOS.length} scenarios + ${prevTests.length} prev-month cases.`
     : `${totalFail} assertion(s) failed.`);
   console.log('━'.repeat(72));
 
