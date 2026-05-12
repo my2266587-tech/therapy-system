@@ -1,18 +1,27 @@
 /**
  * Shared data-fetch for the monthly report.
  *
+ *   Source of truth: `session_summaries`. The hours-report layout
+ *   maps directly onto a finished summary — the summary is what proves
+ *   a session was actually run, holds the real start/end times, the
+ *   clinician's notes, and is joined to the patient for the K column.
+ *   Raw `sessions` rows can be created in advance / cancelled / left
+ *   empty, so they're not the right source for a "what actually
+ *   happened this month" view.
+ *
  *   Both the on-demand UI route and the monthly cron call this so the
  *   xlsx they produce is byte-equivalent.
  *
  *   What we fetch:
- *     - Every session in [start, end] of the chosen month with
- *       status = 'completed' (the report tracks worked hours, not
- *       cancellations or no-shows).
- *     - Patient full_name is joined in for the K column.
+ *     - Every session_summaries row with date in [start, end] of the
+ *       chosen month.
+ *     - Patient full_name joined in for the K column.
  *
  *   What we do NOT fetch:
- *     - Staff. This is a calendar-style monthly report — every session
+ *     - Staff. This is a calendar-style monthly report — every summary
  *       lands on the row matching its date, regardless of therapist.
+ *     - Sessions (the planning/scheduling table). Summaries are the
+ *       authoritative record of what actually happened.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -41,26 +50,32 @@ export async function fetchMonthlySessions(
   const range = monthRange(year, month);
 
   const { data, error } = await supabase
-    .from('sessions')
-    .select('date, start_time, end_time, notes, status, patient:patient_id(full_name)')
+    .from('session_summaries')
+    .select('date, start_time, end_time, notes, patient:patient_id(full_name)')
     .gte('date', range.start)
     .lte('date', range.end)
-    .eq('status', 'completed')
     .order('date',       { ascending: true })
-    .order('start_time', { ascending: true });
-  if (error) throw new Error(`sessions fetch: ${error.message}`);
+    .order('start_time', { ascending: true, nullsFirst: false });
+  if (error) throw new Error(`session_summaries fetch: ${error.message}`);
 
-  type RawSession = {
-    date: string; start_time: string; end_time: string;
-    notes: string | null; status: string;
+  type RawSummary = {
+    date: string;
+    start_time: string | null;
+    end_time:   string | null;
+    notes: string | null;
     patient: { full_name: string } | null;
   };
 
-  const sessions: SessionSlot[] = ((data ?? []) as unknown as RawSession[])
+  // Skip summaries without times — they can't drive a time-pair cell
+  // in the template. They still count toward the K column (name) and L
+  // column (notes), so we keep them with empty time strings, which the
+  // generator's timeToFraction() handles by writing nothing into the
+  // time cells but K/L do get the values.
+  const sessions: SessionSlot[] = ((data ?? []) as unknown as RawSummary[])
     .map(s => ({
       date:         s.date,
-      start_time:   s.start_time,
-      end_time:     s.end_time,
+      start_time:   s.start_time ?? '',
+      end_time:     s.end_time   ?? '',
       patient_name: s.patient?.full_name ?? null,
       notes:        s.notes,
     }));

@@ -121,9 +121,19 @@ export async function buildMonthlyReport(opts: BuildOptions): Promise<BuildResul
   // 1. Sheet name = Hebrew month label.
   ws.name = HEB_MONTHS[month] ?? String(month);
 
-  // 2. C1 — first-of-month Date. Drives the B-column date formulas and
-  //    the A-column weekday VLOOKUPs that reference 'גיליון1'.
-  ws.getCell('C1').value = new Date(year, month - 1, 1);
+  // 2. C1 — first-of-month Date. Drives the B-column date formulas
+  //    (B4 = +C1, B5 = B4+1, …) and the A-column weekday VLOOKUPs
+  //    that reference 'גיליון1'.
+  //
+  //    MUST be UTC midnight, not local midnight: `new Date(y, m, 1)` is
+  //    Israel-local-midnight which is Feb 28 22:00 UTC for "March 1
+  //    local". ExcelJS converts via getTime() → Excel serial, producing
+  //    a fractional serial like 46081.916 for the previous calendar day
+  //    plus 22 hours. Excel reads that as the wrong month and the
+  //    WEEKDAY() chain in column A returns #VALUE / wrong letters.
+  //    Date.UTC() gives midnight at the prime meridian, so the serial
+  //    is a clean integer for the actual date we wanted.
+  ws.getCell('C1').value = new Date(Date.UTC(year, month - 1, 1));
 
   // 3. Day rows — one per day-of-month, written only when the day has
   //    at least one session.

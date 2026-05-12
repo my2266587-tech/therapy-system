@@ -329,6 +329,23 @@ async function run(): Promise<number> {
       /^[\x20-\x7E]+$/.test(built.fileName),
       `got "${built.fileName}"`);
 
+    // C1 must be an integer Excel serial. Fractional serials (e.g.
+    // 46081.916 from Date(year, month-1, 1) in a non-UTC timezone)
+    // shift the displayed month and break the WEEKDAY chain in column A.
+    // We probe the raw cell value in xl/worksheets/*.xml because
+    // ExcelJS' load() hydrates the number back into a Date and hides
+    // the fractional vs integer distinction.
+    const mainSheetXmlFile = Object.keys(zip.files)
+      .filter(f => f.startsWith('xl/worksheets/sheet') && f.endsWith('.xml'))
+      .sort()[0];
+    const sheetXml = await zip.file(mainSheetXmlFile)!.async('string');
+    const c1Match = sheetXml.match(/<c r="C1"[^>]*>\s*<v>([^<]+)<\/v>/);
+    const c1Raw   = c1Match?.[1] ?? '';
+    const c1Num   = Number(c1Raw);
+    check(results, `C1 raw serial is an integer (got "${c1Raw}")`,
+      Number.isFinite(c1Num) && Number.isInteger(c1Num),
+      `non-integer would produce wrong month + #VALUE in column A`);
+
     all.push({ scenario: s.name, assertions: results });
     totalFail += results.filter(a => !a.ok).length;
   }
