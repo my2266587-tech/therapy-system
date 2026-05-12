@@ -1,9 +1,9 @@
 /**
- * Verification harness for the monthly report bundle.
+ * Verification harness for the monthly report generator.
  *
- *   Builds bundles covering five representative scenarios, loads each one
- *   back with ExcelJS, and asserts on cell contents, formulas, merges,
- *   number formats, sheet count, and sheet names. Run with:
+ *   Builds the report under four representative scenarios, loads each
+ *   one back with ExcelJS, and asserts on cell contents, formulas,
+ *   merges, number formats, and sheet structure. Run with:
  *
  *     npm run verify:reports
  *
@@ -11,19 +11,20 @@
  *   table so a human can see what was checked without opening Excel.
  *
  *   What this DOES check (programmatically):
- *     - Single shared lookup sheet ('גיליון1') survives in every output
- *     - One main sheet per staff, each named after the staff
- *     - Per-sheet: C1 anchor Date, G1/J1/G2/J2 identity cells
+ *     - Main sheet renamed to the Hebrew month label
+ *     - Shared 'גיליון1' lookup sheet survives untouched
+ *     - C1 = first-of-month Date
+ *     - G1/J1/G2/J2 remain blank (this is a calendar report, not staff)
  *     - Per-day time pairs (fraction-of-day via UTC math)
  *     - K / L cells (patient names joined by '/', notes by ' \\ ')
- *     - First-3-sessions truncation
+ *     - First-3-sessions truncation on busy days (names+notes keep all)
  *     - Short-month behavior (no writes past lastDay)
- *     - Formulas in rows 35 & 37 SURVIVE the value writes on EVERY main sheet
- *     - All 57 template formulas + 1 merge survive on EVERY main sheet
- *     - Cross-sheet VLOOKUP formulas keep referencing 'גיליון1'
+ *     - All 57 template formulas preserved, all merges preserved
+ *     - Row 35 + row 37 totals formulas still present
  *     - workbook.xml has fullCalcOnLoad="1"
+ *     - fileName is pure ASCII (Content-Disposition safe)
  *
- *   What this does NOT check (you'll have to open Excel for these):
+ *   What this does NOT check (open in Excel to verify):
  *     - Visual layout, fonts, borders rendering
  *     - Whether Excel's recalc returns the right *number*
  *       (we verify formulas are PRESENT; Excel does the math)
@@ -35,11 +36,11 @@ import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
 const _mod = await import('../lib/reports/buildFromTemplate.ts');
-const buildMonthlyReportBundle: typeof import('../lib/reports/buildFromTemplate.ts').buildMonthlyReportBundle =
-  (_mod as { default?: { buildMonthlyReportBundle: unknown } }).default
-    ? ((_mod as { default: { buildMonthlyReportBundle: unknown } }).default.buildMonthlyReportBundle as typeof import('../lib/reports/buildFromTemplate.ts').buildMonthlyReportBundle)
-    : (_mod.buildMonthlyReportBundle as typeof import('../lib/reports/buildFromTemplate.ts').buildMonthlyReportBundle);
-type StaffEntry = import('../lib/reports/buildFromTemplate.ts').StaffEntry;
+const buildMonthlyReport: typeof import('../lib/reports/buildFromTemplate.ts').buildMonthlyReport =
+  (_mod as { default?: { buildMonthlyReport: unknown } }).default
+    ? ((_mod as { default: { buildMonthlyReport: unknown } }).default.buildMonthlyReport as typeof import('../lib/reports/buildFromTemplate.ts').buildMonthlyReport)
+    : (_mod.buildMonthlyReport as typeof import('../lib/reports/buildFromTemplate.ts').buildMonthlyReport);
+type SessionSlot = import('../lib/reports/buildFromTemplate.ts').SessionSlot;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -63,7 +64,6 @@ function eqApprox(a: number | null, b: number, eps = 1e-6): boolean {
   return Math.abs(a - b) < eps;
 }
 
-/** Fraction-of-day for HH:MM. */
 function frac(h: number, m: number): number {
   return (h * 3600 + m * 60) / 86400;
 }
@@ -84,7 +84,11 @@ function cellFraction(cell: ExcelJS.Cell): number | null {
   return null;
 }
 
-/* ── inspector ───────────────────────────────────────────────────────── */
+function isBlank(v: ExcelJS.CellValue): boolean {
+  if (v == null || v === '') return true;
+  if (typeof v === 'object' && v && 'formula' in (v as object)) return true; // template formula
+  return false;
+}
 
 async function inspect(buffer: Buffer): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
@@ -93,10 +97,6 @@ async function inspect(buffer: Buffer): Promise<ExcelJS.Workbook> {
   return wb;
 }
 
-/**
- * Read the template directly so we know what was supposed to survive
- * on every main sheet: formula addresses + merge ranges.
- */
 async function readTemplateMainSheet(): Promise<{
   formulaCells: { addr: string; formula: string }[];
   mergeRanges:  string[];
@@ -141,199 +141,128 @@ function listFormulaCells(ws: ExcelJS.Worksheet): { addr: string; formula: strin
 type Scenario = {
   name: string;
   year: number; month: number;
-  staff: StaffEntry[];
-  /** Asserts run on the LOADED bundle workbook. */
+  sessions: SessionSlot[];
   assert: (wb: ExcelJS.Workbook, results: AssertionResult[]) => void;
 };
 
-const STAFF_A: StaffEntry = {
-  staff: { full_name: 'דנה כהן', role: 'therapist', employee_number: '4321' },
-  sessions: [
-    { date: '2026-03-02', start_time: '09:00', end_time: '10:00', patient_name: 'שירן', notes: 'התחלה רגועה' },
-    { date: '2026-03-02', start_time: '11:00', end_time: '12:30', patient_name: 'מיכל', notes: null },
-    { date: '2026-03-17', start_time: '14:00', end_time: '15:30', patient_name: 'נועה', notes: 'הגיעה באיחור' },
-  ],
-};
-
-const STAFF_BUSY: StaffEntry = {
-  staff: { full_name: 'מעיין לוי', role: 'instructor', employee_number: null },
-  sessions: [
-    { date: '2026-04-08', start_time: '08:00', end_time: '09:00', patient_name: 'א', notes: null },
-    { date: '2026-04-08', start_time: '09:15', end_time: '10:15', patient_name: 'ב', notes: null },
-    { date: '2026-04-08', start_time: '10:30', end_time: '11:30', patient_name: 'ג', notes: null },
-    { date: '2026-04-08', start_time: '12:00', end_time: '13:00', patient_name: 'ד', notes: 'נוספת' },
-    { date: '2026-04-08', start_time: '13:30', end_time: '14:30', patient_name: 'ה', notes: null },
-  ],
-};
-
-const STAFF_FEB: StaffEntry = {
-  staff: { full_name: 'יעל', role: 'coordinator', employee_number: '7' },
-  sessions: [
-    { date: '2026-02-27', start_time: '09:00', end_time: '10:00', patient_name: 'ת', notes: null },
-    { date: '2026-02-28', start_time: '11:00', end_time: '12:00', patient_name: 'ש', notes: null },
-  ],
-};
-
-const STAFF_BLANK: StaffEntry = {
-  staff: { full_name: 'רותי גולן', role: 'therapist', employee_number: null },
-  sessions: [],
-};
-
 const SCENARIOS: Scenario[] = [
-  /* ── A. single staff, normal mix ── */
+  /* ── A. Normal mix ── */
   {
-    name:  'A. one staff, normal mix (3 sessions on 2 different days)',
+    name:  'A. normal mix — 3 sessions across 2 days, 3 patients',
     year:  2026, month: 3,
-    staff: [STAFF_A],
+    sessions: [
+      { date: '2026-03-02', start_time: '09:00', end_time: '10:00', patient_name: 'שירן', notes: 'התחלה רגועה' },
+      { date: '2026-03-02', start_time: '11:00', end_time: '12:30', patient_name: 'מיכל', notes: null },
+      { date: '2026-03-17', start_time: '14:00', end_time: '15:30', patient_name: 'נועה', notes: 'הגיעה באיחור' },
+    ],
     assert(wb, r) {
-      check(r, 'two sheets total (1 main + 1 lookup)', wb.worksheets.length === 2,
+      check(r, '2 sheets in workbook (main + lookup)', wb.worksheets.length === 2,
         `got ${wb.worksheets.length}`);
-      const ws = wb.worksheets[0]!;
-      check(r, 'main sheet name = "דנה כהן"', ws.name === 'דנה כהן', `got "${ws.name}"`);
+      const names = wb.worksheets.map(w => w.name);
+      check(r, 'lookup sheet "גיליון1" preserved', names.includes('גיליון1'),
+        `names = ${JSON.stringify(names)}`);
+      check(r, 'main sheet renamed to "מרץ"', names.includes('מרץ'),
+        `names = ${JSON.stringify(names)}`);
+
+      const ws = wb.worksheets.find(w => w.name === 'מרץ')!;
 
       const c1 = ws.getCell('C1').value;
-      check(r, 'C1 is a Date for 2026-03-01',
+      check(r, 'C1 = Date for 2026-03-01',
         c1 instanceof Date && (c1 as Date).getFullYear() === 2026 && (c1 as Date).getMonth() === 2 && (c1 as Date).getDate() === 1,
         `got ${JSON.stringify(c1)}`);
 
-      check(r, 'G1 = "דנה"', ws.getCell('G1').value === 'דנה');
-      check(r, 'J1 = "כהן"', ws.getCell('J1').value === 'כהן');
-      check(r, 'G2 = "4321"', ws.getCell('G2').value === '4321');
-      check(r, 'J2 = role label "מטפלת"', ws.getCell('J2').value === 'מטפלת');
+      // Identity cells stay blank — this is a calendar report.
+      check(r, 'G1 stays blank (no staff)', isBlank(ws.getCell('G1').value), `got ${JSON.stringify(ws.getCell('G1').value)}`);
+      check(r, 'J1 stays blank (no staff)', isBlank(ws.getCell('J1').value), `got ${JSON.stringify(ws.getCell('J1').value)}`);
+      check(r, 'G2 stays blank (no employee#)', isBlank(ws.getCell('G2').value), `got ${JSON.stringify(ws.getCell('G2').value)}`);
+      check(r, 'J2 stays blank (no role)', isBlank(ws.getCell('J2').value), `got ${JSON.stringify(ws.getCell('J2').value)}`);
 
-      // Day 2 → row 5
-      check(r, 'C5 = 09:00 fraction', eqApprox(cellFraction(ws.getCell('C5')), frac(9, 0)));
-      check(r, 'D5 = 10:00 fraction', eqApprox(cellFraction(ws.getCell('D5')), frac(10, 0)));
-      check(r, 'E5 = 11:00 fraction', eqApprox(cellFraction(ws.getCell('E5')), frac(11, 0)));
-      check(r, 'F5 = 12:30 fraction', eqApprox(cellFraction(ws.getCell('F5')), frac(12, 30)));
+      // Day 2 → row 5. Two slots: (C,D) and (E,F).
+      check(r, 'C5 = 09:00', eqApprox(cellFraction(ws.getCell('C5')), frac(9, 0)));
+      check(r, 'D5 = 10:00', eqApprox(cellFraction(ws.getCell('D5')), frac(10, 0)));
+      check(r, 'E5 = 11:00', eqApprox(cellFraction(ws.getCell('E5')), frac(11, 0)));
+      check(r, 'F5 = 12:30', eqApprox(cellFraction(ws.getCell('F5')), frac(12, 30)));
       check(r, 'C5 numFmt = h:mm', ws.getCell('C5').numFmt === 'h:mm');
-      check(r, 'K5 = "שירן/מיכל"', ws.getCell('K5').value === 'שירן/מיכל');
+      check(r, 'G5 empty (no 3rd slot)', isBlank(ws.getCell('G5').value));
+      check(r, 'K5 = "שירן/מיכל"', ws.getCell('K5').value === 'שירן/מיכל',
+        `got ${JSON.stringify(ws.getCell('K5').value)}`);
+      check(r, 'L5 includes "התחלה רגועה"',
+        String(ws.getCell('L5').value ?? '').includes('התחלה רגועה'),
+        `got ${JSON.stringify(ws.getCell('L5').value)}`);
 
-      // Day 17 → row 20
-      check(r, 'C20 = 14:00 fraction', eqApprox(cellFraction(ws.getCell('C20')), frac(14, 0)));
-      check(r, 'D20 = 15:30 fraction', eqApprox(cellFraction(ws.getCell('D20')), frac(15, 30)));
+      // Day 17 → row 20.
+      check(r, 'C20 = 14:00', eqApprox(cellFraction(ws.getCell('C20')), frac(14, 0)));
+      check(r, 'D20 = 15:30', eqApprox(cellFraction(ws.getCell('D20')), frac(15, 30)));
       check(r, 'K20 = "נועה"', ws.getCell('K20').value === 'נועה');
     },
   },
 
-  /* ── B. >3 sessions in one day (truncation) ── */
+  /* ── B. Many sessions in one day ── */
   {
-    name:  'B. many sessions on one day (>3 → only first 3 written)',
+    name:  'B. busy day — 5 sessions, only first 3 time pairs written',
     year:  2026, month: 4,
-    staff: [STAFF_BUSY],
+    sessions: [
+      { date: '2026-04-08', start_time: '08:00', end_time: '09:00', patient_name: 'א', notes: null },
+      { date: '2026-04-08', start_time: '09:15', end_time: '10:15', patient_name: 'ב', notes: null },
+      { date: '2026-04-08', start_time: '10:30', end_time: '11:30', patient_name: 'ג', notes: null },
+      { date: '2026-04-08', start_time: '12:00', end_time: '13:00', patient_name: 'ד', notes: 'נוספת' },
+      { date: '2026-04-08', start_time: '13:30', end_time: '14:30', patient_name: 'ה', notes: null },
+    ],
     assert(wb, r) {
-      const ws = wb.worksheets[0]!;
-      check(r, 'sheet name = "מעיין לוי"', ws.name === 'מעיין לוי');
-      // Day 8 → row 11
+      const ws = wb.worksheets.find(w => w.name === 'אפריל')!;
+      check(r, 'main sheet renamed to "אפריל"', !!ws,
+        `names=${JSON.stringify(wb.worksheets.map(w=>w.name))}`);
+
+      // Day 8 → row 11. Three slots cap.
       check(r, 'C11 = 08:00', eqApprox(cellFraction(ws.getCell('C11')), frac(8, 0)));
       check(r, 'E11 = 09:15', eqApprox(cellFraction(ws.getCell('E11')), frac(9, 15)));
       check(r, 'G11 = 10:30', eqApprox(cellFraction(ws.getCell('G11')), frac(10, 30)));
-      // K still lists ALL 5 names (slotsAll, not the truncated slice)
-      check(r, 'K11 lists all 5 names', ws.getCell('K11').value === 'א/ב/ג/ד/ה');
+      // K still lists ALL 5 names so the day is fully visible.
+      check(r, 'K11 lists all 5 names', ws.getCell('K11').value === 'א/ב/ג/ד/ה',
+        `got ${JSON.stringify(ws.getCell('K11').value)}`);
     },
   },
 
-  /* ── C. short month (Feb 2026 = 28 days) ── */
+  /* ── C. Short month ── */
   {
-    name:  'C. short month — Feb 2026 (28 days)',
+    name:  'C. short month — Feb 2026 (28 days), no writes past day 28',
     year:  2026, month: 2,
-    staff: [STAFF_FEB],
+    sessions: [
+      { date: '2026-02-27', start_time: '09:00', end_time: '10:00', patient_name: 'ת', notes: null },
+      { date: '2026-02-28', start_time: '11:00', end_time: '12:00', patient_name: 'ש', notes: null },
+    ],
     assert(wb, r) {
-      const ws = wb.worksheets[0]!;
-      check(r, 'sheet name = "יעל"', ws.name === 'יעל');
-      check(r, 'C30 = 09:00 (day 27)', eqApprox(cellFraction(ws.getCell('C30')), frac(9, 0)));
-      check(r, 'C31 = 11:00 (day 28)', eqApprox(cellFraction(ws.getCell('C31')), frac(11, 0)));
+      const ws = wb.worksheets.find(w => w.name === 'פברואר')!;
+      check(r, 'main sheet renamed to "פברואר"', !!ws);
+
+      check(r, 'C30 = 09:00 (day 27 → row 30)', eqApprox(cellFraction(ws.getCell('C30')), frac(9, 0)));
+      check(r, 'C31 = 11:00 (day 28 → row 31)', eqApprox(cellFraction(ws.getCell('C31')), frac(11, 0)));
       for (const row of [32, 33, 34]) {
-        const v = ws.getCell(`C${row}`).value;
-        const empty = v == null || v === '' || (typeof v === 'object' && v && 'formula' in (v as object));
-        check(r, `C${row} not written by us (template-only cell)`, empty, `got ${JSON.stringify(v)}`);
+        check(r, `C${row} unwritten (Feb has no day ${row - 3})`,
+          isBlank(ws.getCell(`C${row}`).value),
+          `got ${JSON.stringify(ws.getCell(`C${row}`).value)}`);
       }
-      check(r, 'J2 = "רכזת"', ws.getCell('J2').value === 'רכזת');
     },
   },
 
-  /* ── D. blank report ── */
+  /* ── D. Empty month ── */
   {
-    name:  'D. blank report — staff with zero sessions',
+    name:  'D. empty month — zero sessions, file still valid',
     year:  2026, month: 5,
-    staff: [STAFF_BLANK],
+    sessions: [],
     assert(wb, r) {
-      const ws = wb.worksheets[0]!;
-      check(r, 'sheet name = "רותי גולן"', ws.name === 'רותי גולן');
-      check(r, 'G1 = "רותי"', ws.getCell('G1').value === 'רותי');
-      check(r, 'J1 = "גולן"', ws.getCell('J1').value === 'גולן');
-      check(r, 'G2 empty', ws.getCell('G2').value == null || ws.getCell('G2').value === '');
-      for (const row of [4, 10, 15, 22, 28]) {
-        const v = ws.getCell(`C${row}`).value;
-        const empty = v == null || v === '' || (typeof v === 'object' && v && 'formula' in (v as object));
-        check(r, `C${row} unwritten in blank report`, empty, `got ${JSON.stringify(v)}`);
+      const ws = wb.worksheets.find(w => w.name === 'מאי')!;
+      check(r, 'main sheet renamed to "מאי"', !!ws);
+
+      const c1 = ws.getCell('C1').value;
+      check(r, 'C1 still set to 2026-05-01',
+        c1 instanceof Date && (c1 as Date).getMonth() === 4);
+
+      for (const row of [4, 10, 15, 22, 28, 34]) {
+        check(r, `C${row} unwritten in empty month`,
+          isBlank(ws.getCell(`C${row}`).value),
+          `got ${JSON.stringify(ws.getCell(`C${row}`).value)}`);
       }
-    },
-  },
-
-  /* ── E. THE BUNDLE — all four staff in one workbook ── */
-  {
-    name:  'E. bundle of 4 staff in one file (5 sheets total incl. lookup)',
-    year:  2026, month: 3,
-    staff: [STAFF_A, STAFF_BUSY, STAFF_FEB, STAFF_BLANK],
-    assert(wb, r) {
-      check(r, '5 sheets total (4 main + 1 lookup)', wb.worksheets.length === 5,
-        `got ${wb.worksheets.length}`);
-
-      const names = wb.worksheets.map(w => w.name);
-      check(r, 'lookup sheet "גיליון1" present', names.includes('גיליון1'),
-        `names = ${JSON.stringify(names)}`);
-      check(r, 'all 4 staff sheets present (by name)',
-        ['דנה כהן', 'מעיין לוי', 'יעל', 'רותי גולן'].every(n => names.includes(n)),
-        `names = ${JSON.stringify(names)}`);
-
-      // Lookup sheet content untouched
-      const lookup = wb.worksheets.find(w => w.name === 'גיליון1')!;
-      check(r, 'lookup A1 = 1', lookup.getCell('A1').value === 1);
-      check(r, 'lookup B1 = "א"', lookup.getCell('B1').value === 'א');
-      check(r, 'lookup B7 = "ש"', lookup.getCell('B7').value === 'ש');
-
-      // Sheet #1 still represents STAFF_A correctly
-      const dana = wb.worksheets.find(w => w.name === 'דנה כהן')!;
-      check(r, 'דנה sheet G1 = "דנה"', dana.getCell('G1').value === 'דנה');
-      check(r, 'דנה sheet C5 = 09:00', eqApprox(cellFraction(dana.getCell('C5')), frac(9, 0)));
-
-      // The CLONED sheet for STAFF_BUSY has independent values. Her
-      // sessions are dated April; the bundle is March; so her sheet
-      // is rendered for March and is empty session-wise — proving the
-      // per-staff sheet is filtered by the bundle's month, not by the
-      // staff's raw session list.
-      const meyan = wb.worksheets.find(w => w.name === 'מעיין לוי')!;
-      check(r, 'מעיין sheet G1 = "מעיין"', meyan.getCell('G1').value === 'מעיין');
-      const meyanC11 = meyan.getCell('C11').value;
-      check(r, 'מעיין sheet C11 empty (her sessions are April, bundle is March)',
-        meyanC11 == null || meyanC11 === '' || (typeof meyanC11 === 'object' && meyanC11 && 'formula' in (meyanC11 as object)),
-        `got ${JSON.stringify(meyanC11)}`);
-      // STAFF_BUSY has no day-17 sessions → C20 must be unwritten in HER sheet
-      const meyanC20 = meyan.getCell('C20').value;
-      check(r, 'מעיין sheet C20 NOT 14:00 (no day-17 sessions for her)',
-        meyanC20 == null || meyanC20 === '' || cellFraction(meyan.getCell('C20')) !== frac(14, 0),
-        `got ${JSON.stringify(meyanC20)}`);
-
-      // The cloned sheet must carry formulas (VLOOKUP into lookup sheet)
-      const yael = wb.worksheets.find(w => w.name === 'יעל')!;
-      const a4 = yael.getCell('A4').value;
-      const a4HasFormula = a4 && typeof a4 === 'object' && 'formula' in (a4 as object);
-      check(r, 'cloned sheet (יעל) A4 still has a formula', !!a4HasFormula,
-        `got ${JSON.stringify(a4)}`);
-      if (a4HasFormula) {
-        const f = (a4 as ExcelJS.CellFormulaValue).formula;
-        check(r, 'cloned sheet formula still references גיליון1',
-          f.includes('גיליון1'), `got formula: ${f}`);
-      }
-
-      // Cross-staff month anchor: דנה=March, יעל=March (this bundle is
-      // generated for month=3), even though Feb was used for STAFF_FEB
-      // in scenario C — here they share the bundle's month.
-      const yaelC1 = yael.getCell('C1').value;
-      check(r, 'יעל sheet C1 = 2026-03-01 (bundle month, not staff-specific)',
-        yaelC1 instanceof Date && (yaelC1 as Date).getMonth() === 2,
-        `got ${JSON.stringify(yaelC1)}`);
     },
   },
 ];
@@ -342,7 +271,7 @@ const SCENARIOS: Scenario[] = [
 
 async function run(): Promise<number> {
   console.log('━'.repeat(72));
-  console.log('Monthly report bundle — verification harness');
+  console.log('Monthly report — verification harness');
   console.log('━'.repeat(72));
 
   const tpl = await readTemplateMainSheet();
@@ -353,41 +282,41 @@ async function run(): Promise<number> {
   let totalFail = 0;
 
   for (const s of SCENARIOS) {
-    const built = await buildMonthlyReportBundle({
-      staff: s.staff,
-      year:  s.year,
-      month: s.month,
+    const built = await buildMonthlyReport({
+      sessions: s.sessions,
+      year:     s.year,
+      month:    s.month,
     });
     const wb = await inspect(built.buffer);
     const results: AssertionResult[] = [];
 
-    // Scenario-specific.
     s.assert(wb, results);
 
-    // Cross-cutting: every main sheet (everything except 'גיליון1') must
-    // preserve every template formula address + every merge range.
-    const mainSheets = wb.worksheets.filter(w => w.name !== 'גיליון1');
-    let allFormulasOk = true;
-    let allMergesOk   = true;
-    let row35Ok = true, row37Ok = true;
-    for (const ws of mainSheets) {
-      const formulas = listFormulaCells(ws);
-      const addrs = new Set(formulas.map(f => f.addr));
-      const missing = tpl.formulaCells.filter(f => !addrs.has(f.addr));
-      if (missing.length > 0) allFormulasOk = false;
+    // Cross-cutting: main sheet must preserve every template formula
+    // address + every merge range. The lookup sheet stays untouched.
+    const main = wb.worksheets.find(w => w.name !== 'גיליון1')!;
+    const formulas = listFormulaCells(main);
+    const addrs = new Set(formulas.map(f => f.addr));
+    const missing = tpl.formulaCells.filter(f => !addrs.has(f.addr));
+    check(results, `all ${tpl.formulaCells.length} template formulas preserved`,
+      missing.length === 0,
+      missing.length ? `missing: ${missing.slice(0,5).map(f=>f.addr).join(', ')}${missing.length>5?`, +${missing.length-5} more`:''}` : undefined);
 
-      const merges = ((ws.model as { merges?: string[] }).merges ?? []);
-      if (merges.length !== tpl.mergeRanges.length) allMergesOk = false;
+    const merges = ((main.model as { merges?: string[] }).merges ?? []);
+    check(results, `all ${tpl.mergeRanges.length} template merges preserved`,
+      merges.length === tpl.mergeRanges.length,
+      `got ${merges.length}`);
 
-      if (formulas.filter(f => /[A-Z]+35$/.test(f.addr)).length === 0) row35Ok = false;
-      if (formulas.filter(f => /[A-Z]+37$/.test(f.addr)).length === 0) row37Ok = false;
-    }
-    check(results, `all ${tpl.formulaCells.length} template formulas preserved on every main sheet`, allFormulasOk);
-    check(results, `all ${tpl.mergeRanges.length} template merges preserved on every main sheet`, allMergesOk);
-    check(results, `row 35 totals formulas present on every main sheet`, row35Ok);
-    check(results, `row 37 totals formulas present on every main sheet`, row37Ok);
+    check(results, 'row 35 totals formulas present',
+      formulas.filter(f => /[A-Z]+35$/.test(f.addr)).length > 0);
+    check(results, 'row 37 totals formulas present',
+      formulas.filter(f => /[A-Z]+37$/.test(f.addr)).length > 0);
 
-    // calcProperties via raw XML (ExcelJS load() drops the attribute).
+    // VLOOKUP cross-sheet refs still point at גיליון1.
+    check(results, 'column A weekday VLOOKUPs reference גיליון1',
+      formulas.some(f => /^A\d+$/.test(f.addr) && f.formula.includes('גיליון1')));
+
+    // calcProperties via raw XML.
     const zip = await JSZip.loadAsync(built.buffer);
     const wbXml = await zip.file('xl/workbook.xml')!.async('string');
     const calcPr = wbXml.match(/<calcPr[^>]*\/>/)?.[0] ?? '';
@@ -395,10 +324,8 @@ async function run(): Promise<number> {
       /fullCalcOnLoad\s*=\s*"1"/.test(calcPr),
       `got <calcPr>: ${calcPr || 'missing'}`);
 
-    // fileName must be ASCII-safe. Hebrew in Content-Disposition makes
-    // Web Headers throw with "Cannot convert argument to a ByteString".
-    // We caught a real 500 over this — guard against the regression.
-    check(results, 'fileName is pure ASCII (Content-Disposition safe)',
+    // ASCII filename guard (Hebrew in headers throws ByteString).
+    check(results, 'fileName is pure ASCII',
       /^[\x20-\x7E]+$/.test(built.fileName),
       `got "${built.fileName}"`);
 

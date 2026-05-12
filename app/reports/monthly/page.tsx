@@ -59,7 +59,7 @@ export default function MonthlyReportsPage() {
 
     try {
       const res = await fetch(
-        `/api/reports/monthly-excel/bundle?year=${year}&month=${month}`,
+        `/api/reports/monthly-excel/download?year=${year}&month=${month}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) {
@@ -95,11 +95,11 @@ export default function MonthlyReportsPage() {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-      const staffCount = res.headers.get('X-Report-Staff') ?? '?';
-      const sessions   = res.headers.get('X-Report-Total-Sessions') ?? '?';
+      const sessions = res.headers.get('X-Report-Total-Sessions') ?? '?';
+      const days     = res.headers.get('X-Report-Days') ?? '?';
       setStatus({
         kind:    'done',
-        message: `הקובץ הורד · ${staffCount} אנשי צוות · ${sessions} פגישות סה"כ`,
+        message: `הקובץ הורד · ${sessions} פגישות · ${days} ימים`,
       });
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message });
@@ -116,8 +116,8 @@ export default function MonthlyReportsPage() {
             דוחות חודשיים
           </h1>
           <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-            הפקת קובץ Excel חודשי יחיד, עם גיליון נפרד לכל איש צוות. אותו הקובץ
-            שנשלח אוטומטית במייל בכל 1 בחודש.
+            הפקת קובץ Excel חודשי יחיד — שורה לכל יום בחודש עם כל הפגישות
+            שהתקיימו. אותו קובץ שנשלח אוטומטית במייל בכל 1 בחודש.
           </p>
         </div>
 

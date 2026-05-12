@@ -1,32 +1,34 @@
 /**
- * GET /api/reports/monthly-excel/bundle?year=YYYY&month=M
+ * GET /api/reports/monthly-excel/download?year=YYYY&month=M
  *
- *   On-demand monthly hours report — a SINGLE xlsx with one sheet per
- *   staff member (plus the shared `גיליון1` lookup sheet) generated
- *   from `public/templates/monthly-report-template.xlsx`.
+ *   On-demand monthly report — ONE xlsx with a single sheet listing
+ *   every completed session of the chosen month, filled into
+ *   `public/templates/monthly-report-template.xlsx`. Same fetch + same
+ *   generator as the cron route, so both produce byte-equivalent files.
  *
- *   Same generator/fetch as the cron route (POST /api/reports/monthly-excel),
- *   so both paths produce a byte-equivalent file.
+ *   Not a per-staff or per-therapist report — it's a calendar view of
+ *   the practice's month.
  *
  *   Auth:    Bearer token of an active authorized user.
  *   Output:  application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
  *            Content-Disposition: attachment; filename="monthly-report-YYYY-MM.xlsx"
  *            (pure ASCII — Hebrew in the filename makes Headers.set() throw)
- *   Headers: X-Report-Staff   (number of main sheets in the file)
- *            X-Report-Total-Sessions (sum across all staff)
+ *   Headers: X-Report-Days           (distinct days written)
+ *            X-Report-Total-Sessions (count of sessions in the month)
+ *            X-Report-Skipped        (sessions beyond the 3rd on any day)
  *
  * Error surface:
  *   Every error path returns JSON `{ error: <message> }` so the UI can
- *   surface a real reason instead of a bare 500. The outer try/catch
- *   exists specifically to convert non-Response throws (auth crash,
- *   supabase client init, header construction, etc.) into JSON.
+ *   surface a real reason. The outer try/catch turns non-Response
+ *   throws (auth crash, supabase init, header rejection, ExcelJS) into
+ *   JSON with the actual error message.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseServer';
 import { getAuthorizedUser } from '@/lib/getAdminUser';
-import { buildMonthlyReportBundle } from '@/lib/reports/buildFromTemplate';
-import { fetchMonthlyBundleData } from '@/lib/reports/fetchBundleData';
+import { buildMonthlyReport } from '@/lib/reports/buildFromTemplate';
+import { fetchMonthlySessions } from '@/lib/reports/fetchMonthlySessions';
 
 export const maxDuration = 60;
 
@@ -48,37 +50,27 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = createServerClient();
-    const fetched  = await fetchMonthlyBundleData(supabase, year, month);
+    const fetched  = await fetchMonthlySessions(supabase, year, month);
 
-    if (fetched.staff.length === 0) {
-      return NextResponse.json(
-        { error: 'אין אנשי צוות במערכת — אין מה להפיק.' },
-        { status: 404 },
-      );
-    }
-
-    const result = await buildMonthlyReportBundle({
-      staff: fetched.staff,
+    const result = await buildMonthlyReport({
+      sessions: fetched.sessions,
       year,
       month,
     });
-    const totalSessions = result.perStaff.reduce((s, p) => s + p.sessionCount, 0);
 
     return new NextResponse(result.buffer as unknown as BodyInit, {
       headers: {
         'Content-Type':            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition':     `attachment; filename="${result.fileName}"`,
         'Cache-Control':           'no-store',
-        'X-Report-Staff':          String(result.perStaff.length),
-        'X-Report-Total-Sessions': String(totalSessions),
+        'X-Report-Days':           String(result.stats.daysCovered),
+        'X-Report-Total-Sessions': String(result.stats.sessionCount),
+        'X-Report-Skipped':        String(result.stats.daysSkippedExtra),
       },
     });
 
   } catch (err) {
-    // Anything that escaped the happy path — auth crash, supabase init
-    // failure, query throw, ExcelJS throw, Headers ByteString rejection,
-    // etc. Log with full context so Vercel function logs are useful.
-    console.error('[monthly-report-bundle]', {
+    console.error('[monthly-report-download]', {
       message: (err as Error)?.message,
       stack:   (err as Error)?.stack,
       url:     req.nextUrl.toString(),
