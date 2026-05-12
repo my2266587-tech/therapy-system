@@ -377,9 +377,11 @@ export async function buildMonthlyReportBundle(opts: BundleOptions): Promise<Bun
   const arrayBuffer = await outWb.xlsx.writeBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  const monthLabel = HEB_MONTHS[month] ?? String(month);
-  const fileName = `monthly-report-${year}-${String(month).padStart(2, '0')}-${monthLabel}.xlsx`
-    .replace(/\s+/g, '-');
+  // Pure ASCII filename. The Hebrew month label is carried inside the
+  // workbook (sheet contents) and in the email subject — putting it in
+  // Content-Disposition makes Headers.set() throw because raw Hebrew
+  // bytes are > 0xFF and Web Headers reject them as non-ByteString.
+  const fileName = `monthly-report-${year}-${String(month).padStart(2, '0')}.xlsx`;
 
   return { buffer, fileName, perStaff };
 }

@@ -395,6 +395,13 @@ async function run(): Promise<number> {
       /fullCalcOnLoad\s*=\s*"1"/.test(calcPr),
       `got <calcPr>: ${calcPr || 'missing'}`);
 
+    // fileName must be ASCII-safe. Hebrew in Content-Disposition makes
+    // Web Headers throw with "Cannot convert argument to a ByteString".
+    // We caught a real 500 over this — guard against the regression.
+    check(results, 'fileName is pure ASCII (Content-Disposition safe)',
+      /^[\x20-\x7E]+$/.test(built.fileName),
+      `got "${built.fileName}"`);
+
     all.push({ scenario: s.name, assertions: results });
     totalFail += results.filter(a => !a.ok).length;
   }

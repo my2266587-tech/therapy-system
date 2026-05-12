@@ -130,9 +130,13 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err) {
-    console.error('[monthly-excel]', err);
+    console.error('[monthly-report-cron]', {
+      message: (err as Error)?.message,
+      stack:   (err as Error)?.stack,
+      url:     req.nextUrl.toString(),
+    });
     return NextResponse.json(
-      { error: String(err) },
+      { error: (err as Error)?.message ?? String(err) },
       { status: 500 },
     );
   }

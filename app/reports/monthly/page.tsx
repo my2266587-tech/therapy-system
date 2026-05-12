@@ -63,8 +63,22 @@ export default function MonthlyReportsPage() {
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) {
+        // Try JSON first (the route's own error shape), then fall back
+        // to raw text (Next's HTML error page is still better signal
+        // than a bare status code). Last resort: status only.
         let msg = `שגיאה (${res.status})`;
-        try { const j = await res.json(); msg = j?.error ?? msg; } catch {}
+        const raw = await res.text().catch(() => '');
+        if (raw) {
+          try {
+            const j = JSON.parse(raw);
+            msg = j?.error ?? msg;
+          } catch {
+            // Not JSON — surface a short snippet so server-side errors
+            // (auth, env, header construction) are at least visible.
+            const trimmed = raw.trim().slice(0, 240);
+            if (trimmed) msg = `${msg} — ${trimmed}`;
+          }
+        }
         setStatus({ kind: 'error', message: msg });
         return;
       }
