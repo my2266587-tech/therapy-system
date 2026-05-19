@@ -28,6 +28,39 @@ const RECORDING_STATUS: Record<string, { label: string; bg: string; text: string
   failed:       { label: 'שגיאה',        bg: '#FEF2F2', text: '#DC2626', border: '#FECACA', dot: '#DC2626' },
 };
 
+/**
+ * OpenAI gpt-4o-mini-transcribe pricing. Hardcoded because this is a
+ * pre-action *estimate* shown next to the button — we're not charging
+ * the user, just letting them see the order-of-magnitude before they
+ * trigger a Whisper call. Update if OpenAI changes the rate.
+ *
+ * Source: https://openai.com/api/pricing (gpt-4o-mini-transcribe)
+ */
+const TRANSCRIPTION_RATE_USD_PER_MIN = 0.003;
+
+const TRANSCRIPTION_TOOLTIP =
+  'העלות מחושבת לפי משך ההקלטה, לפי תעריף OpenAI הנוכחי ' +
+  '($0.003 לדקה ב-gpt-4o-mini-transcribe). הערכה בלבד — לא חיוב בפועל.';
+
+/** Format USD with the smallest precision that still shows the value. */
+function formatUsd(usd: number): string {
+  if (usd === 0) return '$0';
+  if (usd < 0.01) return `$${usd.toFixed(3)}`;   // $0.003, $0.009
+  if (usd < 1)    return `$${usd.toFixed(2)}`;   // $0.03, $0.30
+  return `$${usd.toFixed(2)}`;                    // $1.50, $12.30
+}
+
+/**
+ * Estimated USD cost to transcribe a recording of `seconds` length.
+ * Rounds UP to the next whole minute — matches how Whisper-style APIs
+ * bill (a 31-second clip costs the same as a 60-second one).
+ */
+function estimateTranscriptionCostUsd(seconds: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  const minutes = Math.ceil(seconds / 60);
+  return minutes * TRANSCRIPTION_RATE_USD_PER_MIN;
+}
+
 const RECORDING_EXPORT_COLUMNS: Column<Recording>[] = [
   { header: 'תאריך הקלטה', accessor: r => r.recorded_at ? new Date(r.recorded_at) : '', width: 16 },
   { header: 'מטופלת',      accessor: r => (r.patient as { full_name?: string } | null)?.full_name ?? '', width: 22 },
@@ -409,34 +442,68 @@ function RecordingsInner() {
                         )}
                       </div>
                       {canGenerate && (
-                        <button
-                          onClick={() => handleGenerateSummary(r)}
-                          disabled={busy}
-                          title={hasAi
-                            ? 'יצירת טיוטה מתוך פלט ה-AI הקיים'
-                            : 'תמלול → AI → טיוטה — בלחיצה אחת'}
-                          style={{
-                            flexShrink: 0,
-                            padding: '9px 18px', borderRadius: 9,
-                            fontSize: 13, fontWeight: 600,
-                            backgroundColor: busy ? C.border : C.accent,
-                            color: '#FFFFFF', border: 'none',
-                            cursor: busy ? 'wait' : 'pointer',
-                            boxShadow: busy ? 'none' : '0 2px 6px rgba(13,148,136,0.18)',
-                            display: 'inline-flex', alignItems: 'center', gap: 8,
-                            transition: 'all 0.12s',
-                          }}
-                        >
-                          {busy && (
-                            <span style={{
-                              width: 12, height: 12, borderRadius: '50%',
-                              border: '2px solid rgba(255,255,255,0.4)',
-                              borderTopColor: '#FFFFFF',
-                              animation: 'spin 0.7s linear infinite',
-                            }} />
+                        <div style={{
+                          display: 'flex', flexDirection: 'column',
+                          alignItems: 'flex-end', gap: 5, flexShrink: 0,
+                        }}>
+                          <button
+                            onClick={() => handleGenerateSummary(r)}
+                            disabled={busy}
+                            title={hasAi
+                              ? 'יצירת טיוטה מתוך פלט ה-AI הקיים'
+                              : 'תמלול → AI → טיוטה — בלחיצה אחת'}
+                            style={{
+                              padding: '9px 18px', borderRadius: 9,
+                              fontSize: 13, fontWeight: 600,
+                              backgroundColor: busy ? C.border : C.accent,
+                              color: '#FFFFFF', border: 'none',
+                              cursor: busy ? 'wait' : 'pointer',
+                              boxShadow: busy ? 'none' : '0 2px 6px rgba(13,148,136,0.18)',
+                              display: 'inline-flex', alignItems: 'center', gap: 8,
+                              transition: 'all 0.12s',
+                            }}
+                          >
+                            {busy && (
+                              <span style={{
+                                width: 12, height: 12, borderRadius: '50%',
+                                border: '2px solid rgba(255,255,255,0.4)',
+                                borderTopColor: '#FFFFFF',
+                                animation: 'spin 0.7s linear infinite',
+                              }} />
+                            )}
+                            {generateLabel}
+                          </button>
+
+                          {/* Transcription cost estimate. Only meaningful
+                              when transcription will actually run — if a
+                              transcript already exists we skip Whisper and
+                              go straight to structuring, so no cost line. */}
+                          {!hasTranscript && (
+                            r.duration_seconds != null && r.duration_seconds > 0 ? (
+                              <span
+                                title={TRANSCRIPTION_TOOLTIP}
+                                style={{
+                                  fontSize: 11, color: C.muted,
+                                  fontVariantNumeric: 'tabular-nums',
+                                  letterSpacing: '0.01em',
+                                }}
+                              >
+                                עלות תמלול משוערת:{' '}
+                                <span style={{ color: C.sub, fontWeight: 500 }}>
+                                  {formatUsd(estimateTranscriptionCostUsd(r.duration_seconds))}
+                                </span>
+                                {' '}(הערכה בלבד)
+                              </span>
+                            ) : (
+                              <span
+                                title={TRANSCRIPTION_TOOLTIP}
+                                style={{ fontSize: 11, color: C.muted }}
+                              >
+                                עלות תמלול תחושב אחרי שמירת ההקלטה
+                              </span>
+                            )
                           )}
-                          {generateLabel}
-                        </button>
+                        </div>
                       )}
                     </div>
                   )}
