@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import FormGroup from '@/components/ui/FormGroup';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
 import type { Patient } from '@/types';
-type StaffOpt = { id: string; full_name: string };
+type StaffOpt = { id: string; full_name: string; role?: string };
 
 const STATUS_OPTIONS = [
   { value: 'active',   label: 'פעילה' },
@@ -32,7 +32,6 @@ export default function PatientForm({ initial, onSave, onCancel }: Props) {
     email:             initial?.email ?? '',
     status:            initial?.status ?? 'active',
     coordinator_id:    initial?.coordinator_id ?? '',
-    staff_id:          initial?.staff_id ?? '',
     apartment_address: initial?.apartment_address ?? '',
     housing_type:      initial?.housing_type ?? '',
     father_name:       initial?.father_name ?? '',
@@ -42,16 +41,50 @@ export default function PatientForm({ initial, onSave, onCancel }: Props) {
     marital_status:    initial?.marital_status ?? '',
     notes:             initial?.notes ?? '',
   });
+
+  /**
+   * Multiple staff can be assigned to a patient. The full set lives in
+   * staff_patients (many-to-many). For backwards compatibility we keep
+   * patients.staff_id pointed at the FIRST selected staff — every read
+   * path that still uses patients.staff_id (calendar, header, assistant
+   * tools, monthly reports) continues to resolve to "the primary".
+   */
+  const [staffIds, setStaffIds] = useState<string[]>(
+    initial?.staff_id ? [initial.staff_id] : [],
+  );
+
   const [staffList, setStaffList] = useState<StaffOpt[]>([]);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
 
+  /* ── load staff dropdown options ─────────────────────────────── */
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     supabase.from('staff').select('id, full_name, role').order('full_name').then(({ data }) => {
-      setStaffList(data ?? []);
+      setStaffList((data ?? []) as StaffOpt[]);
     });
   }, []);
+
+  /* ── on edit: union staff_patients with the legacy staff_id ──── */
+  useEffect(() => {
+    if (!initial?.id || !isSupabaseConfigured) return;
+    let cancelled = false;
+    supabase
+      .from('staff_patients')
+      .select('staff_id')
+      .eq('patient_id', initial.id)
+      .then(({ data, error: err }) => {
+        if (cancelled || err || !data) return;
+        const joined = data.map(r => (r as { staff_id: string }).staff_id);
+        // Keep the legacy staff_id first so it remains "primary" after
+        // a no-op edit (user opens the form, hits save without changes).
+        const ordered = initial.staff_id
+          ? [initial.staff_id, ...joined.filter(id => id !== initial.staff_id)]
+          : joined;
+        setStaffIds(ordered);
+      });
+    return () => { cancelled = true; };
+  }, [initial?.id, initial?.staff_id]);
 
   function set(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -70,17 +103,69 @@ export default function PatientForm({ initial, onSave, onCancel }: Props) {
     const payload = {
       ...form,
       coordinator_id: form.coordinator_id || null,
-      staff_id:       form.staff_id || null,
+      // First selected = primary (kept for legacy reads). null when none.
+      staff_id:       staffIds[0] ?? null,
       housing_type:   form.housing_type || null,
       marital_status: form.marital_status || null,
     };
 
-    const { error: err } = initial?.id
-      ? await supabase.from('patients').update(payload).eq('id', initial.id)
-      : await supabase.from('patients').insert(payload);
+    // 1. Upsert the patient row.
+    let patientId: string | null = initial?.id ?? null;
+    if (initial?.id) {
+      const { error: err } = await supabase
+        .from('patients').update(payload).eq('id', initial.id);
+      if (err) { setSaving(false); setError(err.message); return; }
+    } else {
+      const { data, error: err } = await supabase
+        .from('patients').insert(payload).select('id').single();
+      if (err || !data) {
+        setSaving(false);
+        setError(err?.message ?? 'שגיאה ביצירת המטופלת');
+        return;
+      }
+      patientId = (data as { id: string }).id;
+    }
+
+    // 2. Sync staff_patients (insert added, delete removed).
+    if (patientId) {
+      // Fetch what's currently linked so we only touch the diff.
+      const { data: existing } = await supabase
+        .from('staff_patients')
+        .select('staff_id')
+        .eq('patient_id', patientId);
+      const existingIds = new Set(((existing ?? []) as { staff_id: string }[]).map(r => r.staff_id));
+      const targetIds   = new Set(staffIds);
+
+      const toInsert = [...targetIds].filter(id => !existingIds.has(id));
+      const toDelete = [...existingIds].filter(id => !targetIds.has(id));
+
+      if (toInsert.length > 0) {
+        const { error: insErr } = await supabase
+          .from('staff_patients')
+          .insert(toInsert.map(sid => ({ staff_id: sid, patient_id: patientId })));
+        // Non-fatal — the patient row already saved. Surface so the
+        // user can retry, but don't roll the patient back.
+        if (insErr) {
+          setSaving(false);
+          setError(`המטופלת נשמרה, אבל לא הצלחתי לקשר את כל אנשי הצוות: ${insErr.message}`);
+          return;
+        }
+      }
+      if (toDelete.length > 0) {
+        const { error: delErr } = await supabase
+          .from('staff_patients')
+          .delete()
+          .eq('patient_id', patientId)
+          .in('staff_id', toDelete);
+        if (delErr) {
+          setSaving(false);
+          setError(`המטופלת נשמרה, אבל לא הצלחתי להסיר חלק מהקישורים הישנים: ${delErr.message}`);
+          return;
+        }
+      }
+    }
 
     setSaving(false);
-    if (err) { setError(err.message); return; }
     onSave();
   }
 
@@ -135,8 +220,19 @@ export default function PatientForm({ initial, onSave, onCancel }: Props) {
         {/* 4. Team */}
         <FormGroup title="שיוך לצוות">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <SelectField label="רכזת אחראית" value={form.coordinator_id} onChange={v => set('coordinator_id', v)} options={staffOptions} placeholder="בחרי רכזת..." />
-            <SelectField label="איש צוות אחראי" value={form.staff_id} onChange={v => set('staff_id', v)} options={staffOptions} placeholder="בחרי איש צוות..." />
+            <SelectField
+              label="רכזת אחראית"
+              value={form.coordinator_id}
+              onChange={v => set('coordinator_id', v)}
+              options={staffOptions}
+              placeholder="בחרי רכזת..."
+            />
+            <StaffMultiSelect
+              label="אנשי צוות אחראים"
+              value={staffIds}
+              options={staffList}
+              onChange={setStaffIds}
+            />
           </div>
         </FormGroup>
 
@@ -187,5 +283,191 @@ export default function PatientForm({ initial, onSave, onCancel }: Props) {
         </button>
       </div>
     </form>
+  );
+}
+
+/* ── Multi-select for staff assignments ─────────────────────────────
+ *
+ * Local to PatientForm because there's no shared component for this
+ * pattern yet. Renders as:
+ *   - a row of chips for the currently-selected staff (first = primary,
+ *     subtle marker; × button per chip removes it)
+ *   - a "open list" button that toggles a checkbox panel underneath
+ *
+ * Order matters — index 0 is what gets written to patients.staff_id.
+ * Reordering by drag would be nice; today the user can re-pick to
+ * change "primary" (clearing and re-adding promotes the new one).
+ * ─────────────────────────────────────────────────────────────────── */
+
+function StaffMultiSelect({
+  label, value, options, onChange,
+}: {
+  label:   string;
+  value:   string[];
+  options: StaffOpt[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Close on click outside.
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const byId = useMemo(() => {
+    const m = new Map<string, StaffOpt>();
+    for (const s of options) m.set(s.id, s);
+    return m;
+  }, [options]);
+
+  function toggle(id: string) {
+    onChange(
+      value.includes(id)
+        ? value.filter(v => v !== id)
+        : [...value, id],
+    );
+  }
+
+  function remove(id: string) {
+    onChange(value.filter(v => v !== id));
+  }
+
+  return (
+    <div ref={rootRef} style={{ position: 'relative' }}>
+      <label style={{
+        display: 'block', fontSize: 12, fontWeight: 500,
+        color: '#475569', marginBottom: 6,
+      }}>
+        {label}
+      </label>
+
+      {/* Trigger area: chips + open button */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          minHeight: 38, padding: '6px 10px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E8ECF0', borderRadius: 9,
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
+          cursor: 'pointer', fontSize: 13,
+        }}
+      >
+        {value.length === 0 ? (
+          <span style={{ color: '#94A3B8' }}>בחרי אנשי צוות...</span>
+        ) : (
+          value.map((id, i) => {
+            const s = byId.get(id);
+            const name = s?.full_name ?? '(לא נמצא)';
+            const isPrimary = i === 0;
+            return (
+              <span
+                key={id}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '3px 8px 3px 4px',
+                  borderRadius: 14,
+                  backgroundColor: isPrimary ? '#F0FDF9' : '#F8FAFC',
+                  color: isPrimary ? '#0D9488' : '#475569',
+                  border: `1px solid ${isPrimary ? '#99F6E4' : '#E8ECF0'}`,
+                  fontSize: 12, fontWeight: 500,
+                }}
+                title={isPrimary ? 'איש הצוות הראשי — נשמר ב-staff_id של המטופלת' : ''}
+              >
+                {name}
+                {isPrimary && (
+                  <span style={{ fontSize: 10, opacity: 0.8 }}>· ראשי</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => remove(id)}
+                  aria-label={`הסר ${name}`}
+                  style={{
+                    width: 16, height: 16, borderRadius: '50%',
+                    border: 'none', background: 'rgba(0,0,0,0.06)',
+                    color: 'inherit', fontSize: 11, lineHeight: 1,
+                    cursor: 'pointer', display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })
+        )}
+        <span style={{
+          marginInlineStart: 'auto', fontSize: 11, color: '#94A3B8',
+        }}>
+          {open ? '▴' : '▾'}
+        </span>
+      </div>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', insetInlineStart: 0, insetInlineEnd: 0,
+          marginTop: 4, zIndex: 20,
+          backgroundColor: '#FFFFFF', borderRadius: 9,
+          border: '1px solid #E8ECF0',
+          boxShadow: '0 6px 24px rgba(15, 23, 42, 0.10)',
+          maxHeight: 240, overflowY: 'auto',
+        }}>
+          {options.length === 0 ? (
+            <div style={{ padding: 14, fontSize: 12, color: '#94A3B8' }}>
+              אין אנשי צוות במערכת.
+            </div>
+          ) : (
+            options.map((s, i) => {
+              const checked = value.includes(s.id);
+              return (
+                <label
+                  key={s.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '8px 12px', cursor: 'pointer',
+                    borderBottom: i < options.length - 1 ? '1px solid #F1F5F9' : 'none',
+                    backgroundColor: checked ? '#F0FDF9' : '#FFFFFF',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(s.id)}
+                    style={{ flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: '#1A2332', flex: 1 }}>
+                    {s.full_name}
+                  </span>
+                  {s.role && (
+                    <span style={{
+                      fontSize: 11, color: '#64748B',
+                      padding: '2px 8px', borderRadius: 12,
+                      backgroundColor: '#F1F5F9',
+                    }}>
+                      {s.role}
+                    </span>
+                  )}
+                </label>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      <p style={{
+        fontSize: 11, color: '#94A3B8', margin: '5px 2px 0', lineHeight: 1.4,
+      }}>
+        ניתן לבחור כמה אנשי צוות. הראשון בסדר ייחשב לאיש צוות הראשי.
+      </p>
+    </div>
   );
 }
