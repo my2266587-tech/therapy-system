@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import RecordingForm from '@/components/recordings/RecordingForm';
 import RecordingWidget from '@/components/recordings/RecordingWidget';
+import RecordingUploadWidget from '@/components/recordings/RecordingUploadWidget';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
@@ -227,10 +228,16 @@ function RecordingsInner() {
           </div>
         </div>
 
-        {/* Recording widget — primary capture entry. The rest of the
-            pipeline (upload → transcribe → AI → draft) hooks in later. */}
-        <div style={{ marginBottom: 16 }}>
+        {/* Capture entries — live recording in the browser OR uploading
+            an existing audio file (e.g. Zoom audio-only export). Both
+            end with a row in `recordings` ready for the same downstream
+            pipeline (transcribe → AI → draft). */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: 14, marginBottom: 16,
+        }}>
           <RecordingWidget onSaved={() => load()} />
+          <RecordingUploadWidget onSaved={() => load()} />
         </div>
 
         {/* Pipeline note */}
