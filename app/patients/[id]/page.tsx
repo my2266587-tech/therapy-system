@@ -9,6 +9,7 @@ import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
 import SummaryDetailCard from '@/components/summaries/SummaryDetailCard';
 import PatientForm from '@/components/patients/PatientForm';
+import RecordingUploadWidget from '@/components/recordings/RecordingUploadWidget';
 import {
   housingTypeLabels, maritalStatusLabels,
 } from '@/lib/labels';
@@ -24,7 +25,7 @@ const C = {
   shadow: '0 1px 4px rgba(0,0,0,0.05)',
 };
 
-const TABS = ['פרטים', 'פגישות', 'סיכומי פגישות', 'מסמכים', 'משימות', 'הערות'] as const;
+const TABS = ['פרטים', 'פגישות', 'סיכומי פגישות', 'סיכומי זום', 'מסמכים', 'משימות', 'הערות'] as const;
 type Tab = typeof TABS[number];
 
 const STATUS_STYLE: Record<string, { label: string; bg: string; text: string; border: string }> = {
@@ -267,6 +268,7 @@ export default function PatientDetailPage() {
             {activeTab === 'פרטים'          && <DetailsTab patient={patient} />}
             {activeTab === 'פגישות'         && <SessionsTab sessions={sessions} />}
             {activeTab === 'סיכומי פגישות'  && <SummariesTab summaries={summaries} onOpen={setOpenSummary} />}
+            {activeTab === 'סיכומי זום'     && <ZoomTab patientId={patient.id} patientName={patient.full_name} recordings={recordings} summaries={summaries} onUploaded={load} />}
             {activeTab === 'מסמכים'         && <DocumentsTab patientId={patient.id} patientName={patient.full_name} />}
             {activeTab === 'משימות'         && <ComingSoon label="משימות" />}
             {activeTab === 'הערות'          && <NotesTab notes={patient.notes} />}
@@ -630,6 +632,156 @@ function SummariesTab({ summaries, onOpen }: { summaries: SessionSummary[]; onOp
 
 /* SummaryDetail moved to components/summaries/SummaryDetailCard.tsx —
  * shared with the summaries list page. */
+
+/* ── Zoom-recordings tab ────────────────────────────────────────────
+ *
+ * Upload audio files (Zoom .m4a being the common case) directly from
+ * the patient's card, and see every recording already attached to this
+ * patient. We don't re-implement the transcribe/AI pipeline here —
+ * after upload the row sits in `recordings` exactly like any other
+ * recording, and the global /recordings page exposes the
+ * "הפק סיכום מהקלטה" button. The deep-link sends the user there with
+ * the patient filter already applied so the relevant row is on screen.
+ * ─────────────────────────────────────────────────────────────────── */
+
+const ZOOM_REC_STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+  pending:      { label: 'ממתין לתמלול', bg: '#FFFBEB', text: '#92400E', border: '#FDE68A', dot: '#F59E0B' },
+  transcribing: { label: 'בתמלול',       bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8' },
+  transcribed:  { label: 'תומלל',        bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4', dot: '#0D9488' },
+  draft_ready:  { label: 'נוצר סיכום',   bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE', dot: '#4F46E5' },
+  approved:     { label: 'אושר',         bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0', dot: '#16A34A' },
+  failed:       { label: 'שגיאה',        bg: '#FEF2F2', text: '#DC2626', border: '#FECACA', dot: '#DC2626' },
+};
+
+function ZoomTab({
+  patientId, patientName, recordings, summaries, onUploaded,
+}: {
+  patientId:   string;
+  patientName: string;
+  recordings:  Recording[];
+  summaries:   SessionSummary[];
+  onUploaded:  () => void;
+}) {
+  // Quick lookup: does a given recording already have a linked summary?
+  // We use it to swap the per-row link target between /recordings (run
+  // the pipeline) and /summaries (read the result).
+  const recordingHasSummary = new Set(
+    summaries
+      .map(s => s.session_id)
+      .filter((id): id is string => !!id),
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <RecordingUploadWidget
+        title="העלאת קובץ הקלטה (זום, Teams וכו׳)"
+        lockedPatientId={patientId}
+        lockedPatientName={patientName}
+        onSaved={onUploaded}
+      />
+
+      <div>
+        <h3 style={{
+          fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 10px',
+          textTransform: 'uppercase', letterSpacing: '0.07em',
+        }}>
+          הקלטות של {patientName}
+        </h3>
+
+        {recordings.length === 0 ? (
+          <div style={{
+            padding: '28px 16px', textAlign: 'center',
+            backgroundColor: '#FAFBFD', borderRadius: 12,
+            border: `1px dashed ${C.border}`, color: C.muted, fontSize: 13,
+          }}>
+            עדיין לא הועלו הקלטות. השתמשי בכפתור למעלה כדי להעלות
+            קובץ Zoom או מקור אחר.
+          </div>
+        ) : (
+          <div style={{
+            backgroundColor: C.card, borderRadius: 12,
+            border: `1px solid ${C.border}`, overflow: 'hidden',
+          }}>
+            {recordings.map((r, i) => {
+              const st = ZOOM_REC_STATUS[r.status] ?? ZOOM_REC_STATUS.pending;
+              const hasSummary = !!r.summary_id || recordingHasSummary.has(r.id);
+              const dur = r.duration_seconds != null
+                ? `${Math.floor(r.duration_seconds / 60)}:${String(r.duration_seconds % 60).padStart(2, '0')}`
+                : null;
+
+              return (
+                <div key={r.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '12px 16px',
+                  borderTop: i === 0 ? 'none' : `1px solid #F1F5F9`,
+                }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                    backgroundColor: '#F0FDF9', border: '1px solid #99F6E4',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: C.accent, fontSize: 15,
+                  }}>
+                    🎙
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <DateDisplay date={r.recorded_at} size="sm" />
+                    {r.transcript_text || r.transcript ? (
+                      <p style={{
+                        fontSize: 12, color: C.sub, margin: '4px 0 0',
+                        lineHeight: 1.45, display: '-webkit-box',
+                        WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}>
+                        {r.transcript_text ?? r.transcript}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {dur && (
+                    <span style={{
+                      fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums',
+                      flexShrink: 0,
+                    }}>
+                      {dur}
+                    </span>
+                  )}
+
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '3px 10px', borderRadius: 16,
+                    fontSize: 11, fontWeight: 500,
+                    backgroundColor: st.bg, color: st.text,
+                    border: `1px solid ${st.border}`, flexShrink: 0,
+                  }}>
+                    <span style={{
+                      width: 5, height: 5, borderRadius: '50%',
+                      backgroundColor: st.dot, display: 'inline-block',
+                    }} />
+                    {st.label}
+                  </span>
+
+                  <Link
+                    href={hasSummary ? '/summaries' : '/recordings'}
+                    style={{
+                      fontSize: 12, fontWeight: 600, color: C.accent,
+                      textDecoration: 'none', flexShrink: 0,
+                      padding: '5px 10px', borderRadius: 7,
+                      border: `1px solid ${C.accentRim}`,
+                      backgroundColor: C.accentSub,
+                    }}
+                  >
+                    {hasSummary ? 'פתח סיכום ←' : 'הפק סיכום ←'}
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function MetaItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (

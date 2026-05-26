@@ -53,11 +53,22 @@ interface PatientOption { id: string; full_name: string }
 interface Props {
   onSaved?: (recordingId: string) => void;
   title?: string;
+  /**
+   * When the widget is rendered inside a patient's card, the patient is
+   * already determined by the page context — passing the id here hides
+   * the picker and pins uploads to that patient. Omit to render the
+   * standalone picker variant (used on /recordings).
+   */
+  lockedPatientId?: string;
+  /** Used only for display next to the locked-patient indicator. */
+  lockedPatientName?: string;
 }
 
 const ACCEPT_ATTR = '.m4a,.mp3,.wav,.ogg,.webm,.mp4,audio/*';
 
-export default function RecordingUploadWidget({ onSaved, title }: Props) {
+export default function RecordingUploadWidget({
+  onSaved, title, lockedPatientId, lockedPatientName,
+}: Props) {
   const [state,    setState]    = useState<UploadState>('idle');
   const [file,     setFile]     = useState<File | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -65,20 +76,26 @@ export default function RecordingUploadWidget({ onSaved, title }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error,    setError]    = useState<string | null>(null);
   const [patients, setPatients] = useState<PatientOption[]>([]);
-  const [patientId, setPatientId] = useState<string>('');
+  const [patientId, setPatientId] = useState<string>(lockedPatientId ?? '');
   const [savedRecordingId, setSavedRecordingId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  /* ── load active patients ─────────────────────────────────────── */
+  /* ── load active patients (skipped in locked-patient mode) ─────── */
   useEffect(() => {
+    if (lockedPatientId) return;
     supabase
       .from('patients')
       .select('id, full_name, status')
       .neq('status', 'inactive')
       .order('full_name')
       .then(({ data }) => setPatients((data ?? []) as PatientOption[]));
-  }, []);
+  }, [lockedPatientId]);
+
+  /* ── keep state in sync when the host changes the locked patient ── */
+  useEffect(() => {
+    if (lockedPatientId) setPatientId(lockedPatientId);
+  }, [lockedPatientId]);
 
   /* ── cleanup preview URL on unmount / replacement ──────────────── */
   useEffect(() => () => {
@@ -217,31 +234,47 @@ export default function RecordingUploadWidget({ onSaved, title }: Props) {
           {title ?? 'העלאת הקלטה קיימת'}
         </p>
 
-        <label style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          fontSize: 12, color: C.sub,
-        }}>
-          <span style={{ flexShrink: 0 }}>מטופלת:</span>
-          <select
-            value={patientId}
-            onChange={e => setPatientId(e.target.value)}
-            disabled={isUploading}
-            style={{
-              minWidth: 180, padding: '6px 10px', borderRadius: 8,
-              border: `1px solid ${patientId ? C.accentRim : C.border}`,
-              backgroundColor: patientId ? C.accentSub : C.card,
-              color: patientId ? C.accent : C.sub,
-              fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
-              cursor: isUploading ? 'not-allowed' : 'pointer',
-              outline: 'none',
-            }}
-          >
-            <option value="">— בחרי מטופלת —</option>
-            {patients.map(p => (
-              <option key={p.id} value={p.id}>{p.full_name}</option>
-            ))}
-          </select>
-        </label>
+        {lockedPatientId ? (
+          // The host card already shows the patient — render a compact
+          // confirmation chip instead of repeating the picker.
+          lockedPatientName ? (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderRadius: 16,
+              backgroundColor: C.accentSub, color: C.accent,
+              border: `1px solid ${C.accentRim}`,
+              fontSize: 12, fontWeight: 500,
+            }}>
+              {lockedPatientName}
+            </span>
+          ) : null
+        ) : (
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            fontSize: 12, color: C.sub,
+          }}>
+            <span style={{ flexShrink: 0 }}>מטופלת:</span>
+            <select
+              value={patientId}
+              onChange={e => setPatientId(e.target.value)}
+              disabled={isUploading}
+              style={{
+                minWidth: 180, padding: '6px 10px', borderRadius: 8,
+                border: `1px solid ${patientId ? C.accentRim : C.border}`,
+                backgroundColor: patientId ? C.accentSub : C.card,
+                color: patientId ? C.accent : C.sub,
+                fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
+                cursor: isUploading ? 'not-allowed' : 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="">— בחרי מטופלת —</option>
+              {patients.map(p => (
+                <option key={p.id} value={p.id}>{p.full_name}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {/* Idle — file picker */}
