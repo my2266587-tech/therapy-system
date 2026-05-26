@@ -17,6 +17,7 @@ import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import StaffForm from '@/components/staff/StaffForm';
+import DocumentPreviewModal from '@/components/ui/DocumentPreviewModal';
 import { STAFF_ROLE_STYLE } from '@/lib/staffRoles';
 import { formatGregorian, PRESETS } from '@/lib/dateUtils';
 import type { StaffMember, StaffDocumentWithUrl } from '@/types';
@@ -571,6 +572,7 @@ function DocumentsTab({
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<StaffDocumentWithUrl | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const upload = useCallback(async (file: File) => {
@@ -737,20 +739,19 @@ function DocumentsTab({
                     {doc.file_size != null && ` · ${formatBytes(doc.file_size)}`}
                   </p>
                 </div>
-                <a
-                  href={doc.url || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={e => { if (!doc.url) e.preventDefault(); }}
+                <button
+                  onClick={() => { if (doc.url) setPreviewDoc(doc); }}
+                  disabled={!doc.url}
+                  title={doc.url ? 'פתיחה בתצוגת חלון בתוך המערכת' : ''}
                   style={{
                     flexShrink: 0, padding: '7px 12px', borderRadius: 8,
                     fontSize: 12, fontWeight: 600, color: C.accent,
                     backgroundColor: C.accentSub, border: `1px solid ${C.accentRim}`,
-                    textDecoration: 'none', cursor: doc.url ? 'pointer' : 'not-allowed',
+                    cursor: doc.url ? 'pointer' : 'not-allowed',
                   }}
                 >
                   פתח
-                </a>
+                </button>
                 <button
                   onClick={() => remove(doc)}
                   disabled={isDeleting}
@@ -768,6 +769,14 @@ function DocumentsTab({
           })}
         </div>
       )}
+
+      <DocumentPreviewModal
+        open={previewDoc !== null}
+        onClose={() => setPreviewDoc(null)}
+        url={previewDoc?.url ?? ''}
+        fileName={previewDoc?.file_name ?? ''}
+        mimeType={previewDoc?.mime_type ?? null}
+      />
     </div>
   );
 }
