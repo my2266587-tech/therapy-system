@@ -10,7 +10,7 @@
  *   - No multi-select, no ZIP, no per-staff exports.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 const C = {
@@ -26,6 +26,20 @@ const HEB_MONTHS = [
   'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
 ];
 
+interface HistoryRun {
+  id:             string;
+  year:           number;
+  month:          number;
+  generated_at:   string;
+  generated_by:   string | null;
+  status:         string;
+  sessions_count: number | null;
+  days_covered:   number | null;
+  file_name:      string | null;
+  error_message:  string | null;
+  download_url:   string | null;
+}
+
 type Status =
   | { kind: 'idle' }
   | { kind: 'pending' }
@@ -39,6 +53,28 @@ export default function MonthlyReportsPage() {
   const [year,  setYear]  = useState(prev.getFullYear());
   const [month, setMonth] = useState(prev.getMonth() + 1);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const [history, setHistory] = useState<HistoryRun[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setHistoryLoading(false); return; }
+      const res = await fetch('/api/reports/monthly-excel/history?limit=20', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setHistory((j?.runs ?? []) as HistoryRun[]);
+      }
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
 
   const yearOptions = useMemo(() => {
     const y = now.getFullYear();
@@ -101,10 +137,13 @@ export default function MonthlyReportsPage() {
         kind:    'done',
         message: `הקובץ הורד · ${sessions} פגישות · ${days} ימים`,
       });
+      // Pick up the new history row that was just written server-side.
+      // 1s lag is enough for the archive write to land.
+      setTimeout(() => { loadHistory(); }, 1000);
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message });
     }
-  }, [status.kind, year, month]);
+  }, [status.kind, year, month, loadHistory]);
 
   const running = status.kind === 'pending';
 
@@ -165,6 +204,8 @@ export default function MonthlyReportsPage() {
             {running ? 'מפיק דוח...' : 'הפק דוח'}
           </button>
         </div>
+
+        <HistoryList runs={history} loading={historyLoading} />
 
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -251,6 +292,140 @@ function Spinner() {
       display: 'inline-block',
     }} />
   );
+}
+
+/* ── History ──────────────────────────────────────────────────────── */
+
+function HistoryList({ runs, loading }: { runs: HistoryRun[]; loading: boolean }) {
+  return (
+    <div style={{ marginTop: 32 }}>
+      <h2 style={{
+        fontSize: 11, fontWeight: 600, color: C.muted,
+        margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.07em',
+      }}>
+        היסטוריית דוחות שהופקו
+      </h2>
+
+      {loading ? (
+        <div style={{
+          padding: '14px 16px', fontSize: 12, color: C.muted,
+          backgroundColor: C.card, borderRadius: 10,
+          border: `1px solid ${C.border}`,
+        }}>
+          טוען היסטוריה...
+        </div>
+      ) : runs.length === 0 ? (
+        <div style={{
+          padding: '20px 16px', textAlign: 'center', fontSize: 13, color: C.muted,
+          backgroundColor: '#FAFBFD', borderRadius: 10,
+          border: `1px dashed ${C.border}`,
+        }}>
+          עוד לא הופקו דוחות. הדוח הראשון ייכנס לכאן אחרי הלחיצה על
+          "הפק דוח" או אחרי ה-cron של 1 בחודש.
+        </div>
+      ) : (
+        <div style={{
+          backgroundColor: C.card, borderRadius: 10,
+          border: `1px solid ${C.border}`, overflow: 'hidden',
+        }}>
+          {runs.map((r, i) => (
+            <HistoryRow key={r.id} run={r} isLast={i === runs.length - 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryRow({ run, isLast }: { run: HistoryRun; isLast: boolean }) {
+  const isCron     = run.generated_by === 'cron';
+  const isFailed   = run.status !== 'success';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '11px 14px',
+      borderBottom: isLast ? 'none' : '1px solid #F1F5F9',
+      backgroundColor: isFailed ? '#FEF7F7' : C.card,
+    }}>
+      {/* Month label */}
+      <div style={{ minWidth: 110, flexShrink: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: 0 }}>
+          {HEB_MONTHS[run.month - 1]} {run.year}
+        </p>
+        <p style={{ fontSize: 11, color: C.muted, margin: '2px 0 0' }}>
+          {formatRunDate(run.generated_at)}
+        </p>
+      </div>
+
+      {/* Stats */}
+      <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.sub }}>
+        {isFailed ? (
+          <span style={{ color: '#DC2626' }}>
+            ⚠ {run.error_message ?? 'שגיאה לא ידועה'}
+          </span>
+        ) : (
+          <>
+            {run.sessions_count != null && (
+              <>
+                <span style={{ fontWeight: 500, color: C.text }}>{run.sessions_count}</span>
+                <span style={{ color: C.muted }}> סיכומים</span>
+              </>
+            )}
+            {run.days_covered != null && (
+              <>
+                <span style={{ color: C.muted, marginInline: 6 }}>·</span>
+                <span style={{ fontWeight: 500, color: C.text }}>{run.days_covered}</span>
+                <span style={{ color: C.muted }}> ימים</span>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Source chip */}
+      <span style={{
+        flexShrink: 0, fontSize: 11, fontWeight: 500,
+        padding: '3px 9px', borderRadius: 12,
+        backgroundColor: isCron ? '#EEF2FF' : C.accentSub,
+        color:           isCron ? '#4F46E5' : C.accent,
+        border:  `1px solid ${isCron ? '#C7D2FE' : C.accentRim}`,
+      }}>
+        {isCron ? 'אוטומטי' : 'ידני'}
+      </span>
+
+      {/* Download — only when storage_path exists (signed URL minted server-side) */}
+      {run.download_url ? (
+        <a
+          href={run.download_url}
+          download={run.file_name ?? undefined}
+          style={{
+            flexShrink: 0, fontSize: 12, fontWeight: 600, color: C.accent,
+            padding: '5px 11px', borderRadius: 7,
+            backgroundColor: C.accentSub, border: `1px solid ${C.accentRim}`,
+            textDecoration: 'none',
+          }}
+        >
+          ↓ הורד
+        </a>
+      ) : (
+        <span style={{
+          flexShrink: 0, fontSize: 11, color: C.muted,
+          padding: '5px 11px',
+        }}>
+          —
+        </span>
+      )}
+    </div>
+  );
+}
+
+function formatRunDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return iso; }
 }
 
 /* ── helpers ──────────────────────────────────────────────────────── */

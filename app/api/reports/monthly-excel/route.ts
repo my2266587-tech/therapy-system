@@ -43,6 +43,7 @@ import { createServerClient } from '@/lib/supabaseServer';
 import { buildMonthlyReport } from '@/lib/reports/buildFromTemplate';
 import { fetchMonthlySessions } from '@/lib/reports/fetchMonthlySessions';
 import { getPreviousMonth } from '@/lib/reports/previousMonth';
+import { archiveMonthlyReport } from '@/lib/reports/archive';
 
 export const maxDuration = 60;
 
@@ -112,6 +113,18 @@ export async function POST(req: NextRequest) {
       sessions: fetched.sessions,
       year,
       month,
+    });
+
+    // Archive + audit (best-effort, internal-only).
+    await archiveMonthlyReport({
+      supabase,
+      year,
+      month,
+      buffer:        result.buffer,
+      fileName:      result.fileName,
+      generatedBy:   'cron',
+      sessionsCount: result.stats.sessionCount,
+      daysCovered:   result.stats.daysCovered,
     });
 
     // 5. Send the single attachment.

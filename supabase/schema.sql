@@ -500,3 +500,69 @@ begin
   end loop;
 end;
 $$;
+
+-- ── Monthly report run history ───────────────────────────────────────────────
+-- One row per successful (or failed) production of the monthly Excel report.
+-- Drives the "history" list on /reports/monthly so the clinic can see what
+-- was already produced, by whom, and re-download a past file. Each run
+-- generates a fresh row — same month produced twice = two rows, intentional.
+create table if not exists report_runs (
+  id              uuid primary key default gen_random_uuid(),
+  year            integer not null,
+  month           integer not null check (month between 1 and 12),
+  generated_at    timestamptz not null default now(),
+  -- 'cron' for the monthly schedule, otherwise the user's email or id.
+  -- Free-text on purpose — we don't FK to authorized_users because the
+  -- cron has no user identity.
+  generated_by    text,
+  status          text not null check (status in ('success','failed')) default 'success',
+  sessions_count  integer,
+  days_covered    integer,
+  file_name       text,
+  -- Storage path inside the monthly-reports bucket. Null for failed runs.
+  storage_path    text,
+  error_message   text,
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists idx_report_runs_year_month
+  on report_runs (year desc, month desc, generated_at desc);
+
+-- Storage bucket for the archived xlsx files. Private — accessed via short
+-- signed URLs minted by the history endpoint.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'monthly-reports',
+  'monthly-reports',
+  false,
+  20971520,   -- 20 MB (room to grow; current files are ~17 KB)
+  array['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+)
+on conflict (id) do update
+set public             = excluded.public,
+    file_size_limit    = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+-- Storage policies — defense-in-depth (the API route uses service_role).
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname = 'monthly_reports_authenticated_read'
+  ) then
+    create policy monthly_reports_authenticated_read
+      on storage.objects for select to authenticated
+      using (bucket_id = 'monthly-reports');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname = 'monthly_reports_authenticated_write'
+  ) then
+    create policy monthly_reports_authenticated_write
+      on storage.objects for insert to authenticated
+      with check (bucket_id = 'monthly-reports');
+  end if;
+end $$;

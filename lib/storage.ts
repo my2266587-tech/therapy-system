@@ -12,6 +12,8 @@ export const BUCKETS = {
   staffDocuments: 'staff-documents',
   /** Audio captured by RecordingWidget. Private. */
   recordings: 'recordings',
+  /** Archived xlsx of every monthly report production. Private. */
+  monthlyReports: 'monthly-reports',
 } as const;
 
 export const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour

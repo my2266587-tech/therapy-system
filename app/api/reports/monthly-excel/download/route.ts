@@ -29,6 +29,7 @@ import { createServerClient } from '@/lib/supabaseServer';
 import { getAuthorizedUser } from '@/lib/getAdminUser';
 import { buildMonthlyReport } from '@/lib/reports/buildFromTemplate';
 import { fetchMonthlySessions } from '@/lib/reports/fetchMonthlySessions';
+import { archiveMonthlyReport } from '@/lib/reports/archive';
 
 export const maxDuration = 60;
 
@@ -57,6 +58,20 @@ export async function GET(req: NextRequest) {
       year,
       month,
     });
+
+    // Archive a copy + record the run for /reports/monthly history.
+    // Fire-and-forget — the user's download must not wait on it, and
+    // any failure is logged but never blocks the response.
+    archiveMonthlyReport({
+      supabase,
+      year,
+      month,
+      buffer:        result.buffer,
+      fileName:      result.fileName,
+      generatedBy:   user.email ?? user.id ?? null,
+      sessionsCount: result.stats.sessionCount,
+      daysCovered:   result.stats.daysCovered,
+    }).catch(err => console.warn('[monthly-report-download] archive failed:', err));
 
     return new NextResponse(result.buffer as unknown as BodyInit, {
       headers: {
