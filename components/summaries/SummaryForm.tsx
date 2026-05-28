@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import FormGroup from '@/components/ui/FormGroup';
-import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
+import { Field, SelectField } from '@/components/ui/FormField';
+import DictatedTextarea from '@/components/ui/DictatedTextarea';
 import type { SessionSummary } from '@/types';
 type PatientOpt = { id: string; full_name: string };
 type SessionOpt = { id: string; date: string; start_time: string };
@@ -92,19 +93,19 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
 
       <FormGroup title="תוכן הפגישה">
         <div className="space-y-3">
-          <TextareaField label="מצב נוכחי" value={form.current_state} onChange={v => set('current_state', v)} rows={2} />
-          <TextareaField label="נושאים חשובים שעלו" value={form.main_topics} onChange={v => set('main_topics', v)} rows={2} />
-          <TextareaField label="מה עשינו בטיפול" value={form.treatment_actions} onChange={v => set('treatment_actions', v)} rows={2} />
-          <TextareaField label="עם מה מתחילים בפגישה הבאה" value={form.next_steps} onChange={v => set('next_steps', v)} rows={2} />
+          <DictatedTextarea label="מצב נוכחי" value={form.current_state} onChange={v => set('current_state', v)} rows={2} />
+          <DictatedTextarea label="נושאים חשובים שעלו" value={form.main_topics} onChange={v => set('main_topics', v)} rows={2} />
+          <DictatedTextarea label="מה עשינו בטיפול" value={form.treatment_actions} onChange={v => set('treatment_actions', v)} rows={2} />
+          <DictatedTextarea label="עם מה מתחילים בפגישה הבאה" value={form.next_steps} onChange={v => set('next_steps', v)} rows={2} />
         </div>
       </FormGroup>
 
       <FormGroup title="מעקב ומשימות">
         <div className="space-y-3">
-          <TextareaField label="משימות שקיבלה" value={form.tasks_given} onChange={v => set('tasks_given', v)} rows={2} />
-          <TextareaField label="התקדמות" value={form.progress} onChange={v => set('progress', v)} rows={2} />
-          <TextareaField label="קושי בהתקדמות" value={form.difficulties} onChange={v => set('difficulties', v)} rows={2} />
-          <TextareaField label="הערות נוספות" value={form.notes} onChange={v => set('notes', v)} rows={2} />
+          <DictatedTextarea label="משימות שקיבלה" value={form.tasks_given} onChange={v => set('tasks_given', v)} rows={2} />
+          <DictatedTextarea label="התקדמות" value={form.progress} onChange={v => set('progress', v)} rows={2} />
+          <DictatedTextarea label="קושי בהתקדמות" value={form.difficulties} onChange={v => set('difficulties', v)} rows={2} />
+          <DictatedTextarea label="הערות נוספות" value={form.notes} onChange={v => set('notes', v)} rows={2} />
         </div>
       </FormGroup>
 
