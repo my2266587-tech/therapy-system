@@ -229,7 +229,7 @@ export default function DictatedTextarea({
             ...fieldBase,
             resize: 'none',
             // Leave room for the mic button at the start (RTL → right side).
-            paddingInlineStart: supported ? 44 : 12,
+            paddingInlineStart: supported ? 50 : 12,
           }}
           onFocus={e => {
             e.target.style.borderColor = '#0F766E';
@@ -249,31 +249,40 @@ export default function DictatedTextarea({
             title={recording ? 'עצור הכתבה' : 'הכתב לטקסט (קליק)'}
             style={{
               position: 'absolute', top: 6, insetInlineStart: 6,
-              width: 32, height: 32, borderRadius: 8,
-              border: `1px solid ${recording ? '#FECACA' : '#E2E8F0'}`,
-              backgroundColor: recording ? '#FEF2F2' : '#F8FAFC',
-              color: recording ? '#DC2626' : '#475569',
+              width: 36, height: 36, borderRadius: 10,
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
               cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.12s',
+              display: 'inline-flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: 2,
+              padding: 0,
+              boxShadow: recording
+                ? '0 2px 10px rgba(220,38,38,0.30)'
+                : '0 2px 6px rgba(220,38,38,0.18)',
+              transition: 'box-shadow 0.12s, transform 0.12s',
               animation: recording ? 'dictPulse 1.5s ease-in-out infinite' : undefined,
             }}
             onMouseEnter={e => {
               const el = e.currentTarget as HTMLElement;
               if (!recording) {
-                el.style.borderColor = '#99F6E4';
-                el.style.color = '#0D9488';
+                el.style.boxShadow = '0 3px 10px rgba(220,38,38,0.28)';
+                el.style.transform = 'translateY(-1px)';
               }
             }}
             onMouseLeave={e => {
               const el = e.currentTarget as HTMLElement;
               if (!recording) {
-                el.style.borderColor = '#E2E8F0';
-                el.style.color = '#475569';
+                el.style.boxShadow = '0 2px 6px rgba(220,38,38,0.18)';
+                el.style.transform = 'translateY(0)';
               }
             }}
           >
             <MicIcon />
+            <span style={{
+              width: 4, height: 4, borderRadius: '50%',
+              backgroundColor: '#DC2626', display: 'inline-block',
+            }} />
           </button>
         )}
       </div>
