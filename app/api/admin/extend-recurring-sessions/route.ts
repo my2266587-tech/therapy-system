@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     // copy whose computed date lands before today.
     const { data: source, error: srcErr } = await supabase
       .from('sessions')
-      .select('id, patient_id, date, start_time, end_time, status, notes, duration_minutes, is_travel, travel_distance_km, travel_cost')
+      .select('id, patient_id, date, start_time, end_time, status, notes, duration_minutes, is_travel, travel_mode, travel_distance_km, travel_cost')
       .in('status', ['planned', 'completed']);
     if (srcErr) throw new Error(`fetch source sessions: ${srcErr.message}`);
 
@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
       notes:              string | null;
       duration_minutes:   number | null;
       is_travel:          boolean;
+      travel_mode:        string | null;
       travel_distance_km: number | null;
       travel_cost:        number | null;
     };
@@ -115,6 +116,7 @@ export async function POST(req: NextRequest) {
         patient_id: string; date: string; start_time: string;
         end_time: string; notes: string | null; duration_minutes: number | null;
         is_travel: boolean | null;
+        travel_mode: string | null;
         travel_distance_km: number | null;
         travel_cost: number | null;
       };
@@ -135,10 +137,11 @@ export async function POST(req: NextRequest) {
           status:             'planned',
           notes:              row.notes,
           duration_minutes:   row.duration_minutes,
-          // Carry travel forward — home-visit patients usually stay on
-          // home visits; if the clinician swaps one to in-office, she
-          // can edit the individual occurrence.
+          // Carry travel forward — patients who require a taxi every
+          // week usually keep requiring it; if not, the clinician edits
+          // the individual occurrence.
           is_travel:          !!row.is_travel,
+          travel_mode:        row.travel_mode,
           travel_distance_km: row.travel_distance_km,
           travel_cost:        row.travel_cost,
         });

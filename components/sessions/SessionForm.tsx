@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
 import type { Session } from '@/types';
@@ -13,13 +13,18 @@ const STATUS_OPTIONS = [
   { value: 'no_show',   label: 'לא הגיעה' },
 ];
 
-/**
- * ILS reimbursement rate per traveled km. Israeli government rate at the
- * time of writing; update here if the rate changes. The form computes
- * travel_cost as distance × this rate and stores both columns so a future
- * rate change doesn't retroactively alter historical session costs.
- */
-const TRAVEL_RATE_ILS_PER_KM = 2.49;
+const TRAVEL_MODE_OPTIONS = [
+  { value: '',      label: 'ללא נסיעה' },
+  { value: 'taxi',  label: 'מונית' },
+  { value: 'bus',   label: 'אוטובוס' },
+  { value: 'other', label: 'אחר' },
+];
+
+export const TRAVEL_MODE_LABEL: Record<string, string> = {
+  taxi:  'מונית',
+  bus:   'אוטובוס',
+  other: 'אחר',
+};
 
 function calcDuration(start: string, end: string): number | null {
   if (!start || !end) return null;
@@ -27,12 +32,6 @@ function calcDuration(start: string, end: string): number | null {
   const [eh, em] = end.split(':').map(Number);
   const diff = (eh * 60 + em) - (sh * 60 + sm);
   return diff > 0 ? diff : null;
-}
-
-function calcTravelCost(km: string): number | null {
-  const n = Number(km);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.round(n * TRAVEL_RATE_ILS_PER_KM * 100) / 100;
 }
 
 interface Props { initial: Session | null; onSave: () => void; onCancel: () => void; }
@@ -46,10 +45,8 @@ export default function SessionForm({ initial, onSave, onCancel }: Props) {
     end_time:    initial?.end_time    ?? '',
     status:      initial?.status      ?? 'planned',
     notes:       initial?.notes       ?? '',
-    is_travel:   initial?.is_travel   ?? false,
-    travel_distance_km: initial?.travel_distance_km != null
-      ? String(initial.travel_distance_km)
-      : '',
+    travel_mode: initial?.travel_mode ?? '',
+    travel_cost: initial?.travel_cost != null ? String(initial.travel_cost) : '',
   });
   const [patients, setPatients] = useState<PatientOpt[]>([]);
   const [saving,   setSaving]   = useState(false);
@@ -64,10 +61,7 @@ export default function SessionForm({ initial, onSave, onCancel }: Props) {
     setForm(p => ({ ...p, [field]: value }));
   }
 
-  const travelCost = useMemo(
-    () => form.is_travel ? calcTravelCost(form.travel_distance_km) : null,
-    [form.is_travel, form.travel_distance_km],
-  );
+  const hasTravel = !!form.travel_mode;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,22 +69,24 @@ export default function SessionForm({ initial, onSave, onCancel }: Props) {
     if (!form.start_time || !form.end_time) { setError('יש להזין שעות'); return; }
     setSaving(true); setError('');
 
-    const distance = form.is_travel && form.travel_distance_km
-      ? Number(form.travel_distance_km)
+    // travel_cost only matters when there's a travel mode. Empty / NaN
+    // gets stored as null so the column reflects "we don't know".
+    const costNum = hasTravel && form.travel_cost
+      ? Number(form.travel_cost)
       : null;
-    const cost = form.is_travel ? calcTravelCost(form.travel_distance_km) : null;
+    const cost = Number.isFinite(costNum) && (costNum as number) >= 0 ? costNum : null;
 
     const payload = {
-      patient_id:         form.patient_id,
-      date:               form.date,
-      start_time:         form.start_time,
-      end_time:           form.end_time,
-      status:             form.status,
-      notes:              form.notes,
-      duration_minutes:   calcDuration(form.start_time, form.end_time),
-      is_travel:          form.is_travel,
-      travel_distance_km: distance,
-      travel_cost:        cost,
+      patient_id:       form.patient_id,
+      date:             form.date,
+      start_time:       form.start_time,
+      end_time:         form.end_time,
+      status:           form.status,
+      notes:            form.notes,
+      duration_minutes: calcDuration(form.start_time, form.end_time),
+      is_travel:        hasTravel,
+      travel_mode:      hasTravel ? form.travel_mode : null,
+      travel_cost:      cost,
     };
 
     const { error: err } = initial?.id
@@ -123,83 +119,82 @@ export default function SessionForm({ initial, onSave, onCancel }: Props) {
       </div>
 
       {/* ── Travel ──────────────────────────────────────────────────
-        * Toggle + (when on) distance input. Cost is computed live from
-        * distance × TRAVEL_RATE_ILS_PER_KM and shown beside the input.
-        * Both distance and the computed cost are persisted so historical
-        * sessions aren't retroactively re-priced if the rate changes. */}
+        * Section with its own header. Mode dropdown ("ללא נסיעה /
+        * מונית / אוטובוס / אחר"). When a mode is selected, the cost
+        * input appears next to it. The cost is whatever the clinician
+        * actually paid — no formula. Both columns persist; selecting
+        * "ללא נסיעה" wipes them. */}
       <div style={{
         padding: '14px 16px', borderRadius: 10,
-        backgroundColor: form.is_travel ? '#F0FDF9' : '#F8FAFC',
-        border: `1px solid ${form.is_travel ? '#99F6E4' : '#E2E8F0'}`,
+        backgroundColor: hasTravel ? '#F0FDF9' : '#F8FAFC',
+        border: `1px solid ${hasTravel ? '#99F6E4' : '#E2E8F0'}`,
         transition: 'background-color 0.12s, border-color 0.12s',
       }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={form.is_travel}
-            onChange={e => set('is_travel', e.target.checked)}
-            style={{ width: 16, height: 16, accentColor: '#0D9488' }}
-          />
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#1A2332' }}>
-            כללה נסיעה
-          </span>
-          <span style={{ fontSize: 11, color: '#94A3B8' }}>
-            (ביקור בית או נסיעה אחרת בתשלום)
-          </span>
-        </label>
+        <h3 style={{
+          fontSize: 13, fontWeight: 700, color: '#1A2332',
+          margin: '0 0 10px', letterSpacing: '0.01em',
+          display: 'flex', alignItems: 'center', gap: 7,
+        }}>
+          <span>🚗</span>
+          <span>נסיעה</span>
+        </h3>
 
-        {form.is_travel && (
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12,
-            marginTop: 12, alignItems: 'end',
-          }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: hasTravel ? '1fr 1fr' : '1fr',
+          gap: 12, alignItems: 'end',
+        }}>
+          <div>
+            <label style={{
+              display: 'block', fontSize: 12, fontWeight: 600,
+              color: '#374151', marginBottom: 6,
+            }}>
+              סוג נסיעה
+            </label>
+            <select
+              value={form.travel_mode}
+              onChange={e => set('travel_mode', e.target.value as typeof form.travel_mode)}
+              style={{
+                width: '100%', padding: '9px 12px', borderRadius: 8,
+                border: '1px solid #E2E8F0', fontSize: 14,
+                backgroundColor: '#FFFFFF', color: '#0F172A',
+                outline: 'none', fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              {TRAVEL_MODE_OPTIONS.map(o => (
+                <option key={o.value || 'none'} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {hasTravel && (
             <div>
               <label style={{
                 display: 'block', fontSize: 12, fontWeight: 600,
                 color: '#374151', marginBottom: 6,
               }}>
-                מרחק כולל (ק"מ)
+                עלות הנסיעה (₪)
               </label>
               <input
                 type="number"
                 inputMode="decimal"
-                step="0.1"
+                step="0.01"
                 min="0"
-                value={form.travel_distance_km}
-                onChange={e => set('travel_distance_km', e.target.value)}
-                placeholder="לדוגמה: 24"
+                value={form.travel_cost}
+                onChange={e => set('travel_cost', e.target.value)}
+                placeholder="לדוגמה: 32"
                 style={{
                   width: '100%', padding: '9px 12px', borderRadius: 8,
                   border: '1px solid #E2E8F0', fontSize: 14,
                   backgroundColor: '#FFFFFF', color: '#0F172A',
                   outline: 'none', fontFamily: 'inherit',
+                  fontVariantNumeric: 'tabular-nums',
                 }}
               />
             </div>
-            <div>
-              <span style={{
-                display: 'block', fontSize: 12, fontWeight: 600,
-                color: '#374151', marginBottom: 6,
-              }}>
-                עלות מוערכת
-              </span>
-              <div style={{
-                padding: '9px 12px', borderRadius: 8,
-                backgroundColor: '#FFFFFF', border: '1px solid #99F6E4',
-                fontSize: 15, fontWeight: 700, color: '#0D9488',
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {travelCost != null ? `${travelCost.toFixed(2)} ₪` : '—'}
-              </div>
-            </div>
-            <p style={{
-              gridColumn: '1 / -1', fontSize: 11, color: '#64748B', margin: 0,
-            }}>
-              חישוב לפי תעריף {TRAVEL_RATE_ILS_PER_KM} ₪ לק"מ.
-              הערך נשמר עם הפגישה — שינוי עתידי של התעריף לא ישפיע על פגישות קיימות.
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <TextareaField label="הערות" value={form.notes} onChange={v => set('notes', v)} rows={2} />

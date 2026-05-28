@@ -12,6 +12,13 @@ import DateDisplay from '@/components/ui/DateDisplay';
 import { hebrewDay } from '@/lib/dateUtils';
 import type { Session } from '@/types';
 
+function travelModeLabel(mode: string | null | undefined): string {
+  if (mode === 'taxi')  return 'מונית';
+  if (mode === 'bus')   return 'אוטובוס';
+  if (mode === 'other') return 'אחר';
+  return 'נסיעה';
+}
+
 const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
   planned:   { label: 'מתוכננת',  bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4', dot: '#0D9488' },
   completed: { label: 'הושלמה',   bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0', dot: '#16A34A' },
@@ -176,7 +183,7 @@ function SessionsInner() {
                           backgroundColor: '#EEF2FF', color: '#4338CA',
                           border: '1px solid #C7D2FE',
                         }}>
-                          🚗 נסיעה
+                          🚗 {travelModeLabel(r.travel_mode)}
                           {r.travel_cost != null && ` · ${Number(r.travel_cost).toFixed(2)} ₪`}
                         </span>
                       )}

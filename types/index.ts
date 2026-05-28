@@ -79,12 +79,14 @@ export interface Session {
   duration_minutes: number | null;
   status: 'planned' | 'completed' | 'cancelled' | 'no_show';
   notes: string | null;
-  /** True when the therapist traveled to the patient (e.g. home visit). */
+  /** True when the session included a billable trip. */
   is_travel: boolean;
-  /** Total distance for the trip in km. */
-  travel_distance_km: number | null;
-  /** Computed cost — distance × TRAVEL_RATE_ILS_PER_KM rounded to 2 places. */
+  /** Mode of transport — taxi / bus / other. Null when is_travel = false. */
+  travel_mode: 'taxi' | 'bus' | 'other' | null;
+  /** Trip cost the clinician paid, in ILS. Free-form (not computed). */
   travel_cost: number | null;
+  /** Legacy column kept for compatibility — no UI uses it now. */
+  travel_distance_km: number | null;
   created_at: string;
   updated_at: string;
   patient?: { full_name: string } | null;

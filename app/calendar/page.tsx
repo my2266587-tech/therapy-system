@@ -23,6 +23,13 @@ const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; 
 };
 
 const DAY_LABELS    = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+
+function travelModeLabel(mode: string | null | undefined): string {
+  if (mode === 'taxi')  return 'מונית';
+  if (mode === 'bus')   return 'אוטובוס';
+  if (mode === 'other') return 'אחר';
+  return 'נסיעה';
+}
 const MONTH_LABELS  = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
 type View = 'month' | 'week' | 'day';
@@ -687,8 +694,8 @@ function EventCardLarge({ ev, onClick }: { ev: SessionWithRel; onClick: () => vo
           backgroundColor: '#EEF2FF', color: '#4338CA',
           border: '1px solid #C7D2FE', flexShrink: 0,
         }}>
-          🚗
-          {ev.travel_cost != null && ` ${Number(ev.travel_cost).toFixed(2)} ₪`}
+          🚗 {travelModeLabel(ev.travel_mode)}
+          {ev.travel_cost != null && ` · ${Number(ev.travel_cost).toFixed(2)} ₪`}
         </span>
       )}
       <span style={{

@@ -61,6 +61,7 @@ create table if not exists sessions (
   status              text not null check (status in ('planned','completed','cancelled','no_show')) default 'planned',
   notes               text,
   is_travel           boolean not null default false,
+  travel_mode         text check (travel_mode is null or travel_mode in ('taxi','bus','other')),
   travel_distance_km  numeric(6,1),
   travel_cost         numeric(8,2),
   created_at          timestamptz not null default now(),
@@ -73,6 +74,11 @@ begin
   if not exists (select 1 from information_schema.columns
                  where table_name='sessions' and column_name='is_travel') then
     alter table sessions add column is_travel boolean not null default false;
+  end if;
+  if not exists (select 1 from information_schema.columns
+                 where table_name='sessions' and column_name='travel_mode') then
+    alter table sessions add column travel_mode text
+      check (travel_mode is null or travel_mode in ('taxi','bus','other'));
   end if;
   if not exists (select 1 from information_schema.columns
                  where table_name='sessions' and column_name='travel_distance_km') then
