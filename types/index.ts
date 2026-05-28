@@ -183,3 +183,31 @@ export interface PettyCash {
   updated_at: string;
   patient?: { full_name: string } | null;
 }
+
+export interface PhoneSummaryDraft {
+  id: string;
+  spoken_patient_name: string | null;
+  matched_patient_id: string | null;
+  match_status: 'matched' | 'ambiguous' | 'not_found';
+  current_state: string | null;
+  main_topics: string | null;
+  treatment_actions: string | null;
+  next_steps: string | null;
+  tasks_given: string | null;
+  progress: string | null;
+  difficulties: string | null;
+  notes: string | null;
+  call_date: string | null;
+  call_start_time: string | null;
+  call_end_time: string | null;
+  status: 'draft_ready' | 'needs_match' | 'failed' | 'approved';
+  source_transcript: string | null;
+  error_message: string | null;
+  approved_summary_id: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  created_at: string;
+  updated_at: string;
+  /** When fetched with a join — the matched patient's display name. */
+  matched_patient?: { full_name: string } | null;
+}

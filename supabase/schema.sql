@@ -609,3 +609,51 @@ begin
       with check (bucket_id = 'monthly-reports');
   end if;
 end $$;
+
+-- ── Phone summary drafts ─────────────────────────────────────────────────────
+-- Holding pen for session summaries that arrive through the phone flow (Yemot
+-- Mashiach integration is wired separately). A draft starts here with the
+-- spoken patient name + extracted field values; once a human reviews it on
+-- /summaries/phone-pending and clicks "אישור ושמירה", a real row is created
+-- in session_summaries and the draft is marked approved.
+create table if not exists phone_summary_drafts (
+  id                  uuid primary key default gen_random_uuid(),
+  -- Raw name as spoken on the phone, before any patient lookup.
+  spoken_patient_name text,
+  -- Set when the lookup found exactly one match. Null until matched
+  -- (manually or automatically). ON DELETE SET NULL so deleting a patient
+  -- doesn't cascade through historical drafts.
+  matched_patient_id  uuid references patients(id) on delete set null,
+  match_status        text not null check (match_status in (
+                        'matched','ambiguous','not_found'
+                      )) default 'not_found',
+  -- The 8 content fields, same names as session_summaries.
+  current_state       text,
+  main_topics         text,
+  treatment_actions   text,
+  next_steps          text,
+  tasks_given         text,
+  progress            text,
+  difficulties        text,
+  notes               text,
+  -- Call metadata, when known.
+  call_date           date,
+  call_start_time     time,
+  call_end_time       time,
+  -- Draft lifecycle.
+  status              text not null check (status in (
+                        'draft_ready','needs_match','failed','approved'
+                      )) default 'draft_ready',
+  -- Raw transcript (for debugging the future Yemot pipeline).
+  source_transcript   text,
+  error_message       text,
+  -- Link to the session_summaries row created on approval.
+  approved_summary_id uuid references session_summaries(id) on delete set null,
+  approved_at         timestamptz,
+  approved_by         text,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+
+create index if not exists idx_phone_summary_drafts_status_created
+  on phone_summary_drafts (status, created_at desc);
