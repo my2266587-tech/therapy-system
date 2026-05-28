@@ -680,6 +680,17 @@ function EventCardLarge({ ev, onClick }: { ev: SessionWithRel; onClick: () => vo
           {ev.patient?.staff_member?.full_name && ` · ${ev.patient.staff_member.full_name}`}
         </div>
       </div>
+      {ev.is_travel && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '3px 10px', borderRadius: 14, fontSize: 11.5, fontWeight: 600,
+          backgroundColor: '#EEF2FF', color: '#4338CA',
+          border: '1px solid #C7D2FE', flexShrink: 0,
+        }}>
+          🚗
+          {ev.travel_cost != null && ` ${Number(ev.travel_cost).toFixed(2)} ₪`}
+        </span>
+      )}
       <span style={{
         display: 'inline-flex', alignItems: 'center', gap: 5,
         padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,

@@ -79,6 +79,12 @@ export interface Session {
   duration_minutes: number | null;
   status: 'planned' | 'completed' | 'cancelled' | 'no_show';
   notes: string | null;
+  /** True when the therapist traveled to the patient (e.g. home visit). */
+  is_travel: boolean;
+  /** Total distance for the trip in km. */
+  travel_distance_km: number | null;
+  /** Computed cost — distance × TRAVEL_RATE_ILS_PER_KM rounded to 2 places. */
+  travel_cost: number | null;
   created_at: string;
   updated_at: string;
   patient?: { full_name: string } | null;

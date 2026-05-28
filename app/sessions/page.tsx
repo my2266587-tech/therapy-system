@@ -164,9 +164,22 @@ function SessionsInner() {
                     <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2332', margin: 0, lineHeight: 1.3 }}>
                       {(r.patient as any)?.full_name ?? '—'}
                     </p>
-                    <p style={{ fontSize: 12, color: '#94A3B8', margin: '3px 0 0' }}>
-                      {r.start_time} – {r.end_time}
-                      {r.duration_minutes ? ` · ${r.duration_minutes} דק'` : ''}
+                    <p style={{ fontSize: 12, color: '#94A3B8', margin: '3px 0 0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span>
+                        {r.start_time} – {r.end_time}
+                        {r.duration_minutes ? ` · ${r.duration_minutes} דק'` : ''}
+                      </span>
+                      {r.is_travel && (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                          backgroundColor: '#EEF2FF', color: '#4338CA',
+                          border: '1px solid #C7D2FE',
+                        }}>
+                          🚗 נסיעה
+                          {r.travel_cost != null && ` · ${Number(r.travel_cost).toFixed(2)} ₪`}
+                        </span>
+                      )}
                     </p>
                   </div>
 

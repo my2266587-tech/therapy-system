@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     // copy whose computed date lands before today.
     const { data: source, error: srcErr } = await supabase
       .from('sessions')
-      .select('id, patient_id, date, start_time, end_time, status, notes, duration_minutes')
+      .select('id, patient_id, date, start_time, end_time, status, notes, duration_minutes, is_travel, travel_distance_km, travel_cost')
       .in('status', ['planned', 'completed']);
     if (srcErr) throw new Error(`fetch source sessions: ${srcErr.message}`);
 
@@ -93,13 +93,16 @@ export async function POST(req: NextRequest) {
     );
 
     type Insert = {
-      patient_id:       string;
-      date:             string;
-      start_time:       string;
-      end_time:         string;
-      status:           string;
-      notes:            string | null;
-      duration_minutes: number | null;
+      patient_id:         string;
+      date:               string;
+      start_time:         string;
+      end_time:           string;
+      status:             string;
+      notes:              string | null;
+      duration_minutes:   number | null;
+      is_travel:          boolean;
+      travel_distance_km: number | null;
+      travel_cost:        number | null;
     };
 
     const toInsert: Insert[] = [];
@@ -111,6 +114,9 @@ export async function POST(req: NextRequest) {
       const row = s as {
         patient_id: string; date: string; start_time: string;
         end_time: string; notes: string | null; duration_minutes: number | null;
+        is_travel: boolean | null;
+        travel_distance_km: number | null;
+        travel_cost: number | null;
       };
       for (let n = 1; n <= weeks; n++) {
         const newDate = addDays(row.date, n * 7);
@@ -122,13 +128,19 @@ export async function POST(req: NextRequest) {
         if (keys.has(key)) { skipped++; continue; }
         keys.add(key);
         toInsert.push({
-          patient_id:       row.patient_id,
-          date:             newDate,
-          start_time:       row.start_time,
-          end_time:         row.end_time,
-          status:           'planned',
-          notes:            row.notes,
-          duration_minutes: row.duration_minutes,
+          patient_id:         row.patient_id,
+          date:               newDate,
+          start_time:         row.start_time,
+          end_time:           row.end_time,
+          status:             'planned',
+          notes:              row.notes,
+          duration_minutes:   row.duration_minutes,
+          // Carry travel forward — home-visit patients usually stay on
+          // home visits; if the clinician swaps one to in-office, she
+          // can edit the individual occurrence.
+          is_travel:          !!row.is_travel,
+          travel_distance_km: row.travel_distance_km,
+          travel_cost:        row.travel_cost,
         });
       }
     }

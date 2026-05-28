@@ -52,17 +52,37 @@ alter table patients add column if not exists import_metadata  jsonb;
 
 -- ── Sessions ──────────────────────────────────────────────────────────────────
 create table if not exists sessions (
-  id               uuid primary key default gen_random_uuid(),
-  patient_id       uuid not null references patients(id) on delete cascade,
-  date             date not null,
-  start_time       time not null,
-  end_time         time not null,
-  duration_minutes integer,
-  status           text not null check (status in ('planned','completed','cancelled','no_show')) default 'planned',
-  notes            text,
-  created_at       timestamptz not null default now(),
-  updated_at       timestamptz not null default now()
+  id                  uuid primary key default gen_random_uuid(),
+  patient_id          uuid not null references patients(id) on delete cascade,
+  date                date not null,
+  start_time          time not null,
+  end_time            time not null,
+  duration_minutes    integer,
+  status              text not null check (status in ('planned','completed','cancelled','no_show')) default 'planned',
+  notes               text,
+  is_travel           boolean not null default false,
+  travel_distance_km  numeric(6,1),
+  travel_cost         numeric(8,2),
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
 );
+
+-- Migration for existing installs: add travel columns if missing.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                 where table_name='sessions' and column_name='is_travel') then
+    alter table sessions add column is_travel boolean not null default false;
+  end if;
+  if not exists (select 1 from information_schema.columns
+                 where table_name='sessions' and column_name='travel_distance_km') then
+    alter table sessions add column travel_distance_km numeric(6,1);
+  end if;
+  if not exists (select 1 from information_schema.columns
+                 where table_name='sessions' and column_name='travel_cost') then
+    alter table sessions add column travel_cost numeric(8,2);
+  end if;
+end $$;
 
 -- ── Session Summaries ─────────────────────────────────────────────────────────
 create table if not exists session_summaries (
