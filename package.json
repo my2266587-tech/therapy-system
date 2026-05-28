@@ -12,11 +12,13 @@
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
+    "@types/nodemailer": "^8.0.0",
     "bidi-js": "^1.0.3",
     "exceljs": "^4.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "next": "16.2.4",
+    "nodemailer": "^8.0.9",
     "openai": "^6.37.0",
     "papaparse": "^5.5.3",
     "react": "19.2.4",

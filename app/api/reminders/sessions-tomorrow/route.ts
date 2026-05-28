@@ -9,14 +9,26 @@
  *   wherever the cron runs and whatever the Vercel function's wall clock
  *   says, "tomorrow" always means the next calendar day in Asia/Jerusalem.
  *
+ *   Transport: Gmail SMTP via Nodemailer (not Resend).
+ *
+ *   Reason: Resend blocks sending to any address other than the account
+ *   owner until a domain is verified. The clinic doesn't own a domain,
+ *   so we relay through a personal Gmail account using an App Password
+ *   — Google lets you send from any Gmail you own to any recipient with
+ *   no extra verification beyond enabling 2-Step Verification + creating
+ *   the App Password.
+ *
  * Auth:
  *   - Bearer ${CRON_SECRET}. Vercel Cron sets this; manual triggers also OK.
  *
  * Required env vars:
- *   - CRON_SECRET, RESEND_API_KEY, REMINDER_EMAIL_TO
+ *   - CRON_SECRET
+ *   - GMAIL_USER          — gmail address sending the mail (e.g. s0548539967@gmail.com)
+ *   - GMAIL_APP_PASSWORD  — 16-char App Password from Google Account → Security
+ *   - REMINDER_EMAIL_TO   — recipient (s0548539967@gmail.com)
  *
  * Optional:
- *   - REMINDER_EMAIL_FROM (default: REPORT_EMAIL_FROM, else onboarding@resend.dev)
+ *   - REMINDER_EMAIL_FROM_NAME — display name in the From header (default: "מערכת מחר אחר")
  *
  * Behavior:
  *   - 0 sessions tomorrow → returns { ok, sessions: 0 } and does NOT send
@@ -25,7 +37,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { createServerClient } from '@/lib/supabaseServer';
 
 export const maxDuration = 30;
@@ -212,10 +224,9 @@ function renderEmail(opts: {
           <tr>
             <td style="padding:18px 32px;background:#FAFBFD;border-top:1px solid #E8ECF0;" dir="rtl">
               <div style="font-size:11px;color:#94A3B8;line-height:1.55;">
-                תזכורת אוטומטית. נשלחת בכל ערב על פגישות היום שלמחרת.<br>
-                כדי לשנות, לעצור, או לשלוח לכתובת אחרת — לערוך את משתני
-                הסביבה <code style="background:#F1F5F9;padding:1px 5px;border-radius:4px;">REMINDER_EMAIL_TO</code>
-                ו-<code style="background:#F1F5F9;padding:1px 5px;border-radius:4px;">REMINDER_EMAIL_FROM</code>
+                תזכורת אוטומטית. נשלחת בכל ערב על פגישות יום למחרת.<br>
+                כדי לשנות את כתובת היעד — לערוך את
+                <code style="background:#F1F5F9;padding:1px 5px;border-radius:4px;">REMINDER_EMAIL_TO</code>
                 ב-Vercel.
               </div>
             </td>
@@ -240,19 +251,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const resendKey = process.env.RESEND_API_KEY;
-    const emailTo   = process.env.REMINDER_EMAIL_TO;
-    const emailFrom = process.env.REMINDER_EMAIL_FROM
-                   ?? process.env.REPORT_EMAIL_FROM
-                   ?? 'onboarding@resend.dev';
+    const gmailUser     = process.env.GMAIL_USER;
+    const gmailPassword = process.env.GMAIL_APP_PASSWORD;
+    const emailTo       = process.env.REMINDER_EMAIL_TO;
+    const fromName      = process.env.REMINDER_EMAIL_FROM_NAME ?? 'מערכת מחר אחר';
 
     const missing: string[] = [];
-    if (!resendKey) missing.push('RESEND_API_KEY');
-    if (!emailTo)   missing.push('REMINDER_EMAIL_TO');
+    if (!gmailUser)     missing.push('GMAIL_USER');
+    if (!gmailPassword) missing.push('GMAIL_APP_PASSWORD');
+    if (!emailTo)       missing.push('REMINDER_EMAIL_TO');
     if (missing.length > 0) {
       return NextResponse.json(
         {
-          error: `הגדרות מייל חסרות: ${missing.join(', ')}.`,
+          error: `הגדרות מייל חסרות: ${missing.join(', ')}. הוסיפי אותן ב-Vercel project env ונסי שוב.`,
           missing,
         },
         { status: 500 },
@@ -298,20 +309,47 @@ export async function POST(req: NextRequest) {
       ? `תזכורת: פגישה מחר`
       : `תזכורת: ${sessions.length} פגישות מחר`;
 
-    const resend = new Resend(resendKey!);
-    const { error: sendErr } = await resend.emails.send({
-      from:    emailFrom,
-      to:      emailTo!,
-      subject,
-      html,
+    // Gmail SMTP via Nodemailer. host/port/secure are fixed — the only
+    // thing the caller controls is the credentials. App Password is a
+    // 16-char per-app token from Google Account → Security → 2-Step
+    // Verification → App Passwords (requires 2FA enabled).
+    const transporter = nodemailer.createTransport({
+      host:   'smtp.gmail.com',
+      port:   465,
+      secure: true,
+      auth: {
+        user: gmailUser!,
+        // Google ignores spaces in the displayed 16-char password, but
+        // Nodemailer doesn't. Strip them for the user's convenience.
+        pass: gmailPassword!.replace(/\s+/g, ''),
+      },
     });
-    if (sendErr) {
-      throw new Error(`Resend send failed: ${JSON.stringify(sendErr)}`);
+
+    try {
+      await transporter.sendMail({
+        from:    `"${fromName}" <${gmailUser!}>`,
+        to:      emailTo!,
+        subject,
+        html,
+      });
+    } catch (e) {
+      // Common cases — surface a Hebrew nudge so the user knows what to
+      // fix instead of just "Invalid login".
+      const msg = (e as Error).message;
+      if (/Invalid login|Username and Password not accepted/i.test(msg)) {
+        throw new Error(
+          'Gmail דחה את הזיהוי. ודאי ש-GMAIL_APP_PASSWORD הוא App Password ' +
+          'אמיתי (16 תווים, מ-Google Account → Security → App Passwords) ' +
+          'ושתכונת 2-Step Verification מופעלת בחשבון.',
+        );
+      }
+      throw new Error(`Gmail SMTP send failed: ${msg}`);
     }
 
     return NextResponse.json({
       ok: true,
       recipient: emailTo!,
+      from: gmailUser!,
       date: tomorrowYmd,
       sessions: sessions.length,
       sent: true,
