@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useSessionsLiveSync } from '@/lib/useSessionsLiveSync';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
 import { formatGregorian, formatHebrew, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
@@ -93,6 +94,10 @@ export default function CalendarPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live-sync: any session created/edited/deleted from /sessions, another
+  // tab, drag-drop, or the form modal triggers a refetch here.
+  useSessionsLiveSync(load);
 
   /* Apply filters */
   const filtered = useMemo(() => records.filter(r => {

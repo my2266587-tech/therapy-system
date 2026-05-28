@@ -501,6 +501,23 @@ begin
 end;
 $$;
 
+-- ── Realtime publication for sessions ────────────────────────────────────────
+-- The /calendar and /sessions pages subscribe via Supabase Realtime so any
+-- INSERT / UPDATE / DELETE shows up instantly in both views (and across
+-- browser tabs). The publication must include the table for changes to
+-- be broadcast — without this, subscribes silently succeed but never fire.
+-- Safe to re-run: ALTER PUBLICATION rejects duplicates with a clear error
+-- we wrap in a DO block.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'sessions'
+  ) then
+    alter publication supabase_realtime add table sessions;
+  end if;
+end $$;
+
 -- ── Monthly report run history ───────────────────────────────────────────────
 -- One row per successful (or failed) production of the monthly Excel report.
 -- Drives the "history" list on /reports/monthly so the clinic can see what

@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useSessionsLiveSync } from '@/lib/useSessionsLiveSync';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
@@ -58,6 +59,10 @@ function SessionsInner() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live-sync: any session change from /calendar, another tab, or the
+  // cron triggers a refetch here so the two views never drift.
+  useSessionsLiveSync(load);
 
   async function handleDelete(id: string) {
     if (!confirm('האם למחוק פגישה זו?')) return;
