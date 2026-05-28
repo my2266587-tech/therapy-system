@@ -224,10 +224,7 @@ function renderEmail(opts: {
           <tr>
             <td style="padding:18px 32px;background:#FAFBFD;border-top:1px solid #E8ECF0;" dir="rtl">
               <div style="font-size:11px;color:#94A3B8;line-height:1.55;">
-                תזכורת אוטומטית. נשלחת בכל ערב על פגישות יום למחרת.<br>
-                כדי לשנות את כתובת היעד — לערוך את
-                <code style="background:#F1F5F9;padding:1px 5px;border-radius:4px;">REMINDER_EMAIL_TO</code>
-                ב-Vercel.
+                תזכורת אוטומטית. נשלחת בכל ערב על פגישות יום למחרת.
               </div>
             </td>
           </tr>
