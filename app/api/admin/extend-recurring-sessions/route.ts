@@ -68,14 +68,18 @@ export async function POST(req: NextRequest) {
     const supabase = createServerClient();
     const today = todayInIsrael();
 
-    // Source set: future planned sessions only. We don't extend
-    // cancelled / no_show / completed, and we don't extend backwards.
+    // Source set: every session that represents an ongoing weekly slot —
+    // 'planned' (the next live appointment) and 'completed' (a session
+    // that actually took place, evidence the slot is real). 'cancelled'
+    // and 'no_show' are excluded because they don't necessarily imply
+    // the patient still wants that weekly time. No date filter — past
+    // sessions are valid pattern carriers; we just skip generating any
+    // copy whose computed date lands before today.
     const { data: source, error: srcErr } = await supabase
       .from('sessions')
       .select('id, patient_id, date, start_time, end_time, status, notes, duration_minutes')
-      .eq('status', 'planned')
-      .gte('date', today);
-    if (srcErr) throw new Error(`fetch planned sessions: ${srcErr.message}`);
+      .in('status', ['planned', 'completed']);
+    if (srcErr) throw new Error(`fetch source sessions: ${srcErr.message}`);
 
     // Existing dedup key set across ALL planned sessions (past + future)
     // so we never insert a clash if the clinic already has it.
@@ -101,6 +105,8 @@ export async function POST(req: NextRequest) {
     const toInsert: Insert[] = [];
     let skipped = 0;
 
+    let skippedPast = 0;
+
     for (const s of (source ?? [])) {
       const row = s as {
         patient_id: string; date: string; start_time: string;
@@ -108,6 +114,10 @@ export async function POST(req: NextRequest) {
       };
       for (let n = 1; n <= weeks; n++) {
         const newDate = addDays(row.date, n * 7);
+        // Never project into the past — if the source session is old,
+        // its earliest weekly copies will be < today; skip those and
+        // let later iterations (which land >= today) be inserted.
+        if (newDate < today) { skippedPast++; continue; }
         const key = `${row.patient_id}|${newDate}|${row.start_time}`;
         if (keys.has(key)) { skipped++; continue; }
         keys.add(key);
@@ -131,10 +141,11 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      ok:         true,
-      basedOn:    (source ?? []).length,
-      generated:  toInsert.length,
+      ok:           true,
+      basedOn:      (source ?? []).length,
+      generated:    toInsert.length,
       skipped,
+      skippedPast,
       weeks,
     });
 
