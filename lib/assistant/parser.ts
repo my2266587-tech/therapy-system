@@ -27,7 +27,6 @@ export type Intent =
   | 'upcomingSessions'
   | 'missingSummaries'
   | 'openPayments'
-  | 'unprocessedRecordings'
   | 'patientDocuments'
   | 'patientResponsible'
   | 'latestSessionSummary'
@@ -60,7 +59,6 @@ const SYN: Record<string, string[]> = {
   session:    ['פגיש*', 'מפגש*', 'יומן', 'session*', 'טיפול*'],
   summary:    ['סיכומ*', 'תיעוד*'],
   payment:    ['תשלומ*', 'שולמ*', 'שילמ*'],
-  recording:  ['הקלט*', 'תמלול*'],
   document:   ['מסמכ*', 'מסמך', 'קבצים', 'קובץ', 'מסמכים'],
 
   // ── qualifiers ──
@@ -226,18 +224,6 @@ const RULES: IntentRule[] = [
       const u = /לא\s+שולמ|טרם\s+שולמ/.test(text);
       if (p && (o || u)) return 4;
       if (p) return 2; // bare "תשלומים" — show open payments by default
-      return 0;
-    },
-  },
-
-  // ── Unprocessed recordings
-  {
-    intent: 'unprocessedRecordings',
-    score: ({ text }) => {
-      const r = hasGroup(text, 'recording');
-      const u = hasGroup(text, 'unprocessed') || /לא\s+(?:עובד|תומלל)/.test(text);
-      if (r && u) return 4;
-      if (r) return 2; // bare "הקלטות" — default to pending
       return 0;
     },
   },

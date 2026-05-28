@@ -16,9 +16,9 @@
  *   - Any failure (no API key, network, malformed call) → return null.
  *     The caller falls back to the heuristic parser.
  *
- * Why OpenAI and not Anthropic: openai is already a dependency
- * (used by /api/recordings/[id]/structure-summary). Tool schemas are
- * translated to OpenAI's function shape inline below.
+ * Why OpenAI and not Anthropic: openai is already a dependency in
+ * the project. Tool schemas are translated to OpenAI's function shape
+ * inline below.
  */
 
 import OpenAI from 'openai';
@@ -53,7 +53,7 @@ export interface AssistantContext {
 export const ASSISTANT_SYSTEM_PROMPT = [
   'את עוזרת קלינית פנימית של מערכת ניהול קליניקה טיפולית בעברית.',
   'את עונה אך ורק על שאלות הקשורות למטופלות, פגישות, סיכומים, תשלומים,',
-  'הקלטות, מסמכים, וצוות מטפל.',
+  'מסמכים, וצוות מטפל.',
   '',
   'You are read-only. You have no database access. The only way to answer',
   'is to call exactly ONE of the registered tools. The tool result already',

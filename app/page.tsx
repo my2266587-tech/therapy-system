@@ -12,19 +12,11 @@ interface UpcomingSession {
   patient: { full_name: string } | null;
 }
 
-interface PendingRec {
-  id: string;
-  recorded_at: string;
-  patient: { full_name: string } | null;
-}
-
 interface DashData {
   todaySessions:     number;
   activePatients:    number;
   weekSessions:      number;
-  pendingRecordings: number;
   upcoming:          UpcomingSession[];
-  recs:              PendingRec[];
 }
 
 interface MonthlySummaryRow {
@@ -62,7 +54,6 @@ const shortcuts = [
   { href: '/patients',   label: 'מטופלות'   },
   { href: '/sessions',   label: 'פגישות'    },
   { href: '/summaries',  label: 'סיכומים'   },
-  { href: '/recordings', label: 'הקלטות'    },
   { href: '/quarterly',  label: 'רבעוני'    },
   { href: '/staff',      label: 'צוות'      },
 ];
@@ -110,7 +101,7 @@ function monthRange(year: number, month: number): { start: string; end: string }
 export default function DashboardPage() {
   const [data, setData] = useState<DashData>({
     todaySessions: 0, activePatients: 0, weekSessions: 0,
-    pendingRecordings: 0, upcoming: [], recs: [],
+    upcoming: [],
   });
   const [loading, setLoading] = useState(true);
 
@@ -121,22 +112,18 @@ export default function DashboardPage() {
       const sat   = new Date(sun); sat.setDate(sun.getDate() + 6);
       const fmt   = (d: Date) => d.toISOString().slice(0, 10);
 
-      const [pts, todaySess, weekSess, recCount, upcoming, recs] = await Promise.all([
+      const [pts, todaySess, weekSess, upcoming] = await Promise.all([
         supabase.from('patients').select('id', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', today).eq('status', 'planned'),
         supabase.from('sessions').select('id', { count: 'exact', head: true }).gte('date', fmt(sun)).lte('date', fmt(sat)).eq('status', 'planned'),
-        supabase.from('recordings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('sessions').select('id, date, patient:patient_id(full_name)').gte('date', today).eq('status', 'planned').order('date').limit(6),
-        supabase.from('recordings').select('id, recorded_at, patient:patient_id(full_name)').eq('status', 'pending').order('recorded_at', { ascending: false }).limit(5),
       ]);
 
       setData({
-        todaySessions:     todaySess.count  ?? 0,
-        activePatients:    pts.count        ?? 0,
-        weekSessions:      weekSess.count   ?? 0,
-        pendingRecordings: recCount.count   ?? 0,
-        upcoming:          (upcoming.data   ?? []) as unknown as UpcomingSession[],
-        recs:              (recs.data       ?? []) as unknown as PendingRec[],
+        todaySessions:  todaySess.count  ?? 0,
+        activePatients: pts.count        ?? 0,
+        weekSessions:   weekSess.count   ?? 0,
+        upcoming:       (upcoming.data   ?? []) as unknown as UpcomingSession[],
       });
       setLoading(false);
     }
@@ -147,7 +134,6 @@ export default function DashboardPage() {
     { label: 'פגישות היום',    value: data.todaySessions,     accent: true,  href: '/sessions?filter=today'   },
     { label: 'מטופלות פעילות', value: data.activePatients,    accent: false, href: '/patients?status=active'  },
     { label: 'פגישות השבוע',   value: data.weekSessions,      accent: false, href: '/sessions?filter=week'    },
-    { label: 'הקלטות ממתינות', value: data.pendingRecordings, accent: false, href: '/recordings?status=pending' },
   ];
 
   return (
@@ -165,7 +151,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── KPI row ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
           {kpis.map(k => (
             <Link key={k.label} href={k.href} style={{
               display: 'block', textDecoration: 'none',
@@ -218,10 +204,8 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* ── Two-column ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
-
-          {/* Upcoming sessions */}
+        {/* ── Upcoming sessions ── */}
+        <div style={{ marginBottom: 18 }}>
           <SectionCard title="פגישות קרובות" linkHref="/sessions" linkLabel="הכל ←">
             {loading ? <CardSkeleton /> : data.upcoming.length === 0 ? (
               <p style={{ padding: '18px 24px', fontSize: 13, color: C.muted }}>אין פגישות מתוכננות</p>
@@ -247,35 +231,6 @@ export default function DashboardPage() {
               </div>
             ))}
           </SectionCard>
-
-          {/* Pending recordings */}
-          <SectionCard title="הקלטות ממתינות לתמלול" linkHref="/recordings" linkLabel="הכל ←">
-            {loading ? <CardSkeleton /> : data.recs.length === 0 ? (
-              <div style={{ padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ fontSize: 15, color: C.accent }}>✓</span>
-                <span style={{ fontSize: 13, color: C.sub, fontWeight: 500 }}>אין הקלטות ממתינות</span>
-              </div>
-            ) : data.recs.map((r, i) => (
-              <div key={r.id} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '12px 24px', borderBottom: i < data.recs.length - 1 ? `1px solid ${C.border}` : 'none',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#F59E0B', display: 'inline-block', flexShrink: 0 }} />
-                  <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
-                    {(r.patient as any)?.full_name ?? '—'}
-                  </span>
-                </div>
-                <DateDisplay
-                  date={r.recorded_at}
-                  size="sm"
-                  muted={C.muted}
-                  strong={C.text}
-                  style={{ alignItems: 'flex-end', flexShrink: 0 }}
-                />
-              </div>
-            ))}
-          </SectionCard>
         </div>
 
         {/* ── Monthly summaries review ── */}
@@ -292,7 +247,7 @@ export default function DashboardPage() {
           }}>
             ניווט מהיר
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
             {shortcuts.map(s => (
               <Link key={s.href} href={s.href} style={{
                 display: 'block', padding: '14px 10px', borderRadius: 10,

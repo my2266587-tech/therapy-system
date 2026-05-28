@@ -8,7 +8,7 @@ import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
 import SummaryDetailCard from '@/components/summaries/SummaryDetailCard';
-import type { SessionSummary, Recording } from '@/types';
+import type { SessionSummary } from '@/types';
 
 const C = {
   bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
@@ -42,7 +42,6 @@ const SUMMARY_EXPORT_COLUMNS: Column<SummaryWithRel>[] = [
 
 export default function SummariesPage() {
   const [records, setRecords] = useState<SummaryWithRel[]>([]);
-  const [recordingsById, setRecordingsById] = useState<Map<string, Recording>>(new Map());
   const [loading,    setLoading]    = useState(true);
   const [open,       setOpen]       = useState(false);
   const [editing,    setEditing]    = useState<SessionSummary | null>(null);
@@ -50,16 +49,10 @@ export default function SummariesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [s, r] = await Promise.all([
-      supabase.from('session_summaries')
-        .select('*, patient:patient_id(full_name)')
-        .order('date', { ascending: false }),
-      supabase.from('recordings').select('id, recorded_at, status, audio_url, transcript'),
-    ]);
-    setRecords((s.data ?? []) as unknown as SummaryWithRel[]);
-    const m = new Map<string, Recording>();
-    for (const rec of (r.data ?? []) as Recording[]) m.set(rec.id, rec);
-    setRecordingsById(m);
+    const { data } = await supabase.from('session_summaries')
+      .select('*, patient:patient_id(full_name)')
+      .order('date', { ascending: false });
+    setRecords((data ?? []) as unknown as SummaryWithRel[]);
     setLoading(false);
   }, []);
 
@@ -117,7 +110,6 @@ export default function SummariesPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {records.map(r => {
-              const fromRecording = r.session_id ? recordingsById.has(r.session_id) : false;
               const preview = r.main_topics ?? r.treatment_actions ?? r.progress ?? r.notes ?? '';
               return (
                 <div
@@ -148,7 +140,6 @@ export default function SummariesPage() {
                         <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
                           {r.patient?.full_name ?? '—'}
                         </p>
-                        {fromRecording && <SourceBadge label="מהקלטה" />}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                         <DateDisplay date={r.date} size="sm" />
@@ -214,7 +205,6 @@ export default function SummariesPage() {
             summary={openDetail}
             patientName={openDetail.patient?.full_name ?? undefined}
             patientHref={openDetail.patient_id ? `/patients/${openDetail.patient_id}` : undefined}
-            recording={openDetail.session_id ? recordingsById.get(openDetail.session_id) ?? null : null}
             onClose={() => setOpenDetail(null)}
             onEdit={() => {
               const s = openDetail;
@@ -231,21 +221,7 @@ export default function SummariesPage() {
 
 /* SummaryDetail moved to components/summaries/SummaryDetailCard.tsx —
  * shared with the patient detail page so the same redesigned card
- * serves both views. SourceBadge is kept here for the list-row chip. */
-
-function SourceBadge({ label, muted }: { label: string; muted?: boolean }) {
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      padding: '3px 10px', borderRadius: 16, fontSize: 11, fontWeight: 500,
-      backgroundColor: muted ? '#F8FAFC' : '#EEF2FF',
-      color:           muted ? '#64748B' : '#4F46E5',
-      border: `1px solid ${muted ? '#E2E8F0' : '#C7D2FE'}`,
-    }}>
-      {label}
-    </span>
-  );
-}
+ * serves both views. */
 
 function ListSkeleton() {
   return (

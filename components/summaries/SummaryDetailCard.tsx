@@ -27,7 +27,7 @@
 import Link from 'next/link';
 import DateDisplay from '@/components/ui/DateDisplay';
 import { formatHebrew } from '@/lib/dateUtils';
-import type { SessionSummary, Recording } from '@/types';
+import type { SessionSummary } from '@/types';
 
 /* ── palette ───────────────────────────────────────────────────────── */
 
@@ -43,9 +43,6 @@ const C = {
   accent:         '#0D9488',
   accentSoft:     '#F0FDF9',
   accentRim:      '#99F6E4',
-  recordingTint:  '#EEF2FF',
-  recordingRim:   '#C7D2FE',
-  recordingText:  '#4338CA',
 };
 
 /* ── highlighted sections (rendered with a teal accent rail) ──────── */
@@ -78,15 +75,13 @@ export interface Props {
    *  `summary.patient?.full_name` (when the page joined it). */
   patientName?: string;
   patientHref?: string;
-  recording?:   Recording | null;
   onEdit?:      () => void;
   onClose:      () => void;
 }
 
 export default function SummaryDetailCard({
-  summary, patientName, patientHref, recording, onEdit, onClose,
+  summary, patientName, patientHref, onEdit, onClose,
 }: Props) {
-  const fromRecording = !!recording;
   const displayName =
     patientName ??
     ((summary as SessionSummary & { patient?: { full_name?: string } | null })
@@ -169,17 +164,6 @@ export default function SummaryDetailCard({
                   </span>
                 </>
               )}
-              {fromRecording && (
-                <>
-                  <Dot />
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    fontSize: 12, color: C.recordingText, fontWeight: 500,
-                  }}>
-                    🎙 נוצר מהקלטה
-                  </span>
-                </>
-              )}
             </div>
           </div>
 
@@ -223,52 +207,14 @@ export default function SummaryDetailCard({
         </div>
       </div>
 
-      {/* ── Footer attachments ────────────────────────────────── */}
-      {(recording || summary.attachment_url) && (
+      {/* ── Footer attachment ─────────────────────────────────── */}
+      {summary.attachment_url && (
         <footer style={{
           padding: '18px 36px 28px',
           backgroundColor: C.surface,
           borderTop: `1px solid ${C.border}`,
           display: 'flex', flexDirection: 'column', gap: 10,
         }}>
-          {recording && (
-            <div style={{
-              padding: '14px 16px', borderRadius: 12,
-              backgroundColor: C.recordingTint,
-              border: `1px solid ${C.recordingRim}`,
-              display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-            }}>
-              <span style={{
-                width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                backgroundColor: '#FFFFFF', color: C.recordingText,
-                border: `1px solid ${C.recordingRim}`,
-                fontSize: 16,
-              }}>
-                🎙
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.recordingText, letterSpacing: '0.04em' }}>
-                  הקלטה מקורית
-                </p>
-                <p style={{
-                  margin: '2px 0 0', fontSize: 11.5, color: C.muted,
-                  fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {new Date(recording.recorded_at).toLocaleString('he-IL', {
-                    day: 'numeric', month: 'long', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
-                  })}
-                </p>
-              </div>
-              {recording.audio_url && (
-                <audio controls src={recording.audio_url}
-                  style={{ height: 34, flex: '1 1 240px', minWidth: 200 }} />
-              )}
-            </div>
-          )}
-
-          {summary.attachment_url && (
             <a
               href={summary.attachment_url} target="_blank" rel="noreferrer"
               style={{
@@ -306,7 +252,6 @@ export default function SummaryDetailCard({
                 </p>
               </div>
             </a>
-          )}
         </footer>
       )}
     </article>

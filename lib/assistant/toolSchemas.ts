@@ -73,13 +73,8 @@ export const TOOL_SCHEMAS: ClaudeToolSchema[] = [
     input_schema: { type: 'object', properties: {} },
   },
   {
-    name: 'getUnprocessedRecordings',
-    description: 'List recordings still pending transcription (status = "pending"). Use for "הקלטות שלא עובדו" / "הקלטות ממתינות לתמלול".',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
     name: 'getPatientTimeline',
-    description: 'Activity summary for one patient — last/next session, summary count, pending recordings, document count. Use whenever the user asks about a specific patient by name.',
+    description: 'Activity summary for one patient — last/next session, summary count, document count. Use whenever the user asks about a specific patient by name.',
     input_schema: {
       type: 'object',
       properties: {

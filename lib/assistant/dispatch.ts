@@ -47,7 +47,6 @@ export const TOOL_NAMES = [
   'getUpcomingSessions',
   'getMissingSummaries',
   'getOpenPayments',
-  'getUnprocessedRecordings',
   'getPatientTimeline',
   'getPatientDocuments',
   'getPatientList',
@@ -71,7 +70,6 @@ export const INTENT_TO_TOOL: Record<Intent, ToolName | null> = {
   upcomingSessions:      'getUpcomingSessions',
   missingSummaries:      'getMissingSummaries',
   openPayments:          'getOpenPayments',
-  unprocessedRecordings: 'getUnprocessedRecordings',
   patientTimeline:       'getPatientTimeline',
   patientDocuments:      'getPatientDocuments',
   patientResponsible:    'getPatientResponsibleStaff',
@@ -121,9 +119,6 @@ export async function dispatchTool(
 
     case 'getOpenPayments':
       return tools.getOpenPayments(supabase);
-
-    case 'getUnprocessedRecordings':
-      return tools.getUnprocessedRecordings(supabase);
 
     case 'getPatientTimeline': {
       const name = typeof input.name === 'string' ? input.name : null;

@@ -235,38 +235,7 @@ export async function getOpenPayments(supabase: SupabaseClient): Promise<ToolRes
   };
 }
 
-/* ── 5. Recordings still pending transcription ─────────────────────────── */
-
-export async function getUnprocessedRecordings(supabase: SupabaseClient): Promise<ToolResult> {
-  const { data, error } = await supabase
-    .from('recordings')
-    .select('id, recorded_at, status, patient:patient_id(full_name, id)')
-    .eq('status', 'pending')
-    .order('recorded_at', { ascending: false })
-    .limit(20);
-
-  if (error) return { answer: `שגיאה: ${error.message}` };
-  const rows = (data ?? []) as unknown as Array<{
-    id: string; recorded_at: string; status: string;
-    patient: { full_name: string; id: string } | null;
-  }>;
-
-  if (rows.length === 0) return { answer: 'אין הקלטות שממתינות לתמלול.' };
-
-  return {
-    answer: `${pluralBy(rows.length, 'הקלטה', 'הקלטות')} ממתינות לתמלול:`,
-    rows: rows.map(r => ({
-      title:    r.patient?.full_name ?? 'מטופלת לא ידועה',
-      subtitle: new Date(r.recorded_at).toLocaleString('he-IL', {
-        day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
-      }),
-      href:     '/recordings',
-    })),
-    links: [{ label: 'פתח הקלטות', href: '/recordings' }],
-  };
-}
-
-/* ── 6. Find patient by name ───────────────────────────────────────────── */
+/* ── 5. Find patient by name ───────────────────────────────────────────── */
 
 export async function findPatient(
   supabase: SupabaseClient, name: string,
@@ -301,7 +270,7 @@ export async function getPatientTimeline(
   const patient = found;
   const today = new Date().toISOString().slice(0, 10);
 
-  const [lastSess, nextSess, sumCount, recPending, docCount] = await Promise.all([
+  const [lastSess, nextSess, sumCount, docCount] = await Promise.all([
     supabase.from('sessions')
       .select('date, start_time, status')
       .eq('patient_id', patient.id)
@@ -318,10 +287,6 @@ export async function getPatientTimeline(
     supabase.from('session_summaries')
       .select('id', { count: 'exact', head: true })
       .eq('patient_id', patient.id),
-    supabase.from('recordings')
-      .select('id', { count: 'exact', head: true })
-      .eq('patient_id', patient.id)
-      .eq('status', 'pending'),
     supabase.from('patient_documents')
       .select('id', { count: 'exact', head: true })
       .eq('patient_id', patient.id),
@@ -339,7 +304,6 @@ export async function getPatientTimeline(
     lines.push('פגישה הבאה: לא מתוכננת.');
   }
   lines.push(`סיכומים: ${sumCount.count ?? 0}`);
-  lines.push(`הקלטות ממתינות: ${recPending.count ?? 0}`);
   lines.push(`מסמכים: ${docCount.count ?? 0}`);
 
   return {
@@ -725,7 +689,6 @@ export const EXAMPLE_QUESTIONS = [
   'אילו פגישות יש היום?',
   'למי חסר סיכום פגישה?',
   'אילו תשלומים עדיין פתוחים?',
-  'אילו הקלטות לא עובדו?',
 ] as const;
 
 export function helpResult(): ToolResult {
