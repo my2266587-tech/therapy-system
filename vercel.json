@@ -3,6 +3,10 @@
     {
       "path": "/api/reports/monthly-excel",
       "schedule": "0 6 1 * *"
+    },
+    {
+      "path": "/api/reminders/sessions-tomorrow",
+      "schedule": "0 16 * * *"
     }
   ]
 }
