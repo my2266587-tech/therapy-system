@@ -38,6 +38,16 @@ export interface YemotDownloadErr {
 
 export type YemotDownloadResult = YemotDownloadOk | YemotDownloadErr;
 
+/** Like YemotDownloadOk but also carries the bytes (kept in memory only). */
+export interface YemotFetchOk {
+  ok: true;
+  contentType: string;
+  sizeBytes: number;
+  buffer: Buffer;
+}
+
+export type YemotFetchResult = YemotFetchOk | YemotDownloadErr;
+
 /** True if the path is a well-formed Yemot file path (ivr2:/...). */
 export function isValidYemotPath(path: string): boolean {
   if (!path.startsWith(YEMOT_PATH_PREFIX)) return false;
@@ -45,6 +55,32 @@ export function isValidYemotPath(path: string): boolean {
   if (path.includes('://')) return false;
   if (path.includes('..')) return false;
   return true;
+}
+
+/**
+ * Recognises Yemot's "error body instead of a file" case. A real recording
+ * is large binary; an error is small text starting with '{'.
+ */
+function looksLikeJsonError(contentType: string, buf: Buffer): boolean {
+  return (
+    contentType.includes('application/json') ||
+    (buf.length > 0 && buf[0] === 0x7b /* '{' */ && buf.length < 4096)
+  );
+}
+
+/** Extracts a human-readable message from a Yemot JSON error body. */
+function jsonErrorMessage(buf: Buffer): string {
+  const raw = buf.toString('utf8');
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return (
+      (parsed.message as string) ??
+      (parsed.responseStatus as string) ??
+      raw.slice(0, 500)
+    );
+  } catch {
+    return raw.slice(0, 500);
+  }
 }
 
 /** Builds the "number:password" token; throws if env is missing. */
@@ -86,25 +122,45 @@ export async function probeDownload(path: string): Promise<YemotDownloadResult> 
   const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
   const buf = Buffer.from(await res.arrayBuffer());
 
-  // Yemot signals failure with a short JSON body instead of the file.
-  // A real WAV is large and binary; an error body is small text starting
-  // with '{'. Treat a JSON-looking body as an error and pass it through.
-  const looksLikeJson =
-    contentType.includes('application/json') ||
-    (buf.length > 0 && buf[0] === 0x7b /* '{' */ && buf.length < 4096);
-  if (looksLikeJson) {
-    let message = buf.toString('utf8').slice(0, 500);
-    try {
-      const parsed = JSON.parse(buf.toString('utf8')) as Record<string, unknown>;
-      message =
-        (parsed.message as string) ??
-        (parsed.responseStatus as string) ??
-        message;
-    } catch {
-      /* keep raw text */
-    }
-    return { ok: false, error: `Yemot error: ${message}` };
+  if (looksLikeJsonError(contentType, buf)) {
+    return { ok: false, error: `Yemot error: ${jsonErrorMessage(buf)}` };
   }
 
   return { ok: true, contentType, sizeBytes: buf.length };
+}
+
+/**
+ * Same as probeDownload but RETURNS the bytes so a caller can transcribe
+ * them. The buffer lives only as long as the caller keeps it — nothing is
+ * written to disk or storage here.
+ */
+export async function fetchFile(path: string): Promise<YemotFetchResult> {
+  let token: string;
+  try {
+    token = buildToken();
+  } catch {
+    return { ok: false, error: 'Yemot credentials not configured' };
+  }
+
+  const url = `${DOWNLOAD_URL}?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'GET' });
+  } catch (e) {
+    return { ok: false, error: `network error: ${(e as Error).message}` };
+  }
+
+  if (!res.ok) {
+    return { ok: false, error: `Yemot returned HTTP ${res.status}` };
+  }
+
+  const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+  const buffer = Buffer.from(await res.arrayBuffer());
+
+  if (looksLikeJsonError(contentType, buffer)) {
+    return { ok: false, error: `Yemot error: ${jsonErrorMessage(buffer)}` };
+  }
+
+  return { ok: true, contentType, sizeBytes: buffer.length, buffer };
 }
