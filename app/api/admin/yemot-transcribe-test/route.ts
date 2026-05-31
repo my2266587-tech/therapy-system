@@ -28,10 +28,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthorizedUser } from '@/lib/getAdminUser';
-import { getOpenAI } from '@/lib/assistant/ai';
 import { fetchFile, isValidYemotPath, YEMOT_PATH_PREFIX } from '@/lib/yemot';
 import { createServerClient } from '@/lib/supabaseServer';
-import { toFile } from 'openai';
+import OpenAI, { toFile } from 'openai';
 
 export const maxDuration = 60;
 
@@ -104,9 +103,16 @@ export async function POST(req: NextRequest) {
   const audioSize = dl.sizeBytes;
 
   // ── 2. Transcribe (audio buffer never leaves memory) ───────────
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json(
+      { ok: false, path, audio_size_bytes: audioSize, error: 'OPENAI_API_KEY not configured' },
+      { status: 500 },
+    );
+  }
+
   let transcript: string;
   try {
-    const openai = getOpenAI();
+    const openai = new OpenAI();
     const file = await toFile(dl.buffer, fileNameFromPath(path));
     const result = await openai.audio.transcriptions.create({
       file,
@@ -140,7 +146,6 @@ export async function POST(req: NextRequest) {
       current_state:       'נוצר מתמלול הקלטה מימות',
       notes:               transcript,
       source_transcript:   transcript,
-      source:              'yemot_recording',
     })
     .select('id')
     .single();
