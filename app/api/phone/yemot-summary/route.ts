@@ -1,27 +1,34 @@
 /**
+ * GET  /api/phone/yemot-summary
  * POST /api/phone/yemot-summary
  *
- *   Public webhook intended for Yemot Mashiach to POST a finished phone
- *   summary (later — currently nobody is wired to call it yet). Accepts
- *   the same content fields as the internal /api/admin/phone-drafts
- *   route, runs the same patient lookup, and creates a row in
- *   phone_summary_drafts. The clinician then reviews + approves it on
- *   /summaries/phone-pending.
+ *   Public webhook intended for Yemot Mashiach to deliver a finished
+ *   phone summary. Accepts the same content fields as the internal
+ *   /api/admin/phone-drafts route, runs the same patient lookup, and
+ *   creates a row in phone_summary_drafts. The clinician then reviews +
+ *   approves it on /summaries/phone-pending.
  *
  *   This route is INTENTIONALLY separate from the admin route so the
  *   Yemot pipeline never accidentally gets a Bearer user token, and the
  *   in-app pages never expose this webhook secret on the client.
  *
+ * Accepted request shapes (Yemot's API module can use any of them):
+ *   - GET  with query params               (?spoken_patient_name=...&secret=...)
+ *   - POST application/json                 (original shape)
+ *   - POST application/x-www-form-urlencoded
+ *   All three map onto the exact same fields and the same draft flow.
+ *
  * Security:
  *   YEMOT_WEBHOOK_SECRET env var is required. The caller must present
- *   the same value either as:
+ *   the same value in ANY one of:
  *     - HTTP header `x-yemot-secret: <value>`
- *     - OR query string `?secret=<value>`
+ *     - query string `?secret=<value>`
+ *     - a `secret` field inside the JSON / form body
  *   Missing / wrong secret → 401, no draft created, nothing logged at
  *   ERROR level (just a WARN so we don't drown the logs if someone
  *   probes the URL).
  *
- * Body (all fields optional, text/JSON):
+ * Fields (all optional):
  *   spoken_patient_name, current_state, main_topics, treatment_actions,
  *   next_steps, tasks_given, progress, difficulties, notes,
  *   call_date (YYYY-MM-DD), call_start_time (HH:MM), call_end_time,
@@ -42,69 +49,135 @@ export const maxDuration = 30;
 
 const TAG = '[yemot-webhook]';
 
-/** Returns the secret the caller presented, in either supported form. */
-function getProvidedSecret(req: NextRequest): string | null {
+/** The content fields we read out of the request, in any format. */
+const FIELD_KEYS = [
+  'spoken_patient_name',
+  'current_state',
+  'main_topics',
+  'treatment_actions',
+  'next_steps',
+  'tasks_given',
+  'progress',
+  'difficulties',
+  'notes',
+  'call_date',
+  'call_start_time',
+  'call_end_time',
+  'caller_phone',
+] as const;
+
+type FieldKey = (typeof FIELD_KEYS)[number];
+type Fields = Partial<Record<FieldKey, string>>;
+
+/** Where the request data came from — surfaced in logs. */
+type ParsedKind = 'query' | 'json' | 'form';
+
+interface ParsedInput {
+  kind: ParsedKind;
+  fields: Fields;
+  /** A `secret` carried inside the body/query, if any (header is read separately). */
+  bodySecret: string | null;
+}
+
+/** Pull our known field keys (+ secret) out of any key/value source. */
+function collectFields(get: (key: string) => string | null): {
+  fields: Fields;
+  bodySecret: string | null;
+} {
+  const fields: Fields = {};
+  for (const key of FIELD_KEYS) {
+    const value = get(key);
+    if (value != null && value !== '') fields[key] = value;
+  }
+  return { fields, bodySecret: get('secret') };
+}
+
+/**
+ * Reads the request into a uniform { fields } shape regardless of how
+ * Yemot sent it: GET query, POST JSON, or POST form-urlencoded.
+ */
+async function parseRequest(req: NextRequest): Promise<ParsedInput> {
+  // GET → everything lives in the query string.
+  if (req.method === 'GET') {
+    const sp = req.nextUrl.searchParams;
+    const { fields, bodySecret } = collectFields((k) => sp.get(k));
+    return { kind: 'query', fields, bodySecret };
+  }
+
+  // POST → branch on content-type.
+  const contentType = (req.headers.get('content-type') ?? '').toLowerCase();
+
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    const raw = await req.text();
+    const params = new URLSearchParams(raw);
+    const { fields, bodySecret } = collectFields((k) => params.get(k));
+    return { kind: 'form', fields, bodySecret };
+  }
+
+  // Default / explicit JSON.
+  const body = (await req.json()) as Record<string, unknown>;
+  const get = (k: string): string | null => {
+    const v = body[k];
+    return typeof v === 'string' ? v : v != null ? String(v) : null;
+  };
+  const { fields, bodySecret } = collectFields(get);
+  return { kind: 'json', fields, bodySecret };
+}
+
+/** Resolve the presented secret from header → query → body, in that order. */
+function resolveSecret(req: NextRequest, bodySecret: string | null): string | null {
   const headerSecret = req.headers.get('x-yemot-secret');
   if (headerSecret) return headerSecret;
-  return req.nextUrl.searchParams.get('secret');
+  const querySecret = req.nextUrl.searchParams.get('secret');
+  if (querySecret) return querySecret;
+  return bodySecret;
 }
 
-interface YemotBody {
-  spoken_patient_name?: string;
-  current_state?:       string;
-  main_topics?:         string;
-  treatment_actions?:   string;
-  next_steps?:          string;
-  tasks_given?:         string;
-  progress?:            string;
-  difficulties?:        string;
-  notes?:               string;
-  call_date?:           string;
-  call_start_time?:     string;
-  call_end_time?:       string;
-  /** Accepted from Yemot but NOT persisted yet — see file header. */
-  caller_phone?:        string;
-}
+/** Shared handler for GET and POST — only the parsing differs. */
+async function handle(req: NextRequest): Promise<NextResponse> {
+  const contentType = req.headers.get('content-type') ?? '(none)';
+  console.log(`${TAG} received: method=${req.method} content-type=${contentType}`);
 
-export async function POST(req: NextRequest) {
-  console.log(`${TAG} received`);
-
-  // ── 1. Secret check ────────────────────────────────────────────
+  // ── 1. Secret env present? ─────────────────────────────────────
   const expected = process.env.YEMOT_WEBHOOK_SECRET;
   if (!expected) {
-    // Bare 500 here so an unconfigured deploy is obvious in the logs.
     console.error(`${TAG} YEMOT_WEBHOOK_SECRET not configured in env`);
     return NextResponse.json(
       { error: 'YEMOT_WEBHOOK_SECRET לא מוגדר בסביבה.' },
       { status: 500 },
     );
   }
-  const provided = getProvidedSecret(req);
+
+  // ── 2. Parse the request in whatever shape Yemot sent ──────────
+  let parsed: ParsedInput;
+  try {
+    parsed = await parseRequest(req);
+  } catch {
+    console.warn(`${TAG} could not parse body (method=${req.method}, content-type=${contentType})`);
+    return NextResponse.json({ error: 'גוף הבקשה לא תקין' }, { status: 400 });
+  }
+  console.log(`${TAG} parsed as: ${parsed.kind}`);
+
+  // ── 3. Secret check (header → query → body) ────────────────────
+  const provided = resolveSecret(req, parsed.bodySecret);
   if (!provided || provided !== expected) {
     console.warn(`${TAG} invalid secret (provided=${provided ? 'present' : 'missing'})`);
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // ── 2. Body ────────────────────────────────────────────────────
-  let body: YemotBody;
-  try {
-    body = (await req.json()) as YemotBody;
-  } catch {
-    console.warn(`${TAG} invalid JSON body`);
-    return NextResponse.json({ error: 'גוף JSON לא תקין' }, { status: 400 });
-  }
+  const { fields } = parsed;
 
   // caller_phone is accepted by the contract but we can't store it
   // without a migration — log it so the future Yemot integration team
   // can debug missing data once the column lands.
-  if (body.caller_phone) {
-    console.log(`${TAG} caller_phone received (not persisted; no column yet): ${body.caller_phone}`);
+  if (fields.caller_phone) {
+    console.log(`${TAG} caller_phone received (not persisted; no column yet): ${fields.caller_phone}`);
   }
 
-  const name = (body.spoken_patient_name ?? '').trim();
+  const name = (fields.spoken_patient_name ?? '').trim();
   const supabase = createServerClient();
 
-  // ── 3. Patient match (ILIKE same as the admin route) ──────────
+  // ── 4. Patient match (ILIKE same as the admin route) ───────────
   let matched_patient_id: string | null = null;
   let match_status: 'matched' | 'ambiguous' | 'not_found' = 'not_found';
   let status: 'draft_ready' | 'needs_match' = 'needs_match';
@@ -138,23 +211,23 @@ export async function POST(req: NextRequest) {
     console.log(`${TAG} no spoken_patient_name provided → needs_match`);
   }
 
-  // ── 4. Insert draft ───────────────────────────────────────────
+  // ── 5. Insert draft ────────────────────────────────────────────
   const insertRow = {
     spoken_patient_name: name || null,
     matched_patient_id,
     match_status,
     status,
-    current_state:     body.current_state     ?? null,
-    main_topics:       body.main_topics       ?? null,
-    treatment_actions: body.treatment_actions ?? null,
-    next_steps:        body.next_steps        ?? null,
-    tasks_given:       body.tasks_given       ?? null,
-    progress:          body.progress          ?? null,
-    difficulties:      body.difficulties      ?? null,
-    notes:             body.notes             ?? null,
-    call_date:         body.call_date         ?? null,
-    call_start_time:   body.call_start_time   ?? null,
-    call_end_time:     body.call_end_time     ?? null,
+    current_state:     fields.current_state     ?? null,
+    main_topics:       fields.main_topics       ?? null,
+    treatment_actions: fields.treatment_actions ?? null,
+    next_steps:        fields.next_steps        ?? null,
+    tasks_given:       fields.tasks_given       ?? null,
+    progress:          fields.progress          ?? null,
+    difficulties:      fields.difficulties      ?? null,
+    notes:             fields.notes             ?? null,
+    call_date:         fields.call_date         ?? null,
+    call_start_time:   fields.call_start_time   ?? null,
+    call_end_time:     fields.call_end_time     ?? null,
   };
 
   const { data, error: insErr } = await supabase
@@ -167,7 +240,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `draft creation failed: ${insErr.message}` }, { status: 500 });
   }
 
-  console.log(`${TAG} draft created: id=${data.id} status=${status} match=${match_status}`);
+  console.log(`${TAG} draft created: id=${data.id} status=${status} match=${match_status} (via ${parsed.kind})`);
 
   return NextResponse.json({
     ok:           true,
@@ -175,4 +248,12 @@ export async function POST(req: NextRequest) {
     status,
     match_status,
   });
+}
+
+export async function GET(req: NextRequest) {
+  return handle(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handle(req);
 }
