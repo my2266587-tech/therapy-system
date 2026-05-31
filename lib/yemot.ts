@@ -21,6 +21,7 @@
  */
 
 const DOWNLOAD_URL = 'https://www.call2all.co.il/ym/api/DownloadFile';
+const GET_DIR_URL = 'https://www.call2all.co.il/ym/api/GetIVR2Dir';
 
 /** Only Yemot file-system paths are allowed — never an external URL. */
 export const YEMOT_PATH_PREFIX = 'ivr2:/';
@@ -163,4 +164,133 @@ export async function fetchFile(path: string): Promise<YemotFetchResult> {
   }
 
   return { ok: true, contentType, sizeBytes: buffer.length, buffer };
+}
+
+/* ── Directory listing (GetIVR2Dir) ──────────────────────────────── */
+
+export interface YemotListOk {
+  ok: true;
+  files: string[];
+}
+export type YemotListResult = YemotListOk | YemotDownloadErr;
+
+/**
+ * Collects candidate file names out of GetIVR2Dir's loosely-typed JSON.
+ * The exact shape isn't firmly documented, so we accept several:
+ *   files: ["000.wav", ...]                       (array of strings)
+ *   files: [{ name: "000.wav" }, ...]             (name carries extension)
+ *   files: [{ name: "000", extension: "wav" }]    (split name + extension)
+ * The dry-run probe exists precisely to confirm which one Yemot returns.
+ */
+function extractFileNames(data: unknown): string[] {
+  if (!data || typeof data !== 'object') return [];
+  const arr = (data as Record<string, unknown>).files;
+  if (!Array.isArray(arr)) return [];
+
+  const names: string[] = [];
+  for (const item of arr) {
+    if (typeof item === 'string') {
+      if (item.length > 0) names.push(item);
+      continue;
+    }
+    if (item && typeof item === 'object') {
+      const rec = item as Record<string, unknown>;
+      const name = (rec.name ?? rec.fileName ?? rec.file) as unknown;
+      if (typeof name !== 'string' || name.length === 0) continue;
+      const ext = rec.extension as unknown;
+      if (
+        typeof ext === 'string' &&
+        ext.length > 0 &&
+        !name.toLowerCase().endsWith(`.${ext.toLowerCase()}`)
+      ) {
+        names.push(`${name}.${ext}`);
+      } else {
+        names.push(name);
+      }
+    }
+  }
+  return names;
+}
+
+/**
+ * Lists the files in a Yemot directory via GetIVR2Dir. Returns just the
+ * file names — no file is downloaded. Yemot's own error status (anything
+ * other than responseStatus "OK") is surfaced as ok:false.
+ */
+export async function listDir(path: string): Promise<YemotListResult> {
+  let token: string;
+  try {
+    token = buildToken();
+  } catch {
+    return { ok: false, error: 'Yemot credentials not configured' };
+  }
+
+  const url = `${GET_DIR_URL}?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'GET' });
+  } catch (e) {
+    return { ok: false, error: `network error: ${(e as Error).message}` };
+  }
+  if (!res.ok) {
+    return { ok: false, error: `Yemot returned HTTP ${res.status}` };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, error: 'GetIVR2Dir did not return JSON' };
+  }
+
+  if (data && typeof data === 'object') {
+    const rec = data as Record<string, unknown>;
+    if (typeof rec.responseStatus === 'string' && rec.responseStatus !== 'OK') {
+      return { ok: false, error: `Yemot error: ${(rec.message as string) ?? rec.responseStatus}` };
+    }
+  }
+
+  return { ok: true, files: extractFileNames(data) };
+}
+
+/** Numeric key of a recording file name ("001.wav" → 1); -1 if none. */
+function wavSortKey(name: string): number {
+  const base = name.replace(/\.[^.]*$/, '');
+  const digits = base.match(/\d+/);
+  return digits ? parseInt(digits[0], 10) : -1;
+}
+
+export interface YemotLatestOk {
+  ok: true;
+  path: string;
+  fileName: string;
+  files: string[];
+}
+export type YemotLatestResult = YemotLatestOk | YemotDownloadErr;
+
+/**
+ * Finds the newest .wav in a Yemot directory. "Newest" = highest number in
+ * the file name, since Yemot names recordings 000.wav, 001.wav, … Returns
+ * the full ivr2:/ path. Nothing is downloaded.
+ */
+export async function latestWav(dirPath: string): Promise<YemotLatestResult> {
+  const listed = await listDir(dirPath);
+  if (!listed.ok) return listed;
+
+  const wavs = listed.files.filter((n) => n.toLowerCase().endsWith('.wav'));
+  if (wavs.length === 0) {
+    return {
+      ok: false,
+      error: `no .wav files in ${dirPath} (saw: ${listed.files.join(', ') || 'none'})`,
+    };
+  }
+
+  let best = wavs[0];
+  for (const n of wavs) {
+    if (wavSortKey(n) > wavSortKey(best)) best = n;
+  }
+
+  const base = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
+  return { ok: true, path: `${base}/${best}`, fileName: best, files: wavs };
 }
