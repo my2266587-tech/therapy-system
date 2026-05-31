@@ -7,9 +7,12 @@
  *   server can reach Yemot and pull a file before building the real
  *   transcription pipeline.
  *
- * Auth:
- *   Protected exactly like the other admin routes — a Bearer token of an
- *   active authorized user, OR a Bearer CRON_SECRET. Not public.
+ * Auth (any one of these passes):
+ *   - Bearer token of an active authorized user (same as other admin routes)
+ *   - Bearer CRON_SECRET
+ *   - ?secret=<YEMOT_WEBHOOK_SECRET> query param — added ONLY on this probe
+ *     route to make manual testing easy without minting a user JWT.
+ *   Not public — a missing/wrong credential returns 401.
  *
  * Path safety:
  *   Only `ivr2:/` paths are accepted (no external URLs, no traversal).
@@ -32,8 +35,16 @@ function isCron(req: NextRequest): boolean {
   return req.headers.get('authorization') === `Bearer ${secret}`;
 }
 
+/** True if ?secret= matches YEMOT_WEBHOOK_SECRET (probe-only shortcut). */
+function hasValidWebhookSecret(req: NextRequest): boolean {
+  const expected = process.env.YEMOT_WEBHOOK_SECRET;
+  if (!expected) return false;
+  return req.nextUrl.searchParams.get('secret') === expected;
+}
+
 async function authorize(req: NextRequest): Promise<boolean> {
   if (isCron(req)) return true;
+  if (hasValidWebhookSecret(req)) return true;
   const user = await getAuthorizedUser(req);
   return Boolean(user);
 }
