@@ -37,7 +37,10 @@
  *   migration we haven't run yet).
  *
  * Response:
- *   { ok: true, draft_id, status, match_status }
+ *   Default: JSON { ok: true, draft_id, status, match_status }.
+ *   With `?response_mode=yemot`: text/plain `id_list_message=t-<message>`
+ *   that Yemot Mashiach's API extension can read aloud — success and the
+ *   401 auth error both use this shape. All other behaviour is unchanged.
  *
  * Logging tag: [yemot-webhook] — grep this in Vercel function logs.
  */
@@ -124,6 +127,24 @@ async function parseRequest(req: NextRequest): Promise<ParsedInput> {
   return { kind: 'json', fields, bodySecret };
 }
 
+/**
+ * Yemot Mashiach's API extension can't parse JSON — it wants a plain
+ * `id_list_message=t-<text>` line. Callers opt in with `?response_mode=yemot`.
+ * When that flag is absent we keep returning JSON exactly as before, so the
+ * existing curl/JSON/GET tests are untouched.
+ */
+function wantsYemotResponse(req: NextRequest): boolean {
+  return req.nextUrl.searchParams.get('response_mode') === 'yemot';
+}
+
+/** Build a Yemot-flavoured text/plain reply: `id_list_message=t-<message>`. */
+function yemotReply(message: string, status: number): NextResponse {
+  return new NextResponse(`id_list_message=t-${message}`, {
+    status,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
+}
+
 /** Resolve the presented secret from header → query → body, in that order. */
 function resolveSecret(req: NextRequest, bodySecret: string | null): string | null {
   const headerSecret = req.headers.get('x-yemot-secret');
@@ -162,6 +183,9 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   const provided = resolveSecret(req, parsed.bodySecret);
   if (!provided || provided !== expected) {
     console.warn(`${TAG} invalid secret (provided=${provided ? 'present' : 'missing'})`);
+    if (wantsYemotResponse(req)) {
+      return yemotReply('שגיאת הרשאה.', 401);
+    }
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -241,6 +265,10 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   }
 
   console.log(`${TAG} draft created: id=${data.id} status=${status} match=${match_status} (via ${parsed.kind})`);
+
+  if (wantsYemotResponse(req)) {
+    return yemotReply('הסיכום נקלט בהצלחה.', 200);
+  }
 
   return NextResponse.json({
     ok:           true,
