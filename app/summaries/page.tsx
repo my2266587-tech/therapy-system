@@ -52,7 +52,40 @@ export default function SummariesPage() {
     const { data } = await supabase.from('session_summaries')
       .select('*, patient:patient_id(full_name)')
       .order('date', { ascending: false });
-    setRecords((data ?? []) as unknown as SummaryWithRel[]);
+    let rows = (data ?? []) as unknown as SummaryWithRel[];
+
+    // Resolve fresh signed URLs for any uploaded attachments. We do this in
+    // one batch call so a page with 50 summaries doesn't fan out into 50
+    // signed-URL requests.
+    const paths = rows.map(r => r.attachment_path).filter((p): p is string => !!p);
+    if (paths.length > 0) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          const res = await fetch('/api/summaries/sign-attachments', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ paths }),
+          });
+          if (res.ok) {
+            const json = await res.json() as { urls: Record<string, string> };
+            rows = rows.map(r =>
+              r.attachment_path && json.urls[r.attachment_path]
+                ? { ...r, attachment_url: json.urls[r.attachment_path] }
+                : r
+            );
+          }
+        }
+      } catch {
+        // Non-fatal: rows render fine without the link.
+      }
+    }
+
+    setRecords(rows);
     setLoading(false);
   }, []);
 
@@ -62,6 +95,15 @@ export default function SummariesPage() {
     if (!confirm('האם למחוק סיכום זה?')) return;
     await supabase.from('session_summaries').delete().eq('id', id);
     load();
+  }
+
+  function handleSummaryChange(updated: SessionSummary) {
+    setRecords(rows => rows.map(row =>
+      row.id === updated.id ? { ...row, ...updated, patient: row.patient } : row
+    ));
+    setOpenDetail(current =>
+      current?.id === updated.id ? { ...current, ...updated, patient: current.patient } : current
+    );
   }
 
   return (
@@ -205,6 +247,7 @@ export default function SummariesPage() {
             summary={openDetail}
             patientName={openDetail.patient?.full_name ?? undefined}
             patientHref={openDetail.patient_id ? `/patients/${openDetail.patient_id}` : undefined}
+            onSummaryChange={handleSummaryChange}
             onClose={() => setOpenDetail(null)}
             onEdit={() => {
               const s = openDetail;

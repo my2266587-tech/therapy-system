@@ -109,6 +109,8 @@ export interface SessionSummary {
   difficulties: string | null;
   notes: string | null;
   attachment_url: string | null;
+  attachment_path: string | null;
+  attachment_name: string | null;
   created_at: string;
   updated_at: string;
   patient?: { full_name: string } | null;

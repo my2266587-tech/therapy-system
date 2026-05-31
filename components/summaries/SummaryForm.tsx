@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import FormGroup from '@/components/ui/FormGroup';
 import { Field, SelectField } from '@/components/ui/FormField';
@@ -35,11 +35,20 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
     progress:          initial?.progress           ?? '',
     difficulties:      initial?.difficulties       ?? '',
     notes:             initial?.notes              ?? '',
+    attachment_path:   initial?.attachment_path    ?? '',
+    attachment_name:   initial?.attachment_name    ?? '',
   });
   const [patients,  setPatients]  = useState<PatientOpt[]>([]);
   const [sessions,  setSessions]  = useState<SessionOpt[]>([]);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
+  // The original attachment_path that was loaded for this summary. If the
+  // user replaces or clears the file we keep this around so we can clean up
+  // the now-orphaned storage object on submit.
+  const initialAttachmentPath = initial?.attachment_path ?? '';
+  const [uploading, setUploading] = useState(false);
+  const [attachErr, setAttachErr] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     supabase.from('patients').select('id, full_name').order('full_name').then(({ data }) => setPatients(data ?? []));
@@ -53,6 +62,82 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
 
   function set(f: string, v: string) { setForm(p => ({ ...p, [f]: v })); }
 
+  async function getToken(): Promise<string | null> {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  }
+
+  async function handlePickFile(file: File | null) {
+    if (!file) return;
+    if (!form.patient_id) {
+      setAttachErr('יש לבחור מטופלת לפני העלאת קובץ');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setAttachErr('הקובץ גדול מ-10MB');
+      return;
+    }
+    setAttachErr('');
+    setUploading(true);
+    try {
+      const token = await getToken();
+      if (!token) { setAttachErr('יש להתחבר מחדש'); return; }
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('patient_id', form.patient_id);
+      const res = await fetch('/api/summaries/upload-attachment', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setAttachErr(json?.error ?? 'שגיאה בהעלאה');
+        return;
+      }
+      // If we replaced a freshly-uploaded (not yet saved) file, drop the
+      // previous storage object so we don't leak it.
+      if (form.attachment_path && form.attachment_path !== initialAttachmentPath) {
+        await deleteAttachment(form.attachment_path, token);
+      }
+      setForm(p => ({
+        ...p,
+        attachment_path: json.path,
+        attachment_name: json.name,
+      }));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function deleteAttachment(path: string, token: string) {
+    try {
+      await fetch('/api/summaries/delete-attachment', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path }),
+      });
+    } catch {
+      // Best-effort cleanup — never block the user.
+    }
+  }
+
+  async function handleClearAttachment() {
+    setAttachErr('');
+    const token = await getToken();
+    // Only nuke uploads from THIS form session — if the user is just
+    // detaching the previously-saved file, defer the delete until submit
+    // so a cancel keeps the saved attachment intact.
+    if (token && form.attachment_path && form.attachment_path !== initialAttachmentPath) {
+      await deleteAttachment(form.attachment_path, token);
+    }
+    setForm(p => ({ ...p, attachment_path: '', attachment_name: '' }));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.patient_id) { setError('יש לבחור מטופלת'); return; }
@@ -61,6 +146,8 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
     const payload = {
       ...form,
       session_id:       form.session_id || null,
+      attachment_path:  form.attachment_path || null,
+      attachment_name:  form.attachment_name || null,
       duration_minutes: calcDuration(form.start_time, form.end_time),
     };
 
@@ -69,11 +156,73 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
       : await supabase.from('session_summaries').insert(payload);
     setSaving(false);
     if (err) { setError(err.message); return; }
+
+    // After a successful save: if the originally-loaded attachment was
+    // detached or replaced, clean its storage object now (we deferred this
+    // so that cancelling the form preserved it).
+    if (
+      initialAttachmentPath &&
+      initialAttachmentPath !== form.attachment_path
+    ) {
+      const token = await getToken();
+      if (token) await deleteAttachment(initialAttachmentPath, token);
+    }
     onSave();
   }
 
   const patientOptions = patients.map(p => ({ value: p.id, label: p.full_name }));
   const sessionOptions = sessions.map(s => ({ value: s.id, label: `${s.date} ${s.start_time}` }));
+
+  const attachmentSection = (
+    <FormGroup title="קובץ מצורף">
+      <div className="space-y-2">
+        {form.attachment_path ? (
+          <div className="flex items-center gap-3 p-3 bg-teal-50 border border-teal-200 rounded-lg">
+            <span className="text-teal-700" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="1.8"
+                strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+            </span>
+            <span className="flex-1 text-sm text-slate-700 truncate">
+              {form.attachment_name || 'קובץ מצורף'}
+            </span>
+            <button
+              type="button"
+              onClick={handleClearAttachment}
+              className="text-xs text-red-600 hover:text-red-700 hover:underline"
+            >
+              הסר
+            </button>
+          </div>
+        ) : (
+          <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-teal-500 hover:bg-teal-50 transition-colors text-sm text-slate-600">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="1.8"
+              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <span>{uploading ? 'מעלה קובץ...' : 'הוסיפי קובץ (PDF / Word / תמונה, עד 10MB)'}</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+              className="hidden"
+              disabled={uploading}
+              onChange={e => handlePickFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        )}
+        {attachErr && (
+          <p className="text-xs text-red-600">{attachErr}</p>
+        )}
+      </div>
+    </FormGroup>
+  );
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -90,6 +239,8 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
           </div>
         </div>
       </FormGroup>
+
+      {attachmentSection}
 
       <FormGroup title="תוכן הפגישה">
         <div className="space-y-3">
@@ -110,7 +261,7 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
       </FormGroup>
 
       <div className="flex gap-3 pt-2 border-t border-slate-100">
-        <button type="submit" disabled={saving} className="px-5 py-2 bg-teal-700 text-white text-sm font-medium rounded-lg hover:bg-teal-800 disabled:opacity-50 transition-colors">
+        <button type="submit" disabled={saving || uploading} className="px-5 py-2 bg-teal-700 text-white text-sm font-medium rounded-lg hover:bg-teal-800 disabled:opacity-50 transition-colors">
           {saving ? 'שומר...' : initial?.id ? 'עדכן' : 'הוסף'}
         </button>
         <button type="button" onClick={onCancel} className="px-5 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">ביטול</button>

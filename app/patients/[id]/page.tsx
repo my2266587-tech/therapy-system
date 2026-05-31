@@ -80,7 +80,41 @@ export default function PatientDetailPage() {
     ]);
     setPatient(p.data as Patient);
     setSessions((s.data ?? []) as Session[]);
-    setSummaries((sum.data ?? []) as SessionSummary[]);
+
+    // Resolve fresh signed URLs for any uploaded summary attachments so the
+    // detail card can render a working "open file" link. Best-effort —
+    // failure leaves the summaries visible without their attachment link.
+    let summariesData = (sum.data ?? []) as SessionSummary[];
+    const attachmentPaths = summariesData
+      .map(r => r.attachment_path)
+      .filter((p): p is string => !!p);
+    if (attachmentPaths.length > 0) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          const res = await fetch('/api/summaries/sign-attachments', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ paths: attachmentPaths }),
+          });
+          if (res.ok) {
+            const json = await res.json() as { urls: Record<string, string> };
+            summariesData = summariesData.map(r =>
+              r.attachment_path && json.urls[r.attachment_path]
+                ? { ...r, attachment_url: json.urls[r.attachment_path] }
+                : r
+            );
+          }
+        }
+      } catch {
+        // Non-fatal.
+      }
+    }
+    setSummaries(summariesData);
     type StaffJoin = { staff: { id: string; full_name: string; role: string } | null };
     const staffRows = ((sp.data ?? []) as unknown as StaffJoin[])
       .map(r => r.staff)
@@ -90,6 +124,15 @@ export default function PatientDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  function handleSummaryChange(updated: SessionSummary) {
+    setSummaries(rows => rows.map(row =>
+      row.id === updated.id ? { ...row, ...updated } : row
+    ));
+    setOpenSummary(current =>
+      current?.id === updated.id ? { ...current, ...updated } : current
+    );
+  }
 
   if (loading) {
     return (
@@ -291,6 +334,7 @@ export default function PatientDetailPage() {
           <SummaryDetailCard
             summary={openSummary}
             patientName={patient.full_name}
+            onSummaryChange={handleSummaryChange}
             onClose={() => setOpenSummary(null)}
           />
         )}

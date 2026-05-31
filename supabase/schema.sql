@@ -116,6 +116,13 @@ create table if not exists session_summaries (
 alter table session_summaries add column if not exists recording_reference text;
 alter table session_summaries add column if not exists import_metadata     jsonb;
 
+-- ── Session summaries: file attachment (idempotent) ───────────────────────
+-- `attachment_url` (above) is the legacy free-text URL field kept for the
+-- importer. For real uploads we store the bucket-internal storage path and
+-- the user-visible filename, then resolve a fresh signed URL on read.
+alter table session_summaries add column if not exists attachment_path text;
+alter table session_summaries add column if not exists attachment_name text;
+
 -- ── Recordings ────────────────────────────────────────────────────────────────
 create table if not exists recordings (
   id            uuid primary key default gen_random_uuid(),

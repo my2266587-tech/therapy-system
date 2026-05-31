@@ -24,6 +24,7 @@
  * the close button below replaces the modal's default chrome button.
  */
 
+import { useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import DateDisplay from '@/components/ui/DateDisplay';
 import { formatHebrew } from '@/lib/dateUtils';
@@ -76,12 +77,30 @@ export interface Props {
   patientName?: string;
   patientHref?: string;
   onEdit?:      () => void;
+  onSummaryChange?: (summary: SessionSummary) => void;
   onClose:      () => void;
 }
 
 export default function SummaryDetailCard({
-  summary, patientName, patientHref, onEdit, onClose,
+  summary, patientName, patientHref, onEdit, onSummaryChange, onClose,
 }: Props) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [attachmentError, setAttachmentError] = useState('');
+  const [localAttachment, setLocalAttachment] = useState<{
+    summaryId: string;
+    path: string;
+    name: string;
+    url: string;
+  } | null>(null);
+  const attachment = localAttachment?.summaryId === summary.id
+    ? localAttachment
+    : {
+        path: summary.attachment_path ?? '',
+        name: summary.attachment_name ?? '',
+        url: summary.attachment_url ?? '',
+      };
+
   const displayName =
     patientName ??
     ((summary as SessionSummary & { patient?: { full_name?: string } | null })
@@ -91,6 +110,106 @@ export default function SummaryDetailCard({
   const visible = SECTIONS
     .map(s => ({ ...s, value: summary[s.key] as string | null | undefined }))
     .filter(s => s.value && String(s.value).trim().length > 0);
+
+  async function getToken(): Promise<string | null> {
+    const { supabase } = await import('@/lib/supabase');
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  }
+
+  async function deleteAttachment(path: string, token: string) {
+    try {
+      await fetch('/api/summaries/delete-attachment', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path }),
+      });
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+
+  async function handlePickAttachment(file: File | null) {
+    if (!file) return;
+    if (!summary.patient_id) {
+      setAttachmentError('לא נמצא שיוך למטופלת עבור הסיכום');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setAttachmentError('הקובץ גדול מ-10MB');
+      return;
+    }
+
+    setAttachmentError('');
+    setUploading(true);
+    try {
+      const token = await getToken();
+      if (!token) {
+        setAttachmentError('יש להתחבר מחדש');
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('patient_id', summary.patient_id);
+
+      const res = await fetch('/api/summaries/upload-attachment', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const json = await res.json().catch(() => null) as {
+        path?: string;
+        name?: string;
+        url?: string;
+        error?: string;
+      } | null;
+
+      if (!res.ok || !json?.path) {
+        setAttachmentError(json?.error ?? 'שגיאה בהעלאת המסמך');
+        return;
+      }
+
+      const { supabase } = await import('@/lib/supabase');
+      const { error } = await supabase
+        .from('session_summaries')
+        .update({
+          attachment_path: json.path,
+          attachment_name: json.name ?? file.name,
+        })
+        .eq('id', summary.id);
+
+      if (error) {
+        await deleteAttachment(json.path, token);
+        setAttachmentError(error.message);
+        return;
+      }
+
+      if (attachment.path && attachment.path !== json.path) {
+        await deleteAttachment(attachment.path, token);
+      }
+
+      const nextSummary = {
+        ...summary,
+        attachment_path: json.path,
+        attachment_name: json.name ?? file.name,
+        attachment_url: json.url ?? null,
+      };
+      setLocalAttachment({
+        summaryId: summary.id,
+        path: json.path,
+        name: json.name ?? file.name,
+        url: json.url ?? '',
+      });
+      onSummaryChange?.(nextSummary);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   return (
     <article
@@ -208,52 +327,75 @@ export default function SummaryDetailCard({
       </div>
 
       {/* ── Footer attachment ─────────────────────────────────── */}
-      {summary.attachment_url && (
-        <footer style={{
-          padding: '18px 36px 28px',
-          backgroundColor: C.surface,
-          borderTop: `1px solid ${C.border}`,
-          display: 'flex', flexDirection: 'column', gap: 10,
-        }}>
-            <a
-              href={summary.attachment_url} target="_blank" rel="noreferrer"
-              style={{
-                padding: '12px 16px', borderRadius: 12,
-                backgroundColor: C.card, border: `1px solid ${C.border}`,
-                display: 'flex', alignItems: 'center', gap: 12,
-                textDecoration: 'none',
-                transition: 'border-color 0.12s, background-color 0.12s',
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.borderColor = C.accentRim;
-                el.style.backgroundColor = C.accentSoft;
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.borderColor = C.border;
-                el.style.backgroundColor = C.card;
-              }}
-            >
-              <span style={{
-                width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                backgroundColor: C.accentSoft, color: C.accent,
-                border: `1px solid ${C.accentRim}`,
-              }}>
-                <FileIcon />
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: '0.04em' }}>
-                  קובץ מצורף
-                </p>
-                <p style={{ margin: '2px 0 0', fontSize: 13, color: C.text, fontWeight: 500 }}>
-                  פתח את הסיכום המקורי ←
-                </p>
+      <footer style={{
+        padding: '18px 36px 28px',
+        backgroundColor: C.surface,
+        borderTop: `1px solid ${C.border}`,
+        display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+          style={{ display: 'none' }}
+          disabled={uploading}
+          onChange={e => handlePickAttachment(e.target.files?.[0] ?? null)}
+        />
+
+        {attachment.path ? (
+          <div style={{
+            padding: '12px 16px', borderRadius: 12,
+            backgroundColor: C.card, border: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            {attachment.url ? (
+              <a
+                href={attachment.url} target="_blank" rel="noreferrer"
+                style={{
+                  flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12,
+                  textDecoration: 'none',
+                }}
+              >
+                <AttachmentIconBox />
+                <AttachmentText name={attachment.name} />
+              </a>
+            ) : (
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <AttachmentIconBox />
+                <AttachmentText name={attachment.name} />
               </div>
-            </a>
-        </footer>
-      )}
+            )}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              style={secondaryBtnStyle}
+            >
+              {uploading ? 'מעלה...' : 'החלף מסמך'}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{
+              padding: '13px 16px', borderRadius: 12,
+              backgroundColor: C.card, border: `1px dashed ${C.borderStrong}`,
+              color: C.accent, cursor: uploading ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <UploadIcon />
+            {uploading ? 'מעלה מסמך...' : 'הוספת מסמך לפגישה'}
+          </button>
+        )}
+
+        {attachmentError && (
+          <p style={{ margin: 0, fontSize: 12, color: '#DC2626' }}>{attachmentError}</p>
+        )}
+      </footer>
     </article>
   );
 }
@@ -353,7 +495,48 @@ function Dot() {
 
 /* ── Icon button ───────────────────────────────────────────────────── */
 
-function iconBtnStyle(palette: typeof C): React.CSSProperties {
+const secondaryBtnStyle: CSSProperties = {
+  padding: '7px 12px',
+  borderRadius: 9,
+  border: `1px solid ${C.border}`,
+  backgroundColor: '#FFFFFF',
+  color: C.accent,
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+  flexShrink: 0,
+};
+
+function AttachmentIconBox() {
+  return (
+    <span style={{
+      width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: C.accentSoft, color: C.accent,
+      border: `1px solid ${C.accentRim}`,
+    }}>
+      <FileIcon />
+    </span>
+  );
+}
+
+function AttachmentText({ name }: { name: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: '0.04em' }}>
+        קובץ מצורף
+      </p>
+      <p style={{
+        margin: '2px 0 0', fontSize: 13, color: C.text, fontWeight: 500,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {name || 'פתח את הקובץ'}
+      </p>
+    </div>
+  );
+}
+
+function iconBtnStyle(palette: typeof C): CSSProperties {
   return {
     width: 34, height: 34, borderRadius: 9,
     border: `1px solid ${palette.border}`,
@@ -391,6 +574,17 @@ function FileIcon() {
       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
       <polyline points="14 2 14 8 20 8"/>
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
     </svg>
   );
 }
