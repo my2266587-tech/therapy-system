@@ -49,6 +49,28 @@ function isAuthorized(req: NextRequest): boolean {
 }
 
 /**
+ * Best-effort caller fingerprint for tracing WHO hits this endpoint.
+ *
+ * The point is forensic: if a stray external trigger is still calling
+ * this route with ?date=, these fields let us spot it in the Vercel logs
+ * (filter for the "reminders-tomorrow:trace" tag) and shut it off at the
+ * source. `x-vercel-cron` is the cleanest tell — Vercel sets it only on
+ * genuine Cron invocations, so anything blocked WITHOUT it is external.
+ */
+function describeRequest(req: NextRequest) {
+  const h = req.headers;
+  return {
+    userAgent:     h.get('user-agent')      ?? null,
+    referer:       h.get('referer')         ?? null,
+    origin:        h.get('origin')          ?? null,
+    xForwardedFor: h.get('x-forwarded-for') ?? null,
+    xRealIp:       h.get('x-real-ip')       ?? null,
+    // Present (usually "1") only on real Vercel Cron calls.
+    vercelCron:    h.get('x-vercel-cron')   ?? null,
+  };
+}
+
+/**
  * "Tomorrow" in Israel as a YYYY-MM-DD string.
  *
  * Uses Intl to get today-in-Israel reliably regardless of the server's
@@ -238,14 +260,73 @@ function renderEmail(opts: {
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Resolve the request up front so we can trace EVERY call ──────────
+    //
+    // The reminder must ONLY ever fire for the real "tomorrow in Israel".
+    // A ?date=YYYY-MM-DD override exists for manual testing, but in
+    // PRODUCTION we refuse any date that isn't the real tomorrow. This is
+    // a hard guard against a stray trigger (an external cron / automation
+    // / manual loop hitting this endpoint once per future session-date)
+    // blasting a separate reminder for every upcoming Wednesday — exactly
+    // the bug this fixes: the clinic received one email per future
+    // Wednesday (3 Jun, 10 Jun, 17 Jun, 15 Jul…) instead of only
+    // tomorrow's. The legit daily Vercel cron passes no ?date, so it is
+    // unaffected; only a future ?date in production gets rejected.
+    const meta          = describeRequest(req);
+    const authorized    = isAuthorized(req);
+    const realTomorrow  = tomorrowInIsrael();
+    const isProd        = process.env.VERCEL_ENV === 'production';
+    const override      = req.nextUrl.searchParams.get('date');
+    const overrideValid = !!override && /^\d{4}-\d{2}-\d{2}$/.test(override);
+    const blockedByGuard = isProd && overrideValid && override !== realTomorrow;
+
+    const decision =
+      !process.env.CRON_SECRET ? 'error:no-cron-secret'
+      : !authorized            ? 'blocked:unauthorized'
+      : blockedByGuard         ? 'blocked:non-tomorrow-date-in-production'
+      : 'approved';
+
+    // One structured trace line per call. Filter the Vercel logs for the
+    // "reminders-tomorrow:trace" tag to find a stray caller; anything with
+    // decision "blocked:non-tomorrow-date-in-production" and vercelCron:null
+    // is an external trigger to shut off at its source.
+    const trace = {
+      tag:             'reminders-tomorrow:trace',
+      timestamp:       new Date().toISOString(),
+      vercelEnv:       process.env.VERCEL_ENV ?? 'unknown',
+      isProd,
+      queryDate:       override ?? null,
+      realTomorrowYmd: realTomorrow,
+      decision,
+      cronAuthValid:   authorized,
+      ...meta,
+    };
+    if (decision === 'approved') console.log('[reminders-tomorrow]', trace);
+    else                         console.warn('[reminders-tomorrow]', trace);
+
     if (!process.env.CRON_SECRET) {
       return NextResponse.json(
         { error: 'CRON_SECRET לא מוגדר בסביבה.' },
         { status: 500 },
       );
     }
-    if (!isAuthorized(req)) {
+    if (!authorized) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Refuse a non-tomorrow date in production BEFORE doing any work or
+    // touching mail config — no email is sent, we just report sent:false.
+    if (blockedByGuard) {
+      return NextResponse.json({
+        ok: true,
+        sent: false,
+        date: override,
+        realTomorrow,
+        reason:
+          'refused: in production this reminder only sends for the real ' +
+          'next day (tomorrow in Israel). A non-tomorrow ?date was ignored ' +
+          'so a stray trigger cannot send reminders for future dates.',
+      });
     }
 
     const gmailUser     = process.env.GMAIL_USER;
@@ -267,11 +348,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Allow ?date=YYYY-MM-DD for manual testing of a specific date.
-    const override = req.nextUrl.searchParams.get('date');
-    const tomorrowYmd = override && /^\d{4}-\d{2}-\d{2}$/.test(override)
-      ? override
-      : tomorrowInIsrael();
+    // In non-production a valid override is honoured (date-specific tests);
+    // in production tomorrowYmd is always the real tomorrow.
+    const tomorrowYmd = overrideValid && !isProd ? override! : realTomorrow;
 
     const supabase = createServerClient();
     const { data, error } = await supabase
