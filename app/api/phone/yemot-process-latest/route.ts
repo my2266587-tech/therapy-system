@@ -33,7 +33,7 @@
  * Logging tag: [yemot-process-latest]
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { latestWav } from '@/lib/yemot';
 import { processThreeParts } from '@/lib/yemot3part';
 
@@ -43,6 +43,18 @@ const TAG = '[yemot-process-latest]';
 
 /** The three step folders, in part order. */
 const PART_DIRS = ['ivr2:/2/1', 'ivr2:/2/2', 'ivr2:/2/3'] as const;
+
+/**
+ * Best-effort idempotency for the Yemot fast path, keyed by the three
+ * resolved paths. Yemot may re-call (network blip / double keypress); if the
+ * same recording set is already being processed or was just processed, we
+ * skip a duplicate draft. This is IN-MEMORY (module scope) so it only spans
+ * one warm serverless instance — enough for retries seconds apart. A robust
+ * cross-instance guard would need to persist the path-key, which is a schema
+ * change we have NOT made.
+ */
+const inFlightKeys = new Set<string>();
+const processedKeys = new Set<string>();
 
 interface Body {
   secret?: string;
@@ -130,6 +142,55 @@ async function handle(req: NextRequest): Promise<NextResponse> {
 
   const dryRun = wantsDryRun(req, body);
 
+  // ════════════════════════════════════════════════════════════════
+  // Yemot fast path: validate quickly, answer the caller immediately,
+  // and do the heavy work in `after` so the line isn't left silent.
+  // (Only when response_mode=yemot AND not a dry-run.)
+  // ════════════════════════════════════════════════════════════════
+  if (yemot && !dryRun) {
+    console.log(`${TAG} yemot fast response start`);
+    const resolved = await resolveLatestPaths();
+    if (resolved instanceof NextResponse) {
+      return yemotReply('חסר חלק מההקלטה. נא לנסות שוב.', 502);
+    }
+    const found = resolved;
+    console.log(`${TAG} found paths ${found.part1} | ${found.part2} | ${found.part3}`);
+
+    const key = `${found.part1}|${found.part2}|${found.part3}`;
+    if (processedKeys.has(key) || inFlightKeys.has(key)) {
+      console.log(`${TAG} duplicate request for ${key} — skipping`);
+      return yemotReply('הסיכום כבר נקלט ונמצא בעיבוד.', 200);
+    }
+    inFlightKeys.add(key);
+
+    // Schedule the heavy pipeline after the response is flushed. On Vercel
+    // `after` is backed by waitUntil, so the function stays alive until this
+    // settles — not a fire-and-forget that the platform might cut off.
+    after(async () => {
+      console.log(`${TAG} background process started`);
+      try {
+        const result = await processThreeParts({
+          part1Path: found.part1,
+          part2Path: found.part2,
+          part3Path: found.part3,
+        });
+        if (result.ok) {
+          processedKeys.add(key);
+          console.log(`${TAG} background draft created ${result.draft_id}`);
+        } else {
+          console.error(`${TAG} background failed: ${result.error}`);
+        }
+      } catch (e) {
+        console.error(`${TAG} background failed: ${(e as Error).message}`);
+      } finally {
+        inFlightKeys.delete(key);
+      }
+    });
+
+    console.log(`${TAG} returning immediate yemot response`);
+    return yemotReply('הסיכום נקלט ונשלח לעיבוד. ניתן לנתק.', 200);
+  }
+
   // ── Find the three latest recordings (no audio downloaded yet) ──
   const resolved = await resolveLatestPaths();
   if (resolved instanceof NextResponse) {
@@ -146,7 +207,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, dry_run: true, found });
   }
 
-  // ── Real processing via the shared pipeline ────────────────────
+  // ── Real processing via the shared pipeline (manual JSON path) ─
   console.log(`${TAG} start process`);
   console.log(`${TAG} calling processThreeParts`);
   const result = await processThreeParts({
@@ -157,13 +218,11 @@ async function handle(req: NextRequest): Promise<NextResponse> {
 
   if (!result.ok) {
     console.error(`${TAG} processing failed: ${result.error}`);
-    if (yemot) return yemotReply('אירעה שגיאה בשליחת הסיכום. נא לנסות שוב או לפנות למנהלת המערכת.', result.httpStatus);
     return NextResponse.json({ ok: false, processed: false, found, error: result.error }, { status: result.httpStatus });
   }
 
   console.log(`${TAG} draft created ${result.draft_id}`);
   console.log(`${TAG} done`);
-  if (yemot) return yemotReply('הסיכום נשלח למערכת בהצלחה.', 200);
   return NextResponse.json({
     ok:           true,
     processed:    true,
