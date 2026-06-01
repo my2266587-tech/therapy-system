@@ -49,6 +49,10 @@ export const maxDuration = 60;
 
 const DEFAULT_FROM = 'system@maharchacher.co.il';
 
+// Always include this payroll/accountant address as a recipient, in addition
+// to whatever REPORT_EMAIL_TO is configured to — both get a copy (deduped).
+const FIXED_RECIPIENT = 's0548539967@gmail.com';
+
 const HEB_MONTHS: Record<number, string> = {
   1: 'ינואר', 2: 'פברואר', 3: 'מרץ',     4: 'אפריל',
   5: 'מאי',   6: 'יוני',   7: 'יולי',     8: 'אוגוסט',
@@ -127,12 +131,14 @@ export async function POST(req: NextRequest) {
       daysCovered:   result.stats.daysCovered,
     });
 
-    // 5. Send the single attachment.
+    // 5. Send the single attachment. Always include the fixed payroll
+    //    recipient alongside REPORT_EMAIL_TO — both get a copy (deduped).
     const monthName = HEB_MONTHS[month] ?? String(month);
+    const recipients = Array.from(new Set([emailTo!, FIXED_RECIPIENT]));
     const resend = new Resend(resendKey!);
     const { error: emailErr } = await resend.emails.send({
       from:    emailFrom,
-      to:      emailTo!,
+      to:      recipients,
       subject: `דו"ח שעות חודשי – ${monthName} ${year}`,
       html: `
         <div dir="rtl" style="font-family: Arial, sans-serif;">
@@ -158,7 +164,7 @@ export async function POST(req: NextRequest) {
       ok:            true,
       month,
       year,
-      recipient:     emailTo!,
+      recipient:     recipients,
       sessionsCount: result.stats.sessionCount,
       fileName:      result.fileName,
     });
