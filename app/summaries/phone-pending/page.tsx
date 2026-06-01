@@ -343,8 +343,9 @@ function DraftEditor({
     call_start_time:    initial.call_start_time    ?? '',
     call_end_time:      initial.call_end_time      ?? '',
   });
-  const [busy,  setBusy]  = useState<'idle' | 'saving' | 'approving'>('idle');
+  const [busy,  setBusy]  = useState<'idle' | 'saving' | 'approving' | 'deleting'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   function set<K extends keyof typeof form>(k: K, v: typeof form[K]) {
     setForm(p => ({ ...p, [k]: v }));
@@ -432,6 +433,27 @@ function DraftEditor({
       setError((e as Error).message);
     } finally {
       setBusy('idle');
+    }
+  }
+
+  async function remove() {
+    setBusy('deleting'); setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('יש להתחבר מחדש');
+      const res = await fetch(`/api/admin/phone-drafts/${initial.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        throw new Error(j?.error ?? `שגיאה (${res.status})`);
+      }
+      onSaved();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy('idle');
+      setConfirmDelete(false);
     }
   }
 
@@ -528,6 +550,48 @@ function DraftEditor({
         >
           ביטול
         </button>
+
+        {confirmDelete ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12.5, color: '#B91C1C', fontWeight: 600 }}>למחוק לצמיתות?</span>
+            <button
+              onClick={remove}
+              disabled={busy !== 'idle'}
+              style={{
+                padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                backgroundColor: '#DC2626', color: '#FFFFFF', border: 'none',
+                cursor: busy !== 'idle' ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {busy === 'deleting' ? 'מוחק...' : 'כן, מחק'}
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              disabled={busy !== 'idle'}
+              style={{
+                padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                backgroundColor: '#FFFFFF', color: '#64748B', border: '1px solid #E8ECF0',
+                cursor: busy !== 'idle' ? 'not-allowed' : 'pointer',
+              }}
+            >
+              לא
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            disabled={busy !== 'idle'}
+            style={{
+              padding: '10px 16px', borderRadius: 9, fontSize: 14, fontWeight: 500,
+              backgroundColor: '#FFFFFF', color: '#DC2626',
+              border: '1px solid #FECACA',
+              cursor: busy !== 'idle' ? 'not-allowed' : 'pointer',
+            }}
+            title="מחיקת הטיוטה לצמיתות"
+          >
+            מחיקה
+          </button>
+        )}
       </div>
     </div>
   );

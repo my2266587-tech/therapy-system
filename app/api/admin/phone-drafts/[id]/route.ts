@@ -1,13 +1,17 @@
 /**
- * PATCH /api/admin/phone-drafts/[id]
+ * PATCH  /api/admin/phone-drafts/[id]   — edit a draft in place
+ * DELETE /api/admin/phone-drafts/[id]   — delete a draft
  *
- *   Edits a draft in place. Used both for the "שמירת טיוטה" button on
- *   the pending-approvals UI (user updates fields without approving)
- *   AND for "select a patient" — when matched_patient_id is set, we
- *   automatically promote the draft from needs_match → draft_ready.
+ *   PATCH is used both for the "שמירת טיוטה" button on the pending-
+ *   approvals UI (user updates fields without approving) AND for "select a
+ *   patient" — when matched_patient_id is set, we automatically promote the
+ *   draft from needs_match → draft_ready. Whitelisted columns only.
  *
- *   Whitelisted columns only; nothing outside the list below can be
- *   touched here. Approval is its own route (/approve).
+ *   DELETE removes a draft row entirely. Approved drafts are protected:
+ *   the resulting session_summary lives independently, but we refuse to
+ *   delete the draft so the audit trail of an approved summary is kept.
+ *
+ *   Approval is its own route (/approve).
  *
  * Auth: Bearer user token (CRON_SECRET also accepted for symmetry).
  */
@@ -113,6 +117,50 @@ export async function PATCH(
     return NextResponse.json({ draft: data });
   } catch (err) {
     console.error('[phone-drafts PATCH]', { message: (err as Error)?.message });
+    return NextResponse.json(
+      { error: (err as Error)?.message ?? String(err) },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    if (!isCron(req)) {
+      const user = await getAuthorizedUser(req);
+      if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const supabase = createServerClient();
+
+    // Approved drafts are kept as the audit trail of a real summary.
+    const { data: current, error: fetchErr } = await supabase
+      .from('phone_summary_drafts')
+      .select('id, status')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchErr) throw new Error(`fetch: ${fetchErr.message}`);
+    if (!current) return NextResponse.json({ error: 'טיוטה לא נמצאה' }, { status: 404 });
+    if (current.status === 'approved') {
+      return NextResponse.json(
+        { error: 'הטיוטה כבר אושרה — אי אפשר למחוק אותה.' },
+        { status: 409 },
+      );
+    }
+
+    const { error: delErr } = await supabase
+      .from('phone_summary_drafts')
+      .delete()
+      .eq('id', id);
+    if (delErr) throw new Error(`delete: ${delErr.message}`);
+
+    return NextResponse.json({ ok: true, deleted_id: id });
+  } catch (err) {
+    console.error('[phone-drafts DELETE]', { message: (err as Error)?.message });
     return NextResponse.json(
       { error: (err as Error)?.message ?? String(err) },
       { status: 500 },
