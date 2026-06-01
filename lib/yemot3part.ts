@@ -18,6 +18,7 @@
 
 import { fetchFile } from '@/lib/yemot';
 import { createServerClient } from '@/lib/supabaseServer';
+import { matchPatient } from '@/lib/patientMatch';
 import OpenAI, { toFile } from 'openai';
 
 // Cheap, Hebrew-capable models (same as the original probe route).
@@ -203,7 +204,7 @@ export async function processThreeParts(input: ThreePartInput): Promise<ThreePar
     return { ok: false, error: `structuring failed: ${(e as Error).message}`, httpStatus: 502 };
   }
 
-  // ── 3. Patient match (same ILIKE rule as the other routes) ─────
+  // ── 3. Patient match (fuzzy — transcripts garble Hebrew names) ─
   const supabase = createServerClient();
   const name = fields.spoken_patient_name.trim();
   const isPlaceholder = name === 'צריך שיוך מטופלת';
@@ -211,25 +212,24 @@ export async function processThreeParts(input: ThreePartInput): Promise<ThreePar
   let matched_patient_id: string | null = null;
   let match_status: 'matched' | 'ambiguous' | 'not_found' = 'not_found';
   let status: 'draft_ready' | 'needs_match' = 'needs_match';
+  // Stored name: the cleaned/short spoken form when we have one.
+  let storedName = name;
 
   if (name && !isPlaceholder) {
+    // Fetch the full list — a mistranscribed name won't survive an ILIKE
+    // filter, so scoring happens in-process against every patient.
     const { data: candidates, error: lookupErr } = await supabase
       .from('patients')
-      .select('id, full_name')
-      .ilike('full_name', `%${name}%`)
-      .limit(5);
+      .select('id, full_name');
     if (lookupErr) {
       console.error(`${TAG} patient lookup failed:`, lookupErr.message);
       return { ok: false, error: `patient lookup: ${lookupErr.message}`, httpStatus: 500 };
     }
-    const list = candidates ?? [];
-    if (list.length === 1) {
-      matched_patient_id = list[0].id;
-      match_status = 'matched';
-      status = 'draft_ready';
-    } else if (list.length > 1) {
-      match_status = 'ambiguous';
-    } // else stays not_found / needs_match
+    const result = matchPatient(name, candidates ?? []);
+    matched_patient_id = result.matched_patient_id;
+    match_status = result.match_status;
+    if (result.cleanedName) storedName = result.cleanedName;
+    if (match_status === 'matched') status = 'draft_ready';
   }
 
   // ── 4. Create one draft ────────────────────────────────────────
@@ -239,7 +239,7 @@ export async function processThreeParts(input: ThreePartInput): Promise<ThreePar
   const { data, error: insErr } = await supabase
     .from('phone_summary_drafts')
     .insert({
-      spoken_patient_name: name || null,
+      spoken_patient_name: storedName || null,
       matched_patient_id,
       match_status,
       status,
