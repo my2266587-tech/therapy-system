@@ -47,6 +47,7 @@ const PART_DIRS = ['ivr2:/2/1', 'ivr2:/2/2', 'ivr2:/2/3'] as const;
 interface Body {
   secret?: string;
   dry_run?: boolean | string;
+  response_mode?: string;
 }
 
 type Found = Record<'part1' | 'part2' | 'part3', string>;
@@ -56,6 +57,25 @@ function hasValidSecret(req: NextRequest, bodySecret: string | null): boolean {
   if (!expected) return false;
   if (req.nextUrl.searchParams.get('secret') === expected) return true;
   return bodySecret != null && bodySecret === expected;
+}
+
+/**
+ * Yemot Mashiach's API extension can't parse JSON — it wants a plain
+ * `id_list_message=t-<text>` line. Callers opt in with `response_mode=yemot`
+ * (query or body). When absent we keep returning JSON exactly as before, so
+ * the manual curl/browser tests are untouched. Mirrors /api/phone/yemot-summary.
+ */
+function wantsYemotResponse(req: NextRequest, body: Body): boolean {
+  if (req.nextUrl.searchParams.get('response_mode') === 'yemot') return true;
+  return body.response_mode === 'yemot';
+}
+
+/** Build a Yemot-flavoured text/plain reply: `id_list_message=t-<message>`. */
+function yemotReply(message: string, status: number): NextResponse {
+  return new NextResponse(`id_list_message=t-${message}`, {
+    status,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }
 
 function wantsDryRun(req: NextRequest, body: Body): boolean {
@@ -95,12 +115,16 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     // Empty body is fine — secret/dry_run may live in the query string.
   }
 
+  // Decide the reply format up front so every exit can honour it.
+  const yemot = wantsYemotResponse(req, body);
+
   if (!process.env.YEMOT_WEBHOOK_SECRET) {
     console.error(`${TAG} YEMOT_WEBHOOK_SECRET not configured in env`);
     return NextResponse.json({ ok: false, error: 'YEMOT_WEBHOOK_SECRET לא מוגדר בסביבה.' }, { status: 500 });
   }
   if (!hasValidSecret(req, body.secret ?? null)) {
     console.warn(`${TAG} invalid secret`);
+    if (yemot) return yemotReply('שגיאת הרשאה. נא לפנות למנהלת המערכת.', 401);
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -108,7 +132,12 @@ async function handle(req: NextRequest): Promise<NextResponse> {
 
   // ── Find the three latest recordings (no audio downloaded yet) ──
   const resolved = await resolveLatestPaths();
-  if (resolved instanceof NextResponse) return resolved;
+  if (resolved instanceof NextResponse) {
+    // A folder was missing a recording. The JSON detail is in `resolved`;
+    // for Yemot we play a generic try-again message instead.
+    if (yemot) return yemotReply('אירעה שגיאה בשליחת הסיכום. נא לנסות שוב או לפנות למנהלת המערכת.', 502);
+    return resolved;
+  }
   const found = resolved;
 
   // ── Dry-run: just report the paths, unchanged from before ──────
@@ -128,11 +157,13 @@ async function handle(req: NextRequest): Promise<NextResponse> {
 
   if (!result.ok) {
     console.error(`${TAG} processing failed: ${result.error}`);
+    if (yemot) return yemotReply('אירעה שגיאה בשליחת הסיכום. נא לנסות שוב או לפנות למנהלת המערכת.', result.httpStatus);
     return NextResponse.json({ ok: false, processed: false, found, error: result.error }, { status: result.httpStatus });
   }
 
   console.log(`${TAG} draft created ${result.draft_id}`);
   console.log(`${TAG} done`);
+  if (yemot) return yemotReply('הסיכום נשלח למערכת בהצלחה.', 200);
   return NextResponse.json({
     ok:           true,
     processed:    true,
