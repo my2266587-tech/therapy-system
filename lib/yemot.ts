@@ -254,11 +254,17 @@ export async function listDir(path: string): Promise<YemotListResult> {
   return { ok: true, files: extractFileNames(data) };
 }
 
-/** Numeric key of a recording file name ("001.wav" → 1); -1 if none. */
+/**
+ * A real caller recording is named with digits only: 001.wav, 002.wav…
+ * Everything else in a Yemot folder is a system asset — menu prompts and
+ * message files (M1012.wav, M1009.wav), ext.ini, etc. — and must never be
+ * treated as the recording.
+ */
+const RECORDING_NAME = /^\d+\.wav$/i;
+
+/** Numeric key of a recording file name ("001.wav" → 1). */
 function wavSortKey(name: string): number {
-  const base = name.replace(/\.[^.]*$/, '');
-  const digits = base.match(/\d+/);
-  return digits ? parseInt(digits[0], 10) : -1;
+  return parseInt(name, 10);
 }
 
 export interface YemotLatestOk {
@@ -278,19 +284,29 @@ export async function latestWav(dirPath: string): Promise<YemotLatestResult> {
   const listed = await listDir(dirPath);
   if (!listed.ok) return listed;
 
-  const wavs = listed.files.filter((n) => n.toLowerCase().endsWith('.wav'));
-  if (wavs.length === 0) {
+  // Keep only digit-named recordings; log every system file we skip.
+  const recordings: string[] = [];
+  for (const name of listed.files) {
+    if (RECORDING_NAME.test(name)) {
+      recordings.push(name);
+    } else {
+      console.log(`[yemot-process-latest] skip non-recording file ${name}`);
+    }
+  }
+
+  if (recordings.length === 0) {
+    const saw = listed.files.join(', ') || 'none';
     return {
       ok: false,
-      error: `no .wav files in ${dirPath} (saw: ${listed.files.join(', ') || 'none'})`,
+      error: `no_recording_wav_found in ${dirPath} (saw: ${saw})`,
     };
   }
 
-  let best = wavs[0];
-  for (const n of wavs) {
+  let best = recordings[0];
+  for (const n of recordings) {
     if (wavSortKey(n) > wavSortKey(best)) best = n;
   }
 
   const base = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
-  return { ok: true, path: `${base}/${best}`, fileName: best, files: wavs };
+  return { ok: true, path: `${base}/${best}`, fileName: best, files: recordings };
 }
