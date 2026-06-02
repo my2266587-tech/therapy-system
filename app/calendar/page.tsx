@@ -172,6 +172,16 @@ export default function CalendarPage() {
     await load();
   }
 
+  /* Delete a session straight from a calendar card (optimistic). */
+  async function deleteSession(id: string) {
+    if (!confirm('האם למחוק פגישה זו?')) return;
+    const prev = records;
+    setRecords(rs => rs.filter(r => r.id !== id));
+    const { error } = await supabase.from('sessions').delete().eq('id', id);
+    if (error) { setRecords(prev); alert('שגיאה במחיקת הפגישה'); return; }
+    await load();
+  }
+
   function onEventDragStart(e: React.DragEvent, id: string) {
     setDraggingId(id);
     e.dataTransfer.effectAllowed = 'move';
@@ -327,32 +337,33 @@ export default function CalendarPage() {
           {view === 'month' && (
             <MonthView
               anchor={anchor} byDate={byDate} loading={loading}
-              onDayClick={openCreate} onEvent={openEdit}
+              onDayClick={openCreate} onEvent={openEdit} onDelete={deleteSession}
               dnd={{ draggingId, dragOverYmd, onDragStart: onEventDragStart, onDragEnd: onEventDragEnd, onDragOver: onCellDragOver, onDragLeave: onCellDragLeave, onDrop: onCellDrop }}
             />
           )}
           {view === 'week'  && (
             <WeekView
               anchor={anchor} byDate={byDate} loading={loading}
-              onDayClick={openCreate} onEvent={openEdit}
+              onDayClick={openCreate} onEvent={openEdit} onDelete={deleteSession}
               dnd={{ draggingId, dragOverYmd, onDragStart: onEventDragStart, onDragEnd: onEventDragEnd, onDragOver: onCellDragOver, onDragLeave: onCellDragLeave, onDrop: onCellDrop }}
             />
           )}
-          {view === 'day'   && <DayView   anchor={anchor} byDate={byDate} onAdd={openCreate}      onEvent={openEdit} loading={loading} />}
+          {view === 'day'   && <DayView   anchor={anchor} byDate={byDate} onAdd={openCreate}      onEvent={openEdit} onDelete={deleteSession} loading={loading} />}
         </div>
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing?.id ? 'עריכת פגישה' : 'פגישה חדשה'}>
-        <SessionForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} />
+        <SessionForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} onDelete={() => { setOpen(false); load(); }} />
       </Modal>
     </div>
   );
 }
 
 /* ── Month view ── */
-function MonthView({ anchor, byDate, onDayClick, onEvent, loading, dnd }: {
+function MonthView({ anchor, byDate, onDayClick, onEvent, onDelete, loading, dnd }: {
   anchor: Date; byDate: Map<string, SessionWithRel[]>;
-  onDayClick: (d: string) => void; onEvent: (s: Session) => void; loading: boolean;
+  onDayClick: (d: string) => void; onEvent: (s: Session) => void;
+  onDelete: (id: string) => void; loading: boolean;
   dnd: DndProps;
 }) {
   const cells = useMemo(() => {
@@ -428,6 +439,7 @@ function MonthView({ anchor, byDate, onDayClick, onEvent, loading, dnd }: {
                     onDragStart={(e) => dnd.onDragStart(e, ev.id)}
                     onDragEnd={dnd.onDragEnd}
                     onClick={(e) => { e.stopPropagation(); onEvent(ev); }}
+                    onDelete={() => onDelete(ev.id)}
                   />
                 ))}
                 {events.length > 3 && (
@@ -446,9 +458,10 @@ function MonthView({ anchor, byDate, onDayClick, onEvent, loading, dnd }: {
 }
 
 /* ── Week view ── */
-function WeekView({ anchor, byDate, onDayClick, onEvent, loading, dnd }: {
+function WeekView({ anchor, byDate, onDayClick, onEvent, onDelete, loading, dnd }: {
   anchor: Date; byDate: Map<string, SessionWithRel[]>;
-  onDayClick: (d: string) => void; onEvent: (s: Session) => void; loading: boolean;
+  onDayClick: (d: string) => void; onEvent: (s: Session) => void;
+  onDelete: (id: string) => void; loading: boolean;
   dnd: DndProps;
 }) {
   const days = useMemo(() => {
@@ -517,6 +530,7 @@ function WeekView({ anchor, byDate, onDayClick, onEvent, loading, dnd }: {
                   onDragStart={(e) => dnd.onDragStart(e, ev.id)}
                   onDragEnd={dnd.onDragEnd}
                   onClick={(e) => { e.stopPropagation(); onEvent(ev); }}
+                  onDelete={() => onDelete(ev.id)}
                 />
               ))}
             </div>
@@ -529,9 +543,10 @@ function WeekView({ anchor, byDate, onDayClick, onEvent, loading, dnd }: {
 }
 
 /* ── Day view ── */
-function DayView({ anchor, byDate, onAdd, onEvent, loading }: {
+function DayView({ anchor, byDate, onAdd, onEvent, onDelete, loading }: {
   anchor: Date; byDate: Map<string, SessionWithRel[]>;
-  onAdd: (d: string) => void; onEvent: (s: Session) => void; loading: boolean;
+  onAdd: (d: string) => void; onEvent: (s: Session) => void;
+  onDelete: (id: string) => void; loading: boolean;
 }) {
   const events = byDate.get(ymd(anchor)) ?? [];
 
@@ -574,7 +589,7 @@ function DayView({ anchor, byDate, onAdd, onEvent, loading }: {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {events.map(ev => (
-            <EventCardLarge key={ev.id} ev={ev} onClick={() => onEvent(ev)} />
+            <EventCardLarge key={ev.id} ev={ev} onClick={() => onEvent(ev)} onDelete={() => onDelete(ev.id)} />
           ))}
         </div>
       )}
@@ -583,73 +598,91 @@ function DayView({ anchor, byDate, onAdd, onEvent, loading }: {
 }
 
 /* ── Event UI primitives ── */
-function EventChip({ ev, onClick, dragging, onDragStart, onDragEnd }: {
+function EventChip({ ev, onClick, onDelete, dragging, onDragStart, onDragEnd }: {
   ev: SessionWithRel;
   onClick: (e: React.MouseEvent) => void;
+  onDelete: () => void;
   dragging: boolean;
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
 }) {
   const st = SESSION_STATUS[ev.status] ?? SESSION_STATUS.planned;
+  const [hover, setHover] = useState(false);
   return (
-    <button
-      onClick={onClick}
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      title={`${ev.patient?.full_name ?? '—'} · ${ev.start_time}–${ev.end_time}`}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 5,
-        padding: '3px 7px', borderRadius: 5, fontSize: 11, fontWeight: 500,
-        backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
-        cursor: dragging ? 'grabbing' : 'grab', textAlign: 'right', width: '100%',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        opacity: dragging ? 0.4 : 1, transition: 'opacity 0.1s',
-      }}
+    <div
+      style={{ position: 'relative', width: '100%' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
     >
-      <span style={{ width: 4, height: 4, borderRadius: '50%', backgroundColor: st.dot, flexShrink: 0 }} />
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {ev.start_time?.slice(0,5)} {ev.patient?.full_name ?? '—'}
-      </span>
-    </button>
+      <button
+        onClick={onClick}
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        title={`${ev.patient?.full_name ?? '—'} · ${ev.start_time}–${ev.end_time}`}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          padding: '3px 18px 3px 7px', borderRadius: 5, fontSize: 11, fontWeight: 500,
+          backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
+          cursor: dragging ? 'grabbing' : 'grab', textAlign: 'right', width: '100%',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          opacity: dragging ? 0.4 : 1, transition: 'opacity 0.1s',
+        }}
+      >
+        <span style={{ width: 4, height: 4, borderRadius: '50%', backgroundColor: st.dot, flexShrink: 0 }} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {ev.start_time?.slice(0,5)} {ev.patient?.full_name ?? '—'}
+        </span>
+      </button>
+      {hover && <DeleteDot onDelete={onDelete} />}
+    </div>
   );
 }
 
-function EventCard({ ev, onClick, dragging, onDragStart, onDragEnd }: {
+function EventCard({ ev, onClick, onDelete, dragging, onDragStart, onDragEnd }: {
   ev: SessionWithRel;
   onClick: (e: React.MouseEvent) => void;
+  onDelete: () => void;
   dragging: boolean;
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
 }) {
   const st = SESSION_STATUS[ev.status] ?? SESSION_STATUS.planned;
+  const [hover, setHover] = useState(false);
   return (
-    <button
-      onClick={onClick}
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-        padding: '6px 8px', borderRadius: 6, fontSize: 11,
-        backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
-        cursor: dragging ? 'grabbing' : 'grab', textAlign: 'right', width: '100%',
-        borderRight: `3px solid ${st.dot}`,
-        opacity: dragging ? 0.4 : 1, transition: 'opacity 0.1s',
-      }}
+    <div
+      style={{ position: 'relative', width: '100%' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
     >
-      <span style={{ fontWeight: 700, fontSize: 11 }}>
-        {ev.start_time?.slice(0,5)}
-      </span>
-      <span style={{ fontWeight: 500, fontSize: 12, color: C.text, marginTop: 2,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-        {ev.patient?.full_name ?? '—'}
-      </span>
-    </button>
+      <button
+        onClick={onClick}
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+          padding: '6px 24px 6px 8px', borderRadius: 6, fontSize: 11,
+          backgroundColor: st.bg, color: st.text, border: `1px solid ${st.border}`,
+          cursor: dragging ? 'grabbing' : 'grab', textAlign: 'right', width: '100%',
+          borderRight: `3px solid ${st.dot}`,
+          opacity: dragging ? 0.4 : 1, transition: 'opacity 0.1s',
+        }}
+      >
+        <span style={{ fontWeight: 700, fontSize: 11 }}>
+          {ev.start_time?.slice(0,5)}
+        </span>
+        <span style={{ fontWeight: 500, fontSize: 12, color: C.text, marginTop: 2,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+          {ev.patient?.full_name ?? '—'}
+        </span>
+      </button>
+      {hover && <DeleteDot onDelete={onDelete} />}
+    </div>
   );
 }
 
-function EventCardLarge({ ev, onClick }: { ev: SessionWithRel; onClick: () => void }) {
+function EventCardLarge({ ev, onClick, onDelete }: { ev: SessionWithRel; onClick: () => void; onDelete: () => void }) {
   const st = SESSION_STATUS[ev.status] ?? SESSION_STATUS.planned;
   return (
     <div
@@ -706,7 +739,46 @@ function EventCardLarge({ ev, onClick }: { ev: SessionWithRel; onClick: () => vo
         <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: st.dot }} />
         {st.label}
       </span>
+      <button
+        type="button"
+        title="מחק פגישה"
+        aria-label="מחק פגישה"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        style={{
+          flexShrink: 0, width: 30, height: 30, borderRadius: 8,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#DC2626',
+          cursor: 'pointer', fontSize: 15, lineHeight: 1, transition: 'all 0.12s',
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#FEE2E2'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#FEF2F2'; }}
+      >
+        ✕
+      </button>
     </div>
+  );
+}
+
+/* Small red ✕ overlaid on a calendar card; click deletes (after confirm). */
+function DeleteDot({ onDelete }: { onDelete: () => void }) {
+  return (
+    <button
+      type="button"
+      title="מחק פגישה"
+      aria-label="מחק פגישה"
+      draggable={false}
+      onClick={(e) => { e.stopPropagation(); onDelete(); }}
+      style={{
+        position: 'absolute', top: '50%', left: 3, transform: 'translateY(-50%)',
+        width: 16, height: 16, borderRadius: '50%', padding: 0,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#DC2626',
+        cursor: 'pointer', fontSize: 10, lineHeight: 1, fontWeight: 700,
+        boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+      }}
+    >
+      ✕
+    </button>
   );
 }
 

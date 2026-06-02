@@ -34,9 +34,9 @@ function calcDuration(start: string, end: string): number | null {
   return diff > 0 ? diff : null;
 }
 
-interface Props { initial: Session | null; onSave: () => void; onCancel: () => void; }
+interface Props { initial: Session | null; onSave: () => void; onCancel: () => void; onDelete?: () => void; }
 
-export default function SessionForm({ initial, onSave, onCancel }: Props) {
+export default function SessionForm({ initial, onSave, onCancel, onDelete }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     patient_id:  initial?.patient_id  ?? '',
@@ -50,6 +50,7 @@ export default function SessionForm({ initial, onSave, onCancel }: Props) {
   });
   const [patients, setPatients] = useState<PatientOpt[]>([]);
   const [saving,   setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error,    setError]    = useState('');
 
   useEffect(() => {
@@ -95,6 +96,16 @@ export default function SessionForm({ initial, onSave, onCancel }: Props) {
     setSaving(false);
     if (err) { setError(err.message); return; }
     onSave();
+  }
+
+  async function handleDelete() {
+    if (!initial?.id) return;
+    if (!confirm('האם למחוק פגישה זו?')) return;
+    setDeleting(true); setError('');
+    const { error: err } = await supabase.from('sessions').delete().eq('id', initial.id);
+    setDeleting(false);
+    if (err) { setError(err.message); return; }
+    onDelete?.();
   }
 
   const patientOptions = patients.map(p => ({ value: p.id, label: p.full_name }));
@@ -203,6 +214,16 @@ export default function SessionForm({ initial, onSave, onCancel }: Props) {
           {saving ? 'שומר...' : initial?.id ? 'עדכן' : 'הוסף'}
         </button>
         <button type="button" onClick={onCancel} className="px-5 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">ביטול</button>
+        {initial?.id && onDelete && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting || saving}
+            className="ms-auto px-5 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+          >
+            {deleting ? 'מוחק...' : 'מחק פגישה'}
+          </button>
+        )}
       </div>
     </form>
   );
