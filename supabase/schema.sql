@@ -664,3 +664,52 @@ create table if not exists phone_summary_drafts (
 
 create index if not exists idx_phone_summary_drafts_status_created
   on phone_summary_drafts (status, created_at desc);
+
+-- ============================================================================
+-- Row Level Security (RLS) — Supabase Security Advisor remediation
+-- ============================================================================
+-- Clears the two critical Security Advisor warnings:
+--   • rls_disabled_in_public  — every public table now has RLS enabled.
+--   • exposed_sensitive_data  — the public `anon` role can no longer read any
+--                               PII / clinical / financial data via PostgREST.
+--
+-- (Also maintained as a standalone, copy-paste-able file at
+--  supabase/rls-policies.sql — the two are kept identical.)
+--
+-- ── Auth model (unchanged by this block) ────────────────────────────────────
+--   • Browser client uses the anon key, but once a user signs in with Google
+--     (Supabase Auth) every query carries that user's JWT and runs as the
+--     Postgres `authenticated` role.
+--   • All server code (API routes, the Yemot phone webhooks, cron, imports, the
+--     AI assistant) uses the SERVICE ROLE key via lib/supabaseServer.ts. The
+--     service role BYPASSES RLS, so none of these policies affect it.
+--   • Unauthenticated (`anon`) callers get NO access to application data.
+--
+-- We do not FORCE RLS, so the service role keeps its bypass — existing server
+-- flows are untouched. Idempotent; safe to re-run.
+
+-- Application data tables: full access to an authenticated session only.
+-- (anon denied; service_role bypasses RLS and is unaffected.)
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'staff','patients','sessions','session_summaries','recordings',
+    'quarterly_summaries','payments','private_expenses','petty_cash',
+    'staff_patients','staff_documents','patient_documents',
+    'report_runs','phone_summary_drafts'
+  ] loop
+    execute format('alter table public.%I enable row level security;', t);
+    execute format('drop policy if exists %I on public.%I;', t || '_authenticated_all', t);
+    execute format(
+      'create policy %I on public.%I for all to authenticated using (true) with check (true);',
+      t || '_authenticated_all', t
+    );
+  end loop;
+end $$;
+
+-- authorized_users (access-control list of admin/staff emails) is only ever
+-- read server-side via the service role (lib/getAdminUser.ts). Enable RLS with
+-- NO policy: anon AND authenticated are both denied while the service role
+-- still bypasses RLS, so the admin email list is never exposed via PostgREST.
+alter table public.authorized_users enable row level security;
