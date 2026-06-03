@@ -686,12 +686,18 @@ create index if not exists idx_phone_summary_drafts_status_created
 --   • Unauthenticated (`anon`) callers get NO access to application data.
 --
 -- We do not FORCE RLS, so the service role keeps its bypass — existing server
--- flows are untouched. Idempotent; safe to re-run.
+-- flows are untouched. Idempotent and tolerant of missing tables; safe to
+-- re-run. to_regclass() returns NULL for a missing relation instead of raising,
+-- which lets us skip any table not present in a given install.
 
--- Application data tables: full access to an authenticated session only.
--- (anon denied; service_role bypasses RLS and is unaffected.)
+-- Application data tables: for each table THAT EXISTS, enable RLS and grant
+-- full access to an authenticated session only. (anon denied; service_role
+-- bypasses RLS and is unaffected.) Missing tables are skipped with a NOTICE.
 do $$
-declare t text;
+declare
+  t       text;
+  handled text[] := '{}';
+  skipped text[] := '{}';
 begin
   foreach t in array array[
     'staff','patients','sessions','session_summaries','recordings',
@@ -699,17 +705,41 @@ begin
     'staff_patients','staff_documents','patient_documents',
     'report_runs','phone_summary_drafts'
   ] loop
+    if to_regclass('public.' || quote_ident(t)) is null then
+      skipped := skipped || t;
+      raise notice 'SKIP  (missing)                     : public.%', t;
+      continue;
+    end if;
+
     execute format('alter table public.%I enable row level security;', t);
     execute format('drop policy if exists %I on public.%I;', t || '_authenticated_all', t);
     execute format(
       'create policy %I on public.%I for all to authenticated using (true) with check (true);',
       t || '_authenticated_all', t
     );
+
+    handled := handled || t;
+    raise notice 'OK    (RLS + authenticated policy)  : public.%', t;
   end loop;
+
+  raise notice '----------------------------------------------------------------';
+  raise notice 'Data tables handled (%): %',
+    coalesce(array_length(handled, 1), 0), array_to_string(handled, ', ');
+  raise notice 'Data tables skipped (%): %',
+    coalesce(array_length(skipped, 1), 0), array_to_string(skipped, ', ');
 end $$;
 
 -- authorized_users (access-control list of admin/staff emails) is only ever
 -- read server-side via the service role (lib/getAdminUser.ts). Enable RLS with
 -- NO policy: anon AND authenticated are both denied while the service role
 -- still bypasses RLS, so the admin email list is never exposed via PostgREST.
-alter table public.authorized_users enable row level security;
+-- Skipped safely if the table is missing.
+do $$
+begin
+  if to_regclass('public.authorized_users') is null then
+    raise notice 'SKIP  (missing)                     : public.authorized_users';
+  else
+    alter table public.authorized_users enable row level security;
+    raise notice 'OK    (RLS, service_role only)      : public.authorized_users';
+  end if;
+end $$;
