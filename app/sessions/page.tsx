@@ -9,6 +9,7 @@ import SessionForm from '@/components/sessions/SessionForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
+import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { hebrewDay } from '@/lib/dateUtils';
 import type { Session } from '@/types';
 
@@ -52,6 +53,7 @@ function SessionsInner() {
 
   const [records, setRecords] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search,  setSearch]  = useState('');
   const [open,    setOpen]    = useState(false);
   const [editing, setEditing] = useState<Session | null>(null);
 
@@ -78,18 +80,28 @@ function SessionsInner() {
   }
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return records;
-    const today = new Date().toISOString().slice(0, 10);
-    if (filter === 'today') return records.filter(r => r.date === today);
-    if (filter === 'week') {
+    // First narrow by the date chip, then by the free-text query.
+    let base = records;
+    if (filter === 'today') {
+      const today = new Date().toISOString().slice(0, 10);
+      base = records.filter(r => r.date === today);
+    } else if (filter === 'week') {
       const sun = new Date(); sun.setDate(sun.getDate() - sun.getDay());
       const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
       const a = sun.toISOString().slice(0, 10);
       const b = sat.toISOString().slice(0, 10);
-      return records.filter(r => r.date >= a && r.date <= b);
+      base = records.filter(r => r.date >= a && r.date <= b);
     }
-    return records;
-  }, [records, filter]);
+    const q = search.trim().toLowerCase();
+    if (q === '') return base;
+    return base.filter(r => {
+      const haystack = [
+        (r.patient as { full_name?: string } | null)?.full_name, r.date, hebrewDay(r.date),
+        r.start_time, r.end_time, SESSION_STATUS[r.status]?.label ?? r.status, r.notes,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [records, filter, search]);
 
   const filterLabel = filter === 'today' ? 'היום' : filter === 'week' ? 'השבוע' : null;
 
@@ -126,8 +138,21 @@ function SessionsInner() {
           <FilterChip label="השבוע"  active={filter === 'week'}  onClick={() => router.push('/sessions?filter=week')} />
         </div>
 
+        {/* Free-text search */}
+        {!loading && records.length > 0 && (
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש חופשי — מטופלת, תאריך, סטטוס, הערות..."
+          />
+        )}
+
         {loading ? <ListSkeleton /> : filtered.length === 0 ? (
-          <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} filterLabel={filterLabel} />
+          search.trim() !== '' ? (
+            <SearchEmpty query={search} onClear={() => setSearch('')} />
+          ) : (
+            <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} filterLabel={filterLabel} />
+          )
         ) : (
           <div style={{
             backgroundColor: '#FFFFFF', borderRadius: 16,

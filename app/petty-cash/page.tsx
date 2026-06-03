@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import PettyCashForm from '@/components/petty-cash/PettyCashForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
+import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { hebrewDay } from '@/lib/dateUtils';
 import type { PettyCash } from '@/types';
 
@@ -18,6 +19,7 @@ const C = {
 export default function PettyCashPage() {
   const [records, setRecords] = useState<PettyCash[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search,  setSearch]  = useState('');
   const [open,    setOpen]    = useState(false);
   const [editing, setEditing] = useState<PettyCash | null>(null);
 
@@ -41,6 +43,15 @@ export default function PettyCashPage() {
 
   const total = records.reduce((s, r) => s + Number(r.amount), 0);
 
+  const q = search.trim().toLowerCase();
+  const filtered = q === '' ? records : records.filter(r => {
+    const haystack = [
+      r.date, hebrewDay(r.date), r.purpose, r.notes,
+      (r.patient as { full_name?: string } | null)?.full_name, String(r.amount),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
       <div style={{ maxWidth: 980, margin: '0 auto' }}>
@@ -52,7 +63,7 @@ export default function PettyCashPage() {
               מעשר געלט
             </h1>
             <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-              {loading ? '' : `${records.length} רשומות`}
+              {loading ? '' : `${filtered.length} רשומות${search.trim() && filtered.length !== records.length ? ` מתוך ${records.length}` : ''}`}
             </p>
           </div>
           <button
@@ -94,25 +105,36 @@ export default function PettyCashPage() {
           </div>
         )}
 
+        {/* Free-text search */}
+        {!loading && records.length > 0 && (
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש חופשי — מטרה, מטופלת, סכום, הערות..."
+          />
+        )}
+
         {/* List */}
         {loading ? (
           <ListSkeleton />
         ) : records.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
+        ) : filtered.length === 0 ? (
+          <SearchEmpty query={search} onClear={() => setSearch('')} />
         ) : (
           <div style={{
             backgroundColor: C.card, borderRadius: 16,
             border: `1px solid ${C.border}`, boxShadow: C.shadow,
             overflow: 'hidden',
           }}>
-            {records.map((r, i) => (
+            {filtered.map((r, i) => (
               <div
                 key={r.id}
                 onClick={() => { setEditing(r); setOpen(true); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 18,
                   padding: '16px 24px', cursor: 'pointer',
-                  borderBottom: i < records.length - 1 ? `1px solid #F1F5F9` : 'none',
+                  borderBottom: i < filtered.length - 1 ? `1px solid #F1F5F9` : 'none',
                   transition: 'background-color 0.1s',
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
@@ -171,7 +193,7 @@ export default function PettyCashPage() {
               padding: '10px 24px', fontSize: 12, color: C.muted,
               backgroundColor: '#F8FAFC', borderTop: `1px solid #F1F5F9`,
             }}>
-              {records.length} רשומות
+              {filtered.length} רשומות
             </div>
           </div>
         )}

@@ -8,6 +8,7 @@ import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
 import SummaryDetailCard from '@/components/summaries/SummaryDetailCard';
+import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import type { SessionSummary } from '@/types';
 
 const C = {
@@ -43,6 +44,7 @@ const SUMMARY_EXPORT_COLUMNS: Column<SummaryWithRel>[] = [
 export default function SummariesPage() {
   const [records, setRecords] = useState<SummaryWithRel[]>([]);
   const [loading,    setLoading]    = useState(true);
+  const [search,     setSearch]     = useState('');
   const [open,       setOpen]       = useState(false);
   const [editing,    setEditing]    = useState<SessionSummary | null>(null);
   const [openDetail, setOpenDetail] = useState<SummaryWithRel | null>(null);
@@ -106,6 +108,17 @@ export default function SummariesPage() {
     );
   }
 
+  // Free-text search across patient name, date and every text field of the
+  // summary, so a single box finds a summary by who/when/what.
+  const q = search.trim().toLowerCase();
+  const filtered = q === '' ? records : records.filter(r => {
+    const haystack = [
+      r.patient?.full_name, r.date, r.start_time, r.end_time,
+      r.main_topics, r.treatment_actions, r.progress, r.next_steps, r.notes,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
       <div style={{ maxWidth: 920, margin: '0 auto' }}>
@@ -117,12 +130,12 @@ export default function SummariesPage() {
               סיכומי פגישות
             </h1>
             <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-              {loading ? '' : `${records.length} סיכומים`}
+              {loading ? '' : `${filtered.length} סיכומים${search.trim() && filtered.length !== records.length ? ` מתוך ${records.length}` : ''}`}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ExportButton<SummaryWithRel>
-              rows={records}
+              rows={filtered}
               columns={SUMMARY_EXPORT_COLUMNS}
               title="סיכומי פגישות"
               fileBase="session-summaries"
@@ -144,14 +157,25 @@ export default function SummariesPage() {
           </div>
         </div>
 
+        {/* Free-text search */}
+        {!loading && records.length > 0 && (
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש חופשי — שם, תאריך, נושא, הערות..."
+          />
+        )}
+
         {/* Summaries list */}
         {loading ? (
           <ListSkeleton />
         ) : records.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
+        ) : filtered.length === 0 ? (
+          <SearchEmpty query={search} onClear={() => setSearch('')} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {records.map(r => {
+            {filtered.map(r => {
               const preview = r.main_topics ?? r.treatment_actions ?? r.progress ?? r.notes ?? '';
               return (
                 <div

@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal';
 import QuarterlyForm from '@/components/quarterly/QuarterlyForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import DateDisplay from '@/components/ui/DateDisplay';
+import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import type { QuarterlySummary } from '@/types';
 
 const C = {
@@ -25,6 +26,7 @@ function quarterOf(dateStr: string) {
 export default function QuarterlyPage() {
   const [records, setRecords] = useState<QuarterlySummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search,  setSearch]  = useState('');
   const [open,    setOpen]    = useState(false);
   const [editing, setEditing] = useState<QuarterlySummary | null>(null);
   const [openDetail, setOpenDetail] = useState<QuarterlySummary | null>(null);
@@ -54,6 +56,15 @@ export default function QuarterlyPage() {
   const uniquePatients   = new Set(records.map(r => r.patient_id)).size;
   const totalDuration    = records.reduce((s, r) => s + (r.duration_minutes ?? 0), 0);
 
+  const query = search.trim().toLowerCase();
+  const filtered = query === '' ? records : records.filter(r => {
+    const haystack = [
+      (r.patient as { full_name?: string } | null)?.full_name, quarterOf(r.date), r.date,
+      r.summary, r.participants, r.notes,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(query);
+  });
+
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
       <div style={{ maxWidth: 980, margin: '0 auto' }}>
@@ -65,7 +76,7 @@ export default function QuarterlyPage() {
               סיכום רבעון
             </h1>
             <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-              {loading ? '' : `${records.length} סיכומים`}
+              {loading ? '' : `${filtered.length} סיכומים${search.trim() && filtered.length !== records.length ? ` מתוך ${records.length}` : ''}`}
             </p>
           </div>
           <button
@@ -92,14 +103,25 @@ export default function QuarterlyPage() {
           </div>
         )}
 
+        {/* Free-text search */}
+        {!loading && records.length > 0 && (
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש חופשי — מטופלת, רבעון, סיכום, הערות..."
+          />
+        )}
+
         {/* List */}
         {loading ? (
           <ListSkeleton />
         ) : records.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
+        ) : filtered.length === 0 ? (
+          <SearchEmpty query={search} onClear={() => setSearch('')} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {records.map(r => (
+            {filtered.map(r => (
               <div
                 key={r.id}
                 onClick={() => setOpenDetail(r)}

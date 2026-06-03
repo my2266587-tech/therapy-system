@@ -7,6 +7,7 @@ import Modal from '@/components/ui/Modal';
 import StaffForm from '@/components/staff/StaffForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
+import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { STAFF_ROLE_STYLE as ROLE_STYLE } from '@/lib/staffRoles';
 import type { StaffMember } from '@/types';
 
@@ -27,6 +28,7 @@ export default function StaffPage() {
   const router = useRouter();
   const [records, setRecords] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search,  setSearch]  = useState('');
   const [open,    setOpen]    = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
 
@@ -45,6 +47,14 @@ export default function StaffPage() {
     load();
   }
 
+  const q = search.trim().toLowerCase();
+  const filtered = q === '' ? records : records.filter(r => {
+    const haystack = [
+      r.full_name, ROLE_STYLE[r.role]?.label ?? r.role, r.email, r.phone, r.notes,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+
   return (
     <div style={{ backgroundColor: '#F6F8FB', minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
       <div style={{ maxWidth: 820, margin: '0 auto' }}>
@@ -56,12 +66,12 @@ export default function StaffPage() {
               אנשי צוות
             </h1>
             <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
-              {loading ? '' : `${records.length} אנשי צוות`}
+              {loading ? '' : `${filtered.length} אנשי צוות${search.trim() && filtered.length !== records.length ? ` מתוך ${records.length}` : ''}`}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ExportButton<StaffMember>
-              rows={records}
+              rows={filtered}
               columns={STAFF_EXPORT_COLUMNS}
               title="אנשי צוות"
               fileBase="staff"
@@ -71,15 +81,25 @@ export default function StaffPage() {
           </div>
         </div>
 
+        {!loading && records.length > 0 && (
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש חופשי — שם, תפקיד, אימייל, טלפון..."
+          />
+        )}
+
         {loading ? <ListSkeleton /> : records.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} label="אנשי צוות" />
+        ) : filtered.length === 0 ? (
+          <SearchEmpty query={search} onClear={() => setSearch('')} />
         ) : (
           <div style={{
             backgroundColor: '#FFFFFF', borderRadius: 16,
             border: '1px solid #E8ECF0', boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
             overflow: 'hidden',
           }}>
-            {records.map((r, i) => {
+            {filtered.map((r, i) => {
               const rs = ROLE_STYLE[r.role] ?? ROLE_STYLE.other;
               return (
                 <div
@@ -88,7 +108,7 @@ export default function StaffPage() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 16,
                     padding: '14px 24px', cursor: 'pointer',
-                    borderBottom: i < records.length - 1 ? '1px solid #F1F5F9' : 'none',
+                    borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
                     transition: 'background-color 0.1s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
@@ -142,7 +162,7 @@ export default function StaffPage() {
               padding: '10px 24px', fontSize: 12, color: '#94A3B8',
               backgroundColor: '#F8FAFC', borderTop: '1px solid #F1F5F9',
             }}>
-              {records.length} אנשי צוות
+              {filtered.length} אנשי צוות
             </div>
           </div>
         )}

@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal';
 import PaymentForm from '@/components/payments/PaymentForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
+import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { paymentMethodLabels, emailStatusLabels } from '@/lib/labels';
 import type { Payment } from '@/types';
 
@@ -40,6 +41,7 @@ const PAYMENT_EXPORT_COLUMNS: Column<Payment>[] = [
 export default function PaymentsPage() {
   const [records, setRecords] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search,  setSearch]  = useState('');
   const [open,    setOpen]    = useState(false);
   const [editing, setEditing] = useState<Payment | null>(null);
 
@@ -64,6 +66,17 @@ export default function PaymentsPage() {
   const totalPaid   = records.filter(r => r.is_paid).reduce((s, r) => s + Number(r.amount), 0);
   const totalUnpaid = records.filter(r => !r.is_paid).reduce((s, r) => s + Number(r.amount), 0);
 
+  const q = search.trim().toLowerCase();
+  const filtered = q === '' ? records : records.filter(r => {
+    const haystack = [
+      r.month, String(r.amount),
+      r.payment_method ? (paymentMethodLabels[r.payment_method] ?? r.payment_method) : '',
+      r.received_date, (r.coordinator as { full_name?: string } | null)?.full_name,
+      r.is_paid ? 'שולם' : 'טרם שולם', emailStatusLabels[r.email_status] ?? r.email_status,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
       <div style={{ maxWidth: 980, margin: '0 auto' }}>
@@ -75,12 +88,12 @@ export default function PaymentsPage() {
               תשלומי שיראל
             </h1>
             <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-              {loading ? '' : `${records.length} תשלומים`}
+              {loading ? '' : `${filtered.length} תשלומים${search.trim() && filtered.length !== records.length ? ` מתוך ${records.length}` : ''}`}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ExportButton<Payment>
-              rows={records}
+              rows={filtered}
               columns={PAYMENT_EXPORT_COLUMNS}
               title="תשלומי שיראל"
               fileBase="payments"
@@ -148,18 +161,29 @@ export default function PaymentsPage() {
           </div>
         )}
 
+        {/* Free-text search */}
+        {!loading && records.length > 0 && (
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש חופשי — חודש, סכום, רכזת, סטטוס..."
+          />
+        )}
+
         {/* List */}
         {loading ? (
           <ListSkeleton />
         ) : records.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
+        ) : filtered.length === 0 ? (
+          <SearchEmpty query={search} onClear={() => setSearch('')} />
         ) : (
           <div style={{
             backgroundColor: C.card, borderRadius: 16,
             border: `1px solid ${C.border}`, boxShadow: C.shadow,
             overflow: 'hidden',
           }}>
-            {records.map((r, i) => {
+            {filtered.map((r, i) => {
               const paidSt = PAID_STATUS[String(r.is_paid)] ?? PAID_STATUS.false;
               const emailSt = EMAIL_STATUS[r.email_status] ?? EMAIL_STATUS.not_sent;
               return (
@@ -169,7 +193,7 @@ export default function PaymentsPage() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 18,
                     padding: '16px 24px', cursor: 'pointer',
-                    borderBottom: i < records.length - 1 ? `1px solid #F1F5F9` : 'none',
+                    borderBottom: i < filtered.length - 1 ? `1px solid #F1F5F9` : 'none',
                     transition: 'background-color 0.1s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
@@ -230,7 +254,7 @@ export default function PaymentsPage() {
               padding: '10px 24px', fontSize: 12, color: C.muted,
               backgroundColor: '#F8FAFC', borderTop: `1px solid #F1F5F9`,
             }}>
-              {records.length} תשלומים
+              {filtered.length} תשלומים
             </div>
           </div>
         )}

@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import { Field, SelectField } from '@/components/ui/FormField';
 import DictatedTextarea from '@/components/ui/DictatedTextarea';
+import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import type { PhoneSummaryDraft } from '@/types';
 
 const C = {
@@ -57,6 +58,7 @@ export default function PhonePendingPage() {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
   const [filter, setFilter]     = useState<FilterKey>('pending');
+  const [search, setSearch]     = useState('');
   const [editing, setEditing]   = useState<PhoneSummaryDraft | null>(null);
   const [patients, setPatients] = useState<PatientOpt[]>([]);
 
@@ -101,9 +103,21 @@ export default function PhonePendingPage() {
   }, []);
 
   const filteredDrafts = useMemo(() => {
-    if (filter !== 'pending') return drafts;
-    return drafts.filter(d => d.status === 'draft_ready' || d.status === 'needs_match');
-  }, [drafts, filter]);
+    const base = filter !== 'pending'
+      ? drafts
+      : drafts.filter(d => d.status === 'draft_ready' || d.status === 'needs_match');
+    const q = search.trim().toLowerCase();
+    if (q === '') return base;
+    return base.filter(d => {
+      const haystack = [
+        d.spoken_patient_name,
+        (d.matched_patient as { full_name?: string } | null | undefined)?.full_name,
+        d.current_state, d.main_topics, d.treatment_actions, d.next_steps,
+        d.tasks_given, d.progress, d.difficulties, d.notes, d.call_date,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [drafts, filter, search]);
 
   async function createSampleDraft() {
     setError(null);
@@ -212,6 +226,15 @@ export default function PhonePendingPage() {
           })}
         </div>
 
+        {/* Free-text search */}
+        {!loading && drafts.length > 0 && (
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש חופשי — שם, נושאים, התקדמות, הערות..."
+          />
+        )}
+
         {error && (
           <div style={{
             padding: '11px 14px', borderRadius: 9, marginBottom: 12,
@@ -226,7 +249,11 @@ export default function PhonePendingPage() {
         {loading ? (
           <ListSkeleton />
         ) : filteredDrafts.length === 0 ? (
-          <EmptyState />
+          search.trim() !== '' ? (
+            <SearchEmpty query={search} onClear={() => setSearch('')} />
+          ) : (
+            <EmptyState />
+          )
         ) : (
           <div style={{
             backgroundColor: C.card, borderRadius: 14, overflow: 'hidden',
