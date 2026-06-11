@@ -717,7 +717,7 @@ begin
   if exists (
     select 1 from patients p
     where p.id = new.patient_id
-      and trim(p.full_name) = 'שיראל'
+      and trim(p.full_name) = 'שיראל אלמקייס'
   ) then
     insert into payments (month, amount, is_paid, summary_id)
     values (to_char(new.date, 'YYYY-MM'), 150, false, new.id)
