@@ -147,6 +147,9 @@ export interface Payment {
   created_at: string;
   updated_at: string;
   coordinator?: { full_name: string } | null;
+  // Embedded date of the linked session summary (when summary_id is set) —
+  // used by the payments list to show the real session date, not just month.
+  summary?: { date: string } | null;
 }
 
 export interface PrivateExpense {

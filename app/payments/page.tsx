@@ -8,7 +8,29 @@ import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { paymentMethodLabels, emailStatusLabels } from '@/lib/labels';
+import { hebrewLong } from '@/lib/dateUtils';
 import type { Payment } from '@/types';
+
+/**
+ * Resolve the date to show for a payment row. Prefer a real day over the
+ * month-only field so we can render a normal DD/MM/YYYY date:
+ *   1. the linked session summary's date (auto-created שיראל rows)
+ *   2. received_date (manual rows that recorded a day)
+ *   3. fallback: the YYYY-MM month, shown as MM/YYYY with no Hebrew date.
+ * Never throws and never blanks an existing row.
+ */
+function paymentDisplayDate(r: Payment): { greg: string; hebrew: string } {
+  const iso = (r.summary as { date?: string } | null)?.date || r.received_date;
+  if (iso && /^\d{4}-\d{2}-\d{2}/.test(iso)) {
+    const [y, m, d] = iso.slice(0, 10).split('-');
+    return { greg: `${d}/${m}/${y}`, hebrew: hebrewLong(iso) };
+  }
+  if (r.month && /^\d{4}-\d{2}/.test(r.month)) {
+    const [y, m] = r.month.split('-');
+    return { greg: `${m}/${y}`, hebrew: '' };
+  }
+  return { greg: r.month ?? '', hebrew: '' };
+}
 
 const C = {
   bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
@@ -50,7 +72,7 @@ export default function PaymentsPage() {
     setLoading(true);
     const { data } = await supabase
       .from('payments')
-      .select('*, coordinator:coordinator_id(full_name)')
+      .select('*, coordinator:coordinator_id(full_name), summary:summary_id(date)')
       .order('month', { ascending: false });
     setRecords((data ?? []) as Payment[]);
     setLoading(false);
@@ -188,6 +210,7 @@ export default function PaymentsPage() {
             {filtered.map((r, i) => {
               const paidSt = PAID_STATUS[String(r.is_paid)] ?? PAID_STATUS.false;
               const emailSt = EMAIL_STATUS[r.email_status] ?? EMAIL_STATUS.not_sent;
+              const dateD = paymentDisplayDate(r);
               return (
                 <div
                   key={r.id}
@@ -201,15 +224,20 @@ export default function PaymentsPage() {
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
                 >
-                  {/* Month badge */}
+                  {/* Date badge — full Gregorian date + Hebrew date underneath */}
                   <div style={{
-                    minWidth: 54, textAlign: 'center', flexShrink: 0,
+                    minWidth: 96, textAlign: 'center', flexShrink: 0,
                     backgroundColor: '#F6F8FB', border: `1px solid ${C.border}`,
-                    borderRadius: 10, padding: '8px 6px',
+                    borderRadius: 10, padding: '8px 8px',
                   }}>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: 0, lineHeight: 1 }}>
-                      {r.month}
+                    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0, lineHeight: 1.2 }}>
+                      {dateD.greg}
                     </p>
+                    {dateD.hebrew && (
+                      <p style={{ fontSize: 10, color: C.muted, margin: '2px 0 0', lineHeight: 1.2 }}>
+                        {dateD.hebrew}
+                      </p>
+                    )}
                   </div>
 
                   {/* Amount + details */}
