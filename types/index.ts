@@ -139,6 +139,9 @@ export interface Payment {
   received_date: string | null;
   coordinator_id: string | null;
   email_status: 'not_sent' | 'sent' | 'failed';
+  // Set on rows auto-created from a session summary for שיראל (the ₪150
+  // per-summary payments). NULL for the manually-entered monthly rows.
+  summary_id?: string | null;
   created_at: string;
   updated_at: string;
   coordinator?: { full_name: string } | null;
