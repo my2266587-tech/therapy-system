@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Field, SelectField } from '@/components/ui/FormField';
+import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
 import type { Payment } from '@/types';
 type StaffOpt = { id: string; full_name: string };
 
@@ -30,6 +30,7 @@ export default function PaymentForm({ initial, onSave, onCancel }: Props) {
     received_date:  initial?.received_date  ?? '',
     coordinator_id: initial?.coordinator_id ?? '',
     email_status:   initial?.email_status   ?? 'not_sent',
+    notes:          initial?.notes          ?? '',
   });
   const [staff,   setStaff]   = useState<StaffOpt[]>([]);
   const [saving,  setSaving]  = useState(false);
@@ -53,6 +54,7 @@ export default function PaymentForm({ initial, onSave, onCancel }: Props) {
       payment_method: form.payment_method || null,
       received_date:  form.received_date  || null,
       coordinator_id: form.coordinator_id || null,
+      notes:          form.notes.trim()   || null,
     };
     const { error: err } = initial?.id
       ? await supabase.from('payments').update(payload).eq('id', initial.id)
@@ -76,6 +78,7 @@ export default function PaymentForm({ initial, onSave, onCancel }: Props) {
         <SelectField label="רכזת מקושרת" value={form.coordinator_id} onChange={v => set('coordinator_id', v)} options={staffOptions} placeholder="בחרי רכזת..." />
         <SelectField label="סטטוס מייל" value={form.email_status} onChange={v => set('email_status', v)} options={EMAIL_OPTIONS} />
       </div>
+      <TextareaField label="הערות" value={form.notes} onChange={v => set('notes', v)} rows={3} placeholder="הערות חופשיות..." />
       <div className="flex gap-3 pt-2 border-t border-slate-100">
         <button type="submit" disabled={saving} className="px-5 py-2 bg-teal-700 text-white text-sm font-medium rounded-lg hover:bg-teal-800 disabled:opacity-50 transition-colors">
           {saving ? 'שומר...' : initial?.id ? 'עדכן' : 'הוסף'}

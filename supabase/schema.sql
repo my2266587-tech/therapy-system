@@ -668,8 +668,8 @@ create index if not exists idx_phone_summary_drafts_status_created
 -- ============================================================================
 -- Auto-payment for שיראל session summaries
 -- ============================================================================
--- Business rule: whenever a *new* session summary is created for a patient
--- whose assigned therapist is שיראל, record one unpaid ₪150 payment in the
+-- Business rule: whenever a *new* session summary is created for the PATIENT
+-- whose name is שיראל, record one unpaid ₪150 payment in the
 -- existing payments module ("תשלומי שיראל"). Mapping the request onto the
 -- existing table (no new module, smallest safe change):
 --   • category "תשלומים שיראל" → the payments table is wholly שיראל's payments;
@@ -693,6 +693,9 @@ create index if not exists idx_phone_summary_drafts_status_created
 alter table payments add column if not exists summary_id uuid
   references session_summaries(id) on delete set null;
 
+-- 1b. Free-text notes ("הערות") — shown and editable in the payments UI.
+alter table payments add column if not exists notes text;
+
 -- 2. One payment per summary. A plain unique index still allows many NULLs
 --    (the manual rows) and doubles as the ON CONFLICT arbiter below.
 create unique index if not exists payments_summary_id_key
@@ -708,21 +711,13 @@ security definer
 set search_path = public
 as $$
 begin
-  -- Is this summary's patient treated by שיראל? Check the primary therapist
-  -- (patients.staff_id) and any secondary assignment (staff_patients). Name is
-  -- a contains-match — the business has a single therapist named שיראל and the
-  -- payments module is named after her.
+  -- Does this summary belong to the PATIENT named שיראל? The summary links to
+  -- a patient via patient_id; patients.full_name is text NOT NULL (a reliable
+  -- field), so we match it exactly (trimmed). No therapist/staff lookup here.
   if exists (
-    select 1
-    from patients p
+    select 1 from patients p
     where p.id = new.patient_id
-      and (
-        exists (select 1 from staff s
-                 where s.id = p.staff_id and s.full_name like '%שיראל%')
-        or exists (select 1 from staff_patients sp
-                   join staff s on s.id = sp.staff_id
-                   where sp.patient_id = p.id and s.full_name like '%שיראל%')
-      )
+      and trim(p.full_name) = 'שיראל'
   ) then
     insert into payments (month, amount, is_paid, summary_id)
     values (to_char(new.date, 'YYYY-MM'), 150, false, new.id)

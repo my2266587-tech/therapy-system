@@ -36,6 +36,7 @@ const PAYMENT_EXPORT_COLUMNS: Column<Payment>[] = [
   { header: 'תאריך קבלה',    accessor: r => r.received_date ?? '', width: 14 },
   { header: 'רכזת',           accessor: r => (r.coordinator as { full_name?: string } | null)?.full_name ?? '', width: 20 },
   { header: 'סטטוס מייל',    accessor: r => emailStatusLabels[r.email_status] ?? r.email_status, width: 14 },
+  { header: 'הערות',          accessor: r => r.notes ?? '', width: 28 },
 ];
 
 export default function PaymentsPage() {
@@ -73,6 +74,7 @@ export default function PaymentsPage() {
       r.payment_method ? (paymentMethodLabels[r.payment_method] ?? r.payment_method) : '',
       r.received_date, (r.coordinator as { full_name?: string } | null)?.full_name,
       r.is_paid ? 'שולם' : 'טרם שולם', emailStatusLabels[r.email_status] ?? r.email_status,
+      r.notes,
     ].filter(Boolean).join(' ').toLowerCase();
     return haystack.includes(q);
   });
@@ -220,6 +222,14 @@ export default function PaymentsPage() {
                       {r.received_date && ` · ${r.received_date}`}
                       {(r.coordinator as any)?.full_name && ` · ${(r.coordinator as any).full_name}`}
                     </p>
+                    {r.notes && (
+                      <p style={{
+                        fontSize: 12, color: C.sub, margin: '3px 0 0',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {r.notes}
+                      </p>
+                    )}
                   </div>
 
                   {/* Payment status */}
