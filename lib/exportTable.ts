@@ -153,8 +153,11 @@ function getBidi() {
 /**
  * Reorder a string from logical → visual order using the Unicode Bidi Algorithm.
  * jsPDF doesn't apply BiDi, so we have to feed it pre-ordered glyphs.
+ *
+ * Exported so other PDF builders (e.g. the patient-card export) share the exact
+ * same RTL handling instead of re-implementing it.
  */
-function visualOrder(text: string): string {
+export function visualOrder(text: string): string {
   if (!text) return '';
   const bidi = getBidi();
   const levels = bidi.getEmbeddingLevels(text, 'rtl');
@@ -163,7 +166,9 @@ function visualOrder(text: string): string {
 
 let _fontPromise: Promise<{ regular: string; bold: string }> | null = null;
 
-async function loadFonts(): Promise<{ regular: string; bold: string }> {
+/** Load + base64-encode the Alef Hebrew fonts (cached). Exported for reuse by
+ *  other client-side PDF builders. */
+export async function loadFonts(): Promise<{ regular: string; bold: string }> {
   if (_fontPromise) return _fontPromise;
   _fontPromise = (async () => {
     const [reg, bold] = await Promise.all([

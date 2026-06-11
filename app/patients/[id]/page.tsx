@@ -9,6 +9,7 @@ import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import DateDisplay from '@/components/ui/DateDisplay';
 import SummaryDetailCard from '@/components/summaries/SummaryDetailCard';
 import PatientForm from '@/components/patients/PatientForm';
+import PatientCardExportModal from '@/components/patients/PatientCardExportModal';
 import DocumentPreviewModal from '@/components/ui/DocumentPreviewModal';
 import {
   housingTypeLabels, maritalStatusLabels,
@@ -65,6 +66,7 @@ export default function PatientDetailPage() {
   const [activeTab,  setActiveTab]  = useState<Tab>('פרטים');
   const [loading,    setLoading]    = useState(true);
   const [editOpen,   setEditOpen]   = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [openSummary, setOpenSummary] = useState<SessionSummary | null>(null);
 
   const load = useCallback(async () => {
@@ -231,28 +233,45 @@ export default function PatientDetailPage() {
               </div>
             </div>
 
-            <button
-              onClick={() => setEditOpen(true)}
-              style={{
-                padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 600,
-                border: `1px solid ${C.border}`, color: C.sub, backgroundColor: C.card,
-                cursor: 'pointer', transition: 'all 0.12s',
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.backgroundColor = C.accentSub;
-                el.style.borderColor = C.accentRim;
-                el.style.color = C.accent;
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.backgroundColor = C.card;
-                el.style.borderColor = C.border;
-                el.style.color = C.sub;
-              }}
-            >
-              ערוך פרטים
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={() => setExportOpen(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '9px 16px', borderRadius: 9, fontSize: 13, fontWeight: 600,
+                  border: 'none', color: '#FFFFFF', backgroundColor: C.accent,
+                  cursor: 'pointer', boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
+                  transition: 'opacity 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+              >
+                <DownloadIcon />
+                הורדת כרטיס מטופלת
+              </button>
+              <button
+                onClick={() => setEditOpen(true)}
+                style={{
+                  padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 600,
+                  border: `1px solid ${C.border}`, color: C.sub, backgroundColor: C.card,
+                  cursor: 'pointer', transition: 'all 0.12s',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.backgroundColor = C.accentSub;
+                  el.style.borderColor = C.accentRim;
+                  el.style.color = C.accent;
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.backgroundColor = C.card;
+                  el.style.borderColor = C.border;
+                  el.style.color = C.sub;
+                }}
+              >
+                ערוך פרטים
+              </button>
+            </div>
           </div>
 
           {/* Mini stats */}
@@ -322,6 +341,15 @@ export default function PatientDetailPage() {
           onCancel={() => setEditOpen(false)}
         />
       </Modal>
+
+      <PatientCardExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        patient={patient}
+        linkedStaff={linkedStaff}
+        sessions={sessions}
+        summaries={summaries}
+      />
 
       <Modal
         open={openSummary !== null}
@@ -1046,6 +1074,17 @@ function UploadIcon({ size = 14 }: { size?: number }) {
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
       <polyline points="17 8 12 3 7 8"/>
       <line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+  );
+}
+
+function DownloadIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
     </svg>
   );
 }
