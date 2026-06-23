@@ -60,6 +60,7 @@ export default function StaffDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>('פרטים');
   const [loading,   setLoading]   = useState(true);
   const [editOpen,  setEditOpen]  = useState(false);
+  const [toggling,  setToggling]  = useState(false);
 
   const getToken = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -88,6 +89,19 @@ export default function StaffDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const toggleActive = useCallback(async () => {
+    if (!staff) return;
+    const next = staff.is_active === false;
+    const msg = next
+      ? `להחזיר את ${staff.full_name} לפעילות?`
+      : `להשהות את ${staff.full_name}? הקישורים למטופלות, המסמכים והתיעוד הקיימים יישארו — היא רק תוסתר מבחירה חדשה.`;
+    if (!window.confirm(msg)) return;
+    setToggling(true);
+    await supabase.from('staff').update({ is_active: next }).eq('id', staff.id);
+    setToggling(false);
+    load();
+  }, [staff, load]);
+
   if (loading) {
     return (
       <div style={{ backgroundColor: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl' }}>
@@ -112,6 +126,7 @@ export default function StaffDetailPage() {
   }
 
   const rs = STAFF_ROLE_STYLE[staff.role] ?? STAFF_ROLE_STYLE.other;
+  const suspended = staff.is_active === false;
 
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '32px 40px', direction: 'rtl' }}>
@@ -151,6 +166,14 @@ export default function StaffDetailPage() {
                   }}>
                     {rs.label}
                   </span>
+                  {suspended && (
+                    <span style={{
+                      padding: '3px 11px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                      backgroundColor: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA',
+                    }}>
+                      מושהית
+                    </span>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 13, color: C.sub }}>
                   {staff.phone && <span>{staff.phone}</span>}
@@ -159,28 +182,43 @@ export default function StaffDetailPage() {
               </div>
             </div>
 
-            <button
-              onClick={() => setEditOpen(true)}
-              style={{
-                padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 600,
-                border: `1px solid ${C.border}`, color: C.sub, backgroundColor: C.card,
-                cursor: 'pointer', transition: 'all 0.12s',
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.backgroundColor = C.accentSub;
-                el.style.borderColor = C.accentRim;
-                el.style.color = C.accent;
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.backgroundColor = C.card;
-                el.style.borderColor = C.border;
-                el.style.color = C.sub;
-              }}
-            >
-              ערוך פרטים
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={toggleActive}
+                disabled={toggling}
+                style={{
+                  padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 600,
+                  cursor: toggling ? 'wait' : 'pointer', transition: 'all 0.12s',
+                  border: `1px solid ${suspended ? C.accentRim : '#FDE68A'}`,
+                  color: suspended ? C.accent : '#B45309',
+                  backgroundColor: suspended ? C.accentSub : '#FFFBEB',
+                }}
+              >
+                {toggling ? '...' : suspended ? 'החזר לפעילות' : 'השהה'}
+              </button>
+              <button
+                onClick={() => setEditOpen(true)}
+                style={{
+                  padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 600,
+                  border: `1px solid ${C.border}`, color: C.sub, backgroundColor: C.card,
+                  cursor: 'pointer', transition: 'all 0.12s',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.backgroundColor = C.accentSub;
+                  el.style.borderColor = C.accentRim;
+                  el.style.color = C.accent;
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.backgroundColor = C.card;
+                  el.style.borderColor = C.border;
+                  el.style.color = C.sub;
+                }}
+              >
+                ערוך פרטים
+              </button>
+            </div>
           </div>
 
           {/* Mini stats */}

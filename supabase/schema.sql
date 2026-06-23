@@ -298,6 +298,13 @@ alter table staff add constraint staff_role_check
 -- the template). Free text — some institutions use letter prefixes.
 alter table staff add column if not exists employee_number text;
 
+-- Active / suspended flag. Suspending a staff member (is_active = false)
+-- is non-destructive: every existing staff_patients link, staff_documents
+-- row and historical record stays exactly as it was. A suspended member is
+-- just hidden from NEW-assignment pickers and badged in the UI. Defaults to
+-- true so all existing rows remain active.
+alter table staff add column if not exists is_active boolean not null default true;
+
 -- Many-to-many staff ↔ patients. We never store an array on staff or
 -- patients — this is the only place the relationship lives.
 create table if not exists staff_patients (

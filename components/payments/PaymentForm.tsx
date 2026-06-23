@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
 import type { Payment } from '@/types';
-type StaffOpt = { id: string; full_name: string };
+type StaffOpt = { id: string; full_name: string; is_active?: boolean };
 
 const METHOD_OPTIONS = [
   { value: 'bank_transfer', label: 'העברה בנקאית' },
@@ -37,7 +37,9 @@ export default function PaymentForm({ initial, onSave, onCancel }: Props) {
   const [error,   setError]   = useState('');
 
   useEffect(() => {
-    supabase.from('staff').select('id, full_name').eq('role', 'coordinator').order('full_name')
+    // select('*') (not an explicit column list) so this keeps working even
+    // before the is_active migration lands — a missing column is just absent.
+    supabase.from('staff').select('*').eq('role', 'coordinator').order('full_name')
       .then(({ data }) => setStaff(data ?? []));
   }, []);
 
@@ -64,7 +66,11 @@ export default function PaymentForm({ initial, onSave, onCancel }: Props) {
     onSave();
   }
 
-  const staffOptions = staff.map(s => ({ value: s.id, label: s.full_name }));
+  // Hide suspended coordinators from new selections; keep the one already
+  // linked to this payment so editing never clears it.
+  const staffOptions = staff
+    .filter(s => s.is_active !== false || s.id === form.coordinator_id)
+    .map(s => ({ value: s.id, label: s.full_name }));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">

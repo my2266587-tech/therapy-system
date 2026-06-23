@@ -17,6 +17,10 @@ export interface StaffMember {
    *  public/templates/monthly-report-template.xlsx). */
   employee_number: string | null;
   notes: string | null;
+  /** False = suspended (מושהית). Non-destructive: existing patient links,
+   *  documents and history stay; the member is just hidden from new-
+   *  assignment pickers and badged in the UI. */
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }

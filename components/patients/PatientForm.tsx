@@ -5,7 +5,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import FormGroup from '@/components/ui/FormGroup';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
 import type { Patient } from '@/types';
-type StaffOpt = { id: string; full_name: string; role?: string };
+type StaffOpt = { id: string; full_name: string; role?: string; is_active?: boolean };
 
 const STATUS_OPTIONS = [
   { value: 'active',   label: 'פעילה' },
@@ -60,7 +60,10 @@ export default function PatientForm({ initial, onSave, onCancel }: Props) {
   /* ── load staff dropdown options ─────────────────────────────── */
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    supabase.from('staff').select('id, full_name, role').order('full_name').then(({ data }) => {
+    // select('*') (not an explicit column list) so this keeps working even
+    // before the is_active migration lands — a missing column is just absent,
+    // not a PostgREST error.
+    supabase.from('staff').select('*').order('full_name').then(({ data }) => {
       setStaffList((data ?? []) as StaffOpt[]);
     });
   }, []);
@@ -169,7 +172,16 @@ export default function PatientForm({ initial, onSave, onCancel }: Props) {
     onSave();
   }
 
-  const staffOptions = staffList.map(s => ({ value: s.id, label: s.full_name }));
+  // Suspended (is_active === false) staff drop out of NEW selections, but a
+  // member already chosen on this patient stays visible so editing never
+  // silently clears an existing assignment.
+  const coordinatorPickList = staffList.filter(
+    s => s.is_active !== false || s.id === form.coordinator_id,
+  );
+  const teamPickList = staffList.filter(
+    s => s.is_active !== false || staffIds.includes(s.id),
+  );
+  const staffOptions = coordinatorPickList.map(s => ({ value: s.id, label: s.full_name }));
 
   return (
     <form onSubmit={handleSubmit} style={{ direction: 'rtl' }}>
@@ -230,7 +242,7 @@ export default function PatientForm({ initial, onSave, onCancel }: Props) {
             <StaffMultiSelect
               label="אנשי צוות אחראים"
               value={staffIds}
-              options={staffList}
+              options={teamPickList}
               onChange={setStaffIds}
             />
           </div>

@@ -38,6 +38,23 @@ export function EyeIcon({ size = 15 }: { size?: number }) {
   );
 }
 
+export function PauseIcon({ size = 15 }: { size?: number }) {
+  return (
+    <Svg size={size}>
+      <rect x="6" y="4" width="4" height="16" rx="1"/>
+      <rect x="14" y="4" width="4" height="16" rx="1"/>
+    </Svg>
+  );
+}
+
+export function PlayIcon({ size = 15 }: { size?: number }) {
+  return (
+    <Svg size={size}>
+      <polygon points="6 4 20 12 6 20 6 4"/>
+    </Svg>
+  );
+}
+
 /* ── Shared icon button ── */
 export function IconBtn({
   onClick, icon, hoverColor, title, stopPropagation = true,
