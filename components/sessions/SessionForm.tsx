@@ -3,22 +3,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
+import { useSettings } from '@/lib/settings/SettingsProvider';
 import type { Session } from '@/types';
 type PatientOpt = { id: string; full_name: string };
-
-const STATUS_OPTIONS = [
-  { value: 'planned',   label: 'מתוכננת' },
-  { value: 'completed', label: 'התקיימה' },
-  { value: 'cancelled', label: 'בוטלה' },
-  { value: 'no_show',   label: 'לא הגיעה' },
-];
-
-const TRAVEL_MODE_OPTIONS = [
-  { value: '',      label: 'ללא נסיעה' },
-  { value: 'taxi',  label: 'מונית' },
-  { value: 'bus',   label: 'אוטובוס' },
-  { value: 'other', label: 'אחר' },
-];
 
 export const TRAVEL_MODE_LABEL: Record<string, string> = {
   taxi:  'מונית',
@@ -37,6 +24,9 @@ function calcDuration(start: string, end: string): number | null {
 interface Props { initial: Session | null; onSave: () => void; onCancel: () => void; onDelete?: () => void; }
 
 export default function SessionForm({ initial, onSave, onCancel, onDelete }: Props) {
+  const { settings } = useSettings();
+  const STATUS_OPTIONS = settings.options.sessionStatus;
+  const TRAVEL_MODE_OPTIONS = [{ value: '', label: 'ללא נסיעה' }, ...settings.options.travelMode];
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     patient_id:  initial?.patient_id  ?? '',

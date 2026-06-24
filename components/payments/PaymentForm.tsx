@@ -3,25 +3,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
+import { useSettings } from '@/lib/settings/SettingsProvider';
 import type { Payment } from '@/types';
 type StaffOpt = { id: string; full_name: string; is_active?: boolean };
-
-const METHOD_OPTIONS = [
-  { value: 'bank_transfer', label: 'העברה בנקאית' },
-  { value: 'cash',          label: 'מזומן' },
-  { value: 'check',         label: "צ'ק" },
-  { value: 'other',         label: 'אחר' },
-];
-
-const EMAIL_OPTIONS = [
-  { value: 'not_sent', label: 'לא נשלח' },
-  { value: 'sent',     label: 'נשלח' },
-  { value: 'failed',   label: 'שגיאה' },
-];
 
 interface Props { initial: Payment | null; onSave: () => void; onCancel: () => void; }
 
 export default function PaymentForm({ initial, onSave, onCancel }: Props) {
+  const { settings } = useSettings();
+  const METHOD_OPTIONS = settings.options.paymentMethod;
+  const EMAIL_OPTIONS  = settings.options.emailStatus;
   const [form, setForm] = useState({
     month:          initial?.month          ?? '',
     amount:         String(initial?.amount  ?? ''),

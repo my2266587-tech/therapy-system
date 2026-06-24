@@ -1,63 +1,19 @@
 // תרגומי ערכי DB לעברית — לשימוש בכל המערכת
+//
+// ערכי ברירת המחדל מוגדרים במקום אחד: lib/settings/defaults.ts.
+// המפות כאן נגזרות מאותו מקור, ומשמשות הקשרים שאינם React (יצוא PDF/CSV, שרת)
+// כברירת מחדל בטוחה. רכיבי React חיים מושכים את הערכים הניתנים לעריכה דרך
+// useSettings() (lib/settings/SettingsProvider).
 
-export const patientStatusLabels: Record<string, string> = {
-  active: 'פעילה',
-  inactive: 'לא פעילה',
-  waiting: 'בהמתנה',
-};
+import { DEFAULT_SETTINGS, toLabelMap } from '@/lib/settings/defaults';
 
-export const housingTypeLabels: Record<string, string> = {
-  independent: 'עצמאיות',
-  regular: 'רגיל',
-  rehabilitation: 'משקם',
-};
+export const patientStatusLabels   = toLabelMap(DEFAULT_SETTINGS.options.patientStatus);
+export const housingTypeLabels     = toLabelMap(DEFAULT_SETTINGS.options.housingType);
+export const maritalStatusLabels   = toLabelMap(DEFAULT_SETTINGS.options.maritalStatus);
+export const staffRoleLabels       = toLabelMap(DEFAULT_SETTINGS.options.staffRole);
+export const sessionStatusLabels   = toLabelMap(DEFAULT_SETTINGS.options.sessionStatus);
+export const recordingStatusLabels = toLabelMap(DEFAULT_SETTINGS.options.recordingStatus);
+export const paymentMethodLabels   = toLabelMap(DEFAULT_SETTINGS.options.paymentMethod);
+export const emailStatusLabels     = toLabelMap(DEFAULT_SETTINGS.options.emailStatus);
 
-export const maritalStatusLabels: Record<string, string> = {
-  single: 'רווקה',
-  married: 'נשואה',
-  divorced: 'גרושה',
-  widowed: 'אלמנה',
-};
-
-export const staffRoleLabels: Record<string, string> = {
-  coordinator: 'רכזת',
-  instructor: 'מדריכה',
-  therapist: 'מטפלת',
-  other: 'אחר',
-};
-
-export const sessionStatusLabels: Record<string, string> = {
-  planned: 'מתוכננת',
-  completed: 'התקיימה',
-  cancelled: 'בוטלה',
-  no_show: 'לא הגיעה',
-};
-
-export const recordingStatusLabels: Record<string, string> = {
-  pending: 'ממתין לתמלול',
-  transcribed: 'תומלל',
-  draft_ready: 'טיוטה מוכנה',
-  approved: 'אושר',
-};
-
-export const paymentMethodLabels: Record<string, string> = {
-  bank_transfer: 'העברה בנקאית',
-  cash: 'מזומן',
-  check: "צ'ק",
-  other: 'אחר',
-};
-
-export const emailStatusLabels: Record<string, string> = {
-  not_sent: 'לא נשלח',
-  sent: 'נשלח',
-  failed: 'שגיאה',
-};
-
-export const treatmentTypeOptions = [
-  'אומנות',
-  'תרפיה',
-  'פיסול',
-  'מוזיקה',
-  'תנועה',
-  'אחר',
-];
+export const treatmentTypeOptions  = DEFAULT_SETTINGS.lists.treatmentTypes;

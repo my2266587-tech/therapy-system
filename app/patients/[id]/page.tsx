@@ -11,9 +11,7 @@ import SummaryDetailCard from '@/components/summaries/SummaryDetailCard';
 import PatientForm from '@/components/patients/PatientForm';
 import PatientCardExportModal from '@/components/patients/PatientCardExportModal';
 import DocumentPreviewModal from '@/components/ui/DocumentPreviewModal';
-import {
-  housingTypeLabels, maritalStatusLabels,
-} from '@/lib/labels';
+import { useSettings } from '@/lib/settings/SettingsProvider';
 import { hebrewDay } from '@/lib/dateUtils';
 import type {
   Patient, Session, SessionSummary, PatientDocumentWithUrl,
@@ -58,6 +56,8 @@ function avatarColor(name: string) {
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { labelMaps } = useSettings();
+  const housingTypeLabels = labelMaps.housingType;
 
   const [patient,    setPatient]    = useState<Patient | null>(null);
   const [sessions,   setSessions]   = useState<Session[]>([]);
@@ -381,6 +381,9 @@ export default function PatientDetailPage() {
  * toggle so a long history doesn't dominate the tab.
  */
 function DetailsTab({ patient }: { patient: Patient }) {
+  const { labelMaps } = useSettings();
+  const housingTypeLabels   = labelMaps.housingType;
+  const maritalStatusLabels = labelMaps.maritalStatus;
   // FK-resolved name wins over the import fallback text. When the FK
   // is null but the text was set by the importer, surface it with a
   // small "לא מקושר" hint so the user knows it's not a real linkage.

@@ -61,7 +61,7 @@ const navItems = [
   { href: '/petty-cash',     label: 'מעשר געלט',        icon: 'petty-cash'  },
   { href: '/reports/monthly', label: 'דוחות חודשיים',   icon: 'reports'     },
   { href: '/import',         label: 'ייבוא נתונים',     icon: 'import'      },
-  { href: '/settings/users', label: 'הגדרות',           icon: 'settings'    },
+  { href: '/settings',       label: 'הגדרות',           icon: 'settings'    },
 ];
 
 /* ── Colour constants (sidebar is dark) ── */

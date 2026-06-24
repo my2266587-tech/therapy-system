@@ -4,20 +4,9 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import FormGroup from '@/components/ui/FormGroup';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
+import { useSettings } from '@/lib/settings/SettingsProvider';
 import type { Patient } from '@/types';
 type StaffOpt = { id: string; full_name: string; role?: string; is_active?: boolean };
-
-const STATUS_OPTIONS = [
-  { value: 'active',   label: 'פעילה' },
-  { value: 'inactive', label: 'לא פעילה' },
-  { value: 'waiting',  label: 'בהמתנה' },
-];
-
-const HOUSING_OPTIONS = [
-  { value: 'independent',    label: 'עצמאיות' },
-  { value: 'regular',        label: 'רגיל' },
-  { value: 'rehabilitation', label: 'משקם' },
-];
 
 interface Props {
   initial: Patient | null;
@@ -26,6 +15,9 @@ interface Props {
 }
 
 export default function PatientForm({ initial, onSave, onCancel }: Props) {
+  const { settings } = useSettings();
+  const STATUS_OPTIONS  = settings.options.patientStatus;
+  const HOUSING_OPTIONS = settings.options.housingType;
   const [form, setForm] = useState({
     full_name:         initial?.full_name ?? '',
     phone:             initial?.phone ?? '',

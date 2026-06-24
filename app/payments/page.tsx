@@ -8,6 +8,7 @@ import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { paymentMethodLabels, emailStatusLabels } from '@/lib/labels';
+import { useSettings } from '@/lib/settings/SettingsProvider';
 import { hebrewLong } from '@/lib/dateUtils';
 import type { Payment } from '@/types';
 
@@ -62,6 +63,11 @@ const PAYMENT_EXPORT_COLUMNS: Column<Payment>[] = [
 ];
 
 export default function PaymentsPage() {
+  const { settings, labelMaps } = useSettings();
+  // live, admin-editable labels/title (override the static defaults above)
+  const paymentMethodLabels = labelMaps.paymentMethod;
+  const emailStatusLabels   = labelMaps.emailStatus;
+  const pageTitle           = settings.texts.paymentsTitle;
   const [records, setRecords] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState('');
@@ -109,7 +115,7 @@ export default function PaymentsPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: '0 0 3px', letterSpacing: '-0.3px' }}>
-              תשלומי שיראל
+              {pageTitle}
             </h1>
             <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
               {loading ? '' : `${filtered.length} תשלומים${search.trim() && filtered.length !== records.length ? ` מתוך ${records.length}` : ''}`}
@@ -119,7 +125,7 @@ export default function PaymentsPage() {
             <ExportButton<Payment>
               rows={filtered}
               columns={PAYMENT_EXPORT_COLUMNS}
-              title="תשלומי שיראל"
+              title={pageTitle}
               fileBase="payments"
               disabled={loading}
             />

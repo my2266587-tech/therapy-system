@@ -3,14 +3,14 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
-import { STAFF_ROLE_OPTIONS } from '@/lib/staffRoles';
+import { useSettings } from '@/lib/settings/SettingsProvider';
 import type { StaffMember } from '@/types';
-
-const ROLE_OPTIONS = STAFF_ROLE_OPTIONS;
 
 interface Props { initial: StaffMember | null; onSave: () => void; onCancel: () => void; }
 
 export default function StaffForm({ initial, onSave, onCancel }: Props) {
+  const { settings } = useSettings();
+  const ROLE_OPTIONS = settings.options.staffRole;
   const [form, setForm] = useState({
     full_name:       initial?.full_name       ?? '',
     phone:           initial?.phone           ?? '',
