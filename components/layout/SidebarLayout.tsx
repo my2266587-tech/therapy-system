@@ -86,8 +86,12 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   /* Close mobile panel when route changes */
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
-  /* Hide sidebar on auth pages */
-  const noSidebar = pathname === '/login' || pathname?.startsWith('/auth/');
+  /* Hide sidebar on auth pages and on the standalone intake form (it is
+     opened both by patients via a public link and by therapists in a
+     focused view — neither needs the app shell). */
+  const noSidebar = pathname === '/login'
+    || pathname?.startsWith('/auth/')
+    || pathname?.startsWith('/intake/');
   if (noSidebar) return <>{children}</>;
 
   function isActive(href: string) {
