@@ -221,7 +221,7 @@ function PatientsInner() {
       </Modal>
 
       <Modal open={intakeOpen} onClose={() => setIntakeOpen(false)} title="טופס הצטרפות — מטופלת חדשה" size="md">
-        <NewIntakeModal />
+        <NewIntakeModal onClose={() => setIntakeOpen(false)} />
       </Modal>
     </div>
   );
@@ -233,8 +233,7 @@ function PatientsInner() {
  * link to send to the prospective patient, or fill it now from inside the
  * system. The patient record is created when the form is submitted.
  */
-function NewIntakeModal() {
-  const router = useRouter();
+function NewIntakeModal({ onClose }: { onClose: () => void }) {
   const [busy, setBusy]     = useState<null | 'copy' | 'fill'>(null);
   const [error, setError]   = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -265,10 +264,20 @@ function NewIntakeModal() {
 
   const fillNow = useCallback(async () => {
     setBusy('fill');
+    // Open the tab synchronously (before the await) so popup blockers don't
+    // swallow it, then point it at the form once the token is ready.
+    const win = window.open('', '_blank');
     const t = await newToken();
-    if (t) { router.push(`/intake/${t}?mode=internal`); return; }
+    if (t) {
+      const url = `/intake/${t}?mode=internal`;
+      if (win) win.location.href = url;
+      else window.open(url, '_blank');
+      onClose();
+    } else if (win) {
+      win.close();
+    }
     setBusy(null);
-  }, [newToken, router]);
+  }, [newToken, onClose]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
