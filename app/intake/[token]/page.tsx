@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import SignaturePad, { type SignaturePadHandle } from '@/components/intake/SignaturePad';
-import AudioRecorder from '@/components/intake/AudioRecorder';
+import DictatedTextarea from '@/components/ui/DictatedTextarea';
 import { buildIntakePdfBlob } from '@/lib/intakePdf';
 import type { IntakeQuestion } from '@/lib/intake/questions';
 
@@ -36,7 +36,6 @@ export default function IntakeFormPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [texts, setTexts]   = useState<Record<string, string>>({});
-  const [audios, setAudios] = useState<Record<string, Blob>>({});
   const sigRef = useRef<SignaturePadHandle | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
@@ -61,14 +60,6 @@ export default function IntakeFormPage() {
 
   const setText = useCallback((id: string, v: string) => {
     setTexts(prev => ({ ...prev, [id]: v }));
-  }, []);
-
-  const setAudio = useCallback((id: string, blob: Blob | null) => {
-    setAudios(prev => {
-      const next = { ...prev };
-      if (blob) next[id] = blob; else delete next[id];
-      return next;
-    });
   }, []);
 
   const submit = useCallback(async () => {
@@ -101,11 +92,7 @@ export default function IntakeFormPage() {
         patientName: fullName,
         filledByLabel: internal ? 'מולא ע״י המטפלת (מתוך המערכת)' : 'מולא ע״י המטופלת',
         submittedAt: new Date(),
-        answers: answers.map(a => ({
-          question: a.question,
-          text: a.text,
-          hasAudio: !!audios[a.id],
-        })),
+        answers: answers.map(a => ({ question: a.question, text: a.text })),
         signatureDataUrl: sigDataUrl,
       });
 
@@ -116,11 +103,6 @@ export default function IntakeFormPage() {
 
       const sigBlob = await (await fetch(sigDataUrl)).blob();
       fd.append('signature', sigBlob, 'signature.png');
-
-      for (const [id, blob] of Object.entries(audios)) {
-        const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm';
-        fd.append(`audio_${id}`, blob, `${id}.${ext}`);
-      }
 
       const headers: Record<string, string> = {};
       if (internal) {
@@ -142,7 +124,7 @@ export default function IntakeFormPage() {
       setSubmitError('שגיאה בשליחת הטופס');
     }
     setSubmitting(false);
-  }, [def, texts, audios, internal, token, router]);
+  }, [def, texts, internal, token, router]);
 
   /* ── Render states ── */
   if (loading) {
@@ -197,22 +179,15 @@ export default function IntakeFormPage() {
                 <span style={{ color: C.muted, marginInlineEnd: 6 }}>{i + 1}.</span>{q.label}
                 {q.id === 'full_name' && <span style={{ color: '#DC2626', marginInlineStart: 4 }}>*</span>}
               </label>
-              <textarea
+              <DictatedTextarea
                 value={texts[q.id] ?? ''}
-                onChange={e => setText(q.id, e.target.value)}
+                onChange={v => setText(q.id, v)}
                 rows={q.rows}
-                style={{
-                  width: '100%', boxSizing: 'border-box', resize: 'vertical',
-                  padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`,
-                  fontSize: 14, color: C.text, fontFamily: 'inherit', lineHeight: 1.5,
-                  outline: 'none', backgroundColor: '#FCFDFE',
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = C.accentRim; }}
-                onBlur={e => { e.currentTarget.style.borderColor = C.border; }}
+                placeholder="הקלידי, או לחצי על המיקרופון כדי להכתיב בקול"
               />
-              <div style={{ marginTop: 10 }}>
-                <AudioRecorder onChange={blob => setAudio(q.id, blob)} />
-              </div>
+              <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0' }}>
+                ניתן לדבר במקום להקליד — המילים ייכתבו אוטומטית בשדה.
+              </p>
             </div>
           ))}
         </div>

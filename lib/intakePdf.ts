@@ -22,10 +22,8 @@ const MARGIN = 40;
 
 export interface IntakePdfAnswer {
   question: string;
-  /** Typed answer text (may be empty when only a recording was left). */
+  /** Answer text (typed or dictated to text). */
   text: string;
-  /** True when the patient left a voice recording for this question. */
-  hasAudio: boolean;
 }
 
 export interface IntakePdfData {
@@ -111,15 +109,7 @@ export async function buildIntakePdfBlob(data: IntakePdfData): Promise<Blob> {
     c.y += 16;
 
     const hasText = !!a.text && a.text.trim().length > 0;
-    if (hasText) {
-      paragraph(doc, c, a.text, 10.5, TEXT);
-    }
-    if (a.hasAudio) {
-      paragraph(doc, c, '🎙 צורפה תשובה קולית מוקלטת', 9.5, MUTED);
-    }
-    if (!hasText && !a.hasAudio) {
-      paragraph(doc, c, '—', 10.5, MUTED);
-    }
+    paragraph(doc, c, hasText ? a.text : '—', 10.5, hasText ? TEXT : MUTED);
     c.y += 8;
   }
 

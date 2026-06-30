@@ -8,8 +8,10 @@
  *     answers    : JSON string  [{ id, question, text }]
  *     signature  : PNG file     (optional)
  *     pdf        : PDF file      (the client-built summary, required)
- *     audio_<id> : audio files   (optional, one per recorded question)
  *     internal   : '1' when filled by the therapist from inside the system
+ *
+ * Voice input is dictated to text in the browser (no audio file is kept) — the
+ * words land directly in the answer text.
  *
  * Filler identity:
  *   • internal='1' + a valid Bearer of an authorized user → filled_by='therapist'
@@ -17,7 +19,6 @@
  *
  * The new patient is created with status 'waiting' (a fresh intake = waitlist).
  * Storage (all private, via service role):
- *   • audio     → bucket "recordings"          intake/<form_id>/<qid>.<ext>
  *   • signature → bucket "patient-documents"   <patient_id>/intake-<form_id>-signature.png
  *   • pdf       → bucket "patient-documents"   <patient_id>/<doc_id>.pdf  (+ patient_documents row)
  */
@@ -27,21 +28,6 @@ import { createServerClient } from '@/lib/supabaseServer';
 import { getAuthorizedUser } from '@/lib/getAdminUser';
 import { BUCKETS, friendlyStorageError } from '@/lib/storage';
 import { INTAKE_CATEGORY } from '@/lib/intake/questions';
-
-const AUDIO_EXT: Record<string, string> = {
-  'audio/webm': 'webm',
-  'audio/ogg': 'ogg',
-  'audio/mp4': 'mp4',
-  'audio/x-m4a': 'm4a',
-  'audio/mpeg': 'mp3',
-  'audio/mp3': 'mp3',
-  'audio/wav': 'wav',
-  'audio/x-wav': 'wav',
-};
-
-function audioExt(type: string): string {
-  return AUDIO_EXT[type] ?? 'webm';
-}
 
 function pad(n: number): string { return String(n).padStart(2, '0'); }
 
@@ -141,22 +127,6 @@ export async function POST(
 
   const uploaded: string[] = []; // for rollback
 
-  // ── Upload per-question audio → recordings bucket ──
-  const audioByQid: Record<string, string> = {};
-  for (const [key, value] of fd.entries()) {
-    if (!key.startsWith('audio_') || !(value instanceof File) || value.size === 0) continue;
-    const qid = key.slice('audio_'.length);
-    const ext = audioExt(value.type);
-    const path = `intake/${form.id}/${qid}.${ext}`;
-    const buf = Buffer.from(await value.arrayBuffer());
-    const { error } = await supabase.storage
-      .from(BUCKETS.recordings)
-      .upload(path, buf, { contentType: value.type || 'audio/webm', upsert: true });
-    if (error) return await fail(supabase, patientId, uploaded, friendlyStorageError(error.message), 500);
-    uploaded.push(`${BUCKETS.recordings}:${path}`);
-    audioByQid[qid] = path;
-  }
-
   // ── Upload signature → patient-documents bucket ──
   let signaturePath: string | null = null;
   const sig = fd.get('signature');
@@ -204,12 +174,11 @@ export async function POST(
 
   if (docErr) return await fail(supabase, patientId, uploaded, docErr.message, 500);
 
-  // ── Merge audio paths into answers and finalise the form ──
-  const mergedAnswers = answers.map(a => ({
+  // ── Finalise the form ──
+  const finalAnswers = answers.map(a => ({
     id: a.id,
     question: a.question,
     text: a.text ?? '',
-    audio_path: audioByQid[a.id] ?? null,
   }));
 
   const { error: updErr } = await supabase
@@ -219,7 +188,7 @@ export async function POST(
       status: 'submitted',
       filled_by: filledBy,
       filled_by_email: filledByEmail,
-      answers: mergedAnswers,
+      answers: finalAnswers,
       signature_path: signaturePath,
       pdf_document_id: docRow.id,
       submitted_at: now.toISOString(),
