@@ -54,6 +54,7 @@ export const TOOL_NAMES = [
   'getPatientResponsibleStaff',
   'getLatestSessionSummary',
   'getPatientOverview',
+  'getHowTo',
   'help',
 ] as const;
 
@@ -77,6 +78,7 @@ export const INTENT_TO_TOOL: Record<Intent, ToolName | null> = {
   patientOverview:       'getPatientOverview',
   openPatient:           'openPatient',
   listPatients:          'getPatientList',
+  howTo:                 'getHowTo',
   help:                  'help',
   unknown:               null,
 };
@@ -161,6 +163,11 @@ export async function dispatchTool(
       const name = typeof input.name === 'string' ? input.name : null;
       if (!name) return { answer: NEEDS_PATIENT_NAME };
       return tools.getPatientOverview(supabase, name);
+    }
+
+    case 'getHowTo': {
+      const topic = typeof input.topic === 'string' ? input.topic : 'index';
+      return tools.getHowToResult(topic);
     }
 
     case 'help':

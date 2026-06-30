@@ -154,6 +154,9 @@ export async function POST(req: NextRequest) {
   if (resolved.name) {
     input.name = resolved.name;
   }
+  if (resolved.topic) {
+    input.topic = resolved.topic;
+  }
 
   try {
     const result = await dispatchTool(supabase, toolName, input);

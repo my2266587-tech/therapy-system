@@ -19,9 +19,12 @@
 --
 -- Idempotent — safe to re-run.
 
+-- The intake form is filled for a NOT-YET-EXISTING patient: a new patient
+-- record is created on submit and linked back here. patient_id is therefore
+-- nullable until submission.
 create table if not exists intake_forms (
   id                 uuid primary key default gen_random_uuid(),
-  patient_id         uuid not null references patients(id) on delete cascade,
+  patient_id         uuid references patients(id) on delete cascade,
   token              text not null unique,
   status             text not null check (status in ('pending','submitted')) default 'pending',
   filled_by          text check (filled_by in ('patient','therapist')),
@@ -34,6 +37,10 @@ create table if not exists intake_forms (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
+
+-- For DBs where the table was first created with a NOT NULL patient_id, relax
+-- it (the patient is created on submit). Safe / idempotent.
+alter table intake_forms alter column patient_id drop not null;
 
 create index if not exists idx_intake_forms_patient
   on intake_forms (patient_id, created_at desc);

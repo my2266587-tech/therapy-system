@@ -43,10 +43,6 @@ const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; 
 
 const AVATAR_COLORS = ['#0D9488','#4F46E5','#9333EA','#0284C7','#059669','#D97706'];
 
-interface IntakeStatus {
-  submitted: { submitted_at: string; filled_by: 'patient' | 'therapist' | null; pdf_url: string } | null;
-}
-
 function initials(name: string) {
   const p = name.trim().split(/\s+/);
   return p.length >= 2 ? p[0][0] + p[1][0] : name.slice(0, 2);
@@ -72,8 +68,6 @@ export default function PatientDetailPage() {
   const [editOpen,   setEditOpen]   = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [openSummary, setOpenSummary] = useState<SessionSummary | null>(null);
-  const [intakeOpen, setIntakeOpen] = useState(false);
-  const [intake, setIntake] = useState<IntakeStatus | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,21 +122,6 @@ export default function PatientDetailPage() {
       .map(r => r.staff)
       .filter((s): s is NonNullable<typeof s> => s !== null);
     setLinkedStaff(staffRows);
-
-    // Intake-form status for the card (best-effort).
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (token) {
-        const res = await fetch(`/api/patients/${id}/intake`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) setIntake(await res.json() as IntakeStatus);
-      }
-    } catch {
-      // Non-fatal.
-    }
-
     setLoading(false);
   }, [id]);
 
@@ -271,24 +250,6 @@ export default function PatientDetailPage() {
                 הורדת כרטיס מטופלת
               </button>
               <button
-                onClick={() => setIntakeOpen(true)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '9px 16px', borderRadius: 9, fontSize: 13, fontWeight: 600,
-                  border: `1px solid ${C.accentRim}`, color: C.accent, backgroundColor: C.accentSub,
-                  cursor: 'pointer', transition: 'opacity 0.12s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.85'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-              >
-                <FormIcon />
-                טופס הצטרפות
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%', display: 'inline-block',
-                  backgroundColor: intake?.submitted ? '#16A34A' : '#CBD5E1',
-                }} />
-              </button>
-              <button
                 onClick={() => setEditOpen(true)}
                 style={{
                   padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 600,
@@ -389,14 +350,6 @@ export default function PatientDetailPage() {
         sessions={sessions}
         summaries={summaries}
       />
-
-      <Modal open={intakeOpen} onClose={() => setIntakeOpen(false)} title="טופס הצטרפות" size="md">
-        <IntakeModal
-          patientId={patient.id}
-          patientName={patient.full_name}
-          intake={intake}
-        />
-      </Modal>
 
       <Modal
         open={openSummary !== null}
@@ -1070,139 +1023,6 @@ function DocumentsTab({ patientId, patientName }: { patientId: string; patientNa
   );
 }
 
-/**
- * "טופס הצטרפות" action sheet: shows the fill status and the two ways to fill
- * the intake form — copy a personal link for the patient, or open it now from
- * inside the system (recorded as filled by the therapist).
- */
-function IntakeModal({
-  patientId, intake,
-}: {
-  patientId: string;
-  patientName: string;
-  intake: IntakeStatus | null;
-}) {
-  const [busy, setBusy]     = useState<null | 'copy' | 'fill'>(null);
-  const [error, setError]   = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const ensureToken = useCallback(async (): Promise<string | null> => {
-    setError(null);
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) { setError('יש להתחבר מחדש'); return null; }
-    const res = await fetch(`/api/patients/${patientId}/intake`, {
-      method: 'POST', headers: { Authorization: `Bearer ${token}` },
-    });
-    const json = await res.json().catch(() => null);
-    if (!res.ok) { setError(json?.error ?? 'שגיאה ביצירת קישור'); return null; }
-    return (json as { token: string }).token;
-  }, [patientId]);
-
-  const copyLink = useCallback(async () => {
-    setBusy('copy'); setCopied(false);
-    const t = await ensureToken();
-    if (t) {
-      const url = `${window.location.origin}/intake/${t}`;
-      try { await navigator.clipboard.writeText(url); setCopied(true); }
-      catch { setError(`העתקה ידנית: ${url}`); }
-    }
-    setBusy(null);
-  }, [ensureToken]);
-
-  const fillNow = useCallback(async () => {
-    setBusy('fill');
-    const t = await ensureToken();
-    if (t) { window.location.href = `/intake/${t}?mode=internal`; return; }
-    setBusy(null);
-  }, [ensureToken]);
-
-  const submitted = intake?.submitted ?? null;
-  const filledByLabel = submitted?.filled_by === 'therapist'
-    ? 'ע״י המטפלת' : submitted?.filled_by === 'patient' ? 'ע״י המטופלת' : '';
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Status */}
-      <div style={{
-        borderRadius: 12, padding: '14px 16px',
-        backgroundColor: submitted ? '#F0FDF4' : '#F8FAFC',
-        border: `1px solid ${submitted ? '#BBF7D0' : '#E8ECF0'}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            width: 9, height: 9, borderRadius: '50%',
-            backgroundColor: submitted ? '#16A34A' : '#CBD5E1',
-          }} />
-          <span style={{ fontSize: 14, fontWeight: 600, color: submitted ? '#16A34A' : '#64748B' }}>
-            {submitted ? 'מולא' : 'טרם מולא'}
-          </span>
-        </div>
-        {submitted && (
-          <div style={{ marginTop: 8, fontSize: 13, color: '#475569' }}>
-            <DateDisplay date={submitted.submitted_at} size="sm" /> {filledByLabel}
-            {submitted.pdf_url && (
-              <a
-                href={submitted.pdf_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-block', marginTop: 10, padding: '7px 14px', borderRadius: 8,
-                  fontSize: 12.5, fontWeight: 600, color: '#0D9488', textDecoration: 'none',
-                  backgroundColor: '#F0FDF9', border: '1px solid #99F6E4',
-                }}
-              >
-                צפייה / הורדת PDF
-              </a>
-            )}
-          </div>
-        )}
-      </div>
-
-      {error && (
-        <div style={{
-          padding: '10px 14px', borderRadius: 10, fontSize: 13,
-          backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626',
-          wordBreak: 'break-all',
-        }}>
-          {error}
-        </div>
-      )}
-
-      {/* Actions */}
-      <button
-        onClick={copyLink}
-        disabled={busy !== null}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          width: '100%', padding: '13px', borderRadius: 11, fontSize: 14, fontWeight: 600,
-          color: '#0D9488', backgroundColor: '#FFFFFF', border: '1px solid #99F6E4',
-          cursor: busy ? 'wait' : 'pointer',
-        }}
-      >
-        {busy === 'copy' ? 'יוצר קישור...' : copied ? '✓ הקישור הועתק' : 'העתקת קישור למטופלת'}
-      </button>
-
-      <button
-        onClick={fillNow}
-        disabled={busy !== null}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          width: '100%', padding: '13px', borderRadius: 11, fontSize: 14, fontWeight: 700,
-          color: '#FFFFFF', backgroundColor: '#0D9488', border: 'none',
-          cursor: busy ? 'wait' : 'pointer', boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
-        }}
-      >
-        {busy === 'fill' ? 'פותח טופס...' : 'מילוי הטופס עכשיו'}
-      </button>
-
-      <p style={{ fontSize: 11.5, color: '#94A3B8', textAlign: 'center', margin: 0 }}>
-        הקישור האישי מאובטח ואינו חושף את מזהה המטופלת. לאחר השליחה ייווצר PDF שיישמר במסמכי המטופלת.
-      </p>
-    </div>
-  );
-}
-
 function NotesTab({ notes }: { notes: string | null }) {
   if (!notes || !notes.trim()) return <Empty msg="אין הערות" />;
   return (
@@ -1257,18 +1077,6 @@ function UploadIcon({ size = 14 }: { size?: number }) {
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
       <polyline points="17 8 12 3 7 8"/>
       <line x1="12" y1="3" x2="12" y2="15"/>
-    </svg>
-  );
-}
-
-function FormIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="9" y1="13" x2="15" y2="13" />
-      <line x1="9" y1="17" x2="13" y2="17" />
     </svg>
   );
 }

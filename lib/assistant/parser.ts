@@ -21,6 +21,7 @@
  */
 
 import { parseHebrewDateRange, type DateRange } from './dates';
+import { matchGuide } from './guides';
 
 export type Intent =
   | 'sessionsByDate'
@@ -34,6 +35,7 @@ export type Intent =
   | 'openPatient'
   | 'patientTimeline'
   | 'listPatients'
+  | 'howTo'
   | 'help'
   | 'unknown';
 
@@ -41,6 +43,8 @@ export interface ParsedQuestion {
   intent: Intent;
   range?: DateRange;
   name?:  string;
+  /** For howTo: the resolved guide key (offline fallback only). */
+  topic?: string;
   raw:    string;
   /** Top scored candidates (descending). Useful for server logs. */
   debug?: { intent: Intent; score: number }[];
@@ -81,6 +85,9 @@ const SYN: Record<string, string[]> = {
 
   // ── help phrasing ──
   help:       ['עזרה', 'דוגמאות', 'מה_אפשר_לשאול'],
+
+  // ── "how do I use the system" phrasing (usage guides) ──
+  howto:      ['איך', 'כיצד', 'מאיפה', 'איפה', 'היכן', 'הדרכה', 'מדריך'],
 
   // ── responsibility / "who handles X" ──
   responsible: ['אחראי*', 'אחראית', 'מטפל*', 'מטפלת', 'רכז*', 'רכזת', 'מדריכ*', 'צוות', 'אצל'],
@@ -198,6 +205,17 @@ const RULES: IntentRule[] = [
       if (/^(עזרה|דוגמאות)\b/.test(text)) return 100;
       if (/(מה אתה יודע|מה את יודעת|מה אפשר לשאול)/.test(text)) return 100;
       return 0;
+    },
+  },
+
+  // ── How-to (usage guide) — "איך/כיצד/איפה …" about operating the system.
+  // Scores above bare data signals so "איך מוסיפים פגישה?" routes to a guide,
+  // but stays below name/range-anchored data rules so real data questions win.
+  {
+    intent: 'howTo',
+    score: ({ text, hasName }) => {
+      if (hasName) return 0;                 // a named data question takes priority
+      return hasGroup(text, 'howto') ? 3 : 0;
     },
   },
 
@@ -350,7 +368,11 @@ export function parseQuestion(raw: string, now: Date = new Date()): ParsedQuesti
     .sort((a, b) => b.score - a.score);
 
   if (scored.length > 0 && scored[0].score >= MIN_SCORE) {
-    return { intent: scored[0].intent, range, name, raw, debug: scored.slice(0, 3) };
+    const intent = scored[0].intent;
+    // For a usage-guide question, resolve the most relevant guide so the
+    // offline path can answer the specific topic (not just the index).
+    const topic = intent === 'howTo' ? (matchGuide(raw)?.key ?? 'index') : undefined;
+    return { intent, range, name, topic, raw, debug: scored.slice(0, 3) };
   }
 
   // Fallbacks — these fire when no rule passed the threshold.

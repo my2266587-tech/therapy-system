@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import SignaturePad, { type SignaturePadHandle } from '@/components/intake/SignaturePad';
 import AudioRecorder from '@/components/intake/AudioRecorder';
@@ -17,12 +17,12 @@ const C = {
 interface FormDef {
   status: string;
   alreadySubmitted: boolean;
-  patientName: string;
   questions: IntakeQuestion[];
 }
 
 export default function IntakeFormPage() {
   const { token } = useParams<{ token: string }>();
+  const router = useRouter();
 
   // Read mode from the URL once, lazily (avoids a hydration mismatch and a
   // set-state-in-effect). 'internal' = opened by the therapist from inside
@@ -75,6 +75,12 @@ export default function IntakeFormPage() {
     if (!def) return;
     setSubmitError(null);
 
+    const fullName = (texts['full_name'] ?? '').trim();
+    if (!fullName) {
+      setSubmitError('נא למלא שם מלא — הוא נדרש ליצירת המטופלת');
+      return;
+    }
+
     const sigDataUrl = sigRef.current?.getDataUrl() ?? null;
     if (!sigDataUrl) {
       setSubmitError('נא לחתום בתחתית הטופס לפני השליחה');
@@ -92,7 +98,7 @@ export default function IntakeFormPage() {
       // Build the summary PDF in-browser (reuses the app's shared Hebrew/RTL
       // PDF infrastructure).
       const pdfBlob = await buildIntakePdfBlob({
-        patientName: def.patientName,
+        patientName: fullName,
         filledByLabel: internal ? 'מולא ע״י המטפלת (מתוך המערכת)' : 'מולא ע״י המטופלת',
         submittedAt: new Date(),
         answers: answers.map(a => ({
@@ -125,12 +131,18 @@ export default function IntakeFormPage() {
       const res = await fetch(`/api/intake/${token}/submit`, { method: 'POST', headers, body: fd });
       const json = await res.json().catch(() => null);
       if (!res.ok) { setSubmitError(json?.error ?? 'שגיאה בשליחת הטופס'); setSubmitting(false); return; }
+
+      // Filled from inside the system → jump straight to the new patient card.
+      if (internal && json?.patientId) {
+        router.push(`/patients/${json.patientId}`);
+        return;
+      }
       setDone(true);
     } catch {
       setSubmitError('שגיאה בשליחת הטופס');
     }
     setSubmitting(false);
-  }, [def, texts, audios, internal, token]);
+  }, [def, texts, audios, internal, token, router]);
 
   /* ── Render states ── */
   if (loading) {
@@ -170,7 +182,7 @@ export default function IntakeFormPage() {
         }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>טופס הצטרפות</h1>
           <p style={{ fontSize: 14, color: C.sub, margin: 0 }}>
-            {def?.patientName ? `שלום ${def.patientName}, ` : ''}נא למלא את הפרטים הבאים. ליד כל שאלה ניתן גם להקליט תשובה קולית.
+            נא למלא את פרטי ההצטרפות. ליד כל שאלה ניתן גם להקליט תשובה קולית.
           </p>
         </div>
 
@@ -183,6 +195,7 @@ export default function IntakeFormPage() {
             }}>
               <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 10 }}>
                 <span style={{ color: C.muted, marginInlineEnd: 6 }}>{i + 1}.</span>{q.label}
+                {q.id === 'full_name' && <span style={{ color: '#DC2626', marginInlineStart: 4 }}>*</span>}
               </label>
               <textarea
                 value={texts[q.id] ?? ''}

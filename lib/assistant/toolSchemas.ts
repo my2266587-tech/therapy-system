@@ -27,6 +27,8 @@
  *   The current heuristic parser stays as the offline fallback / cheap path.
  */
 
+import { GUIDE_KEYS } from './guides';
+
 export interface ClaudeToolSchema {
   name: string;
   description: string;
@@ -157,8 +159,24 @@ export const TOOL_SCHEMAS: ClaudeToolSchema[] = [
     },
   },
   {
+    name: 'getHowTo',
+    description:
+      'Return a step-by-step GUIDE on HOW TO USE the system itself — UI/workflow help, not data. Use this for any "how do I…", "where do I…", "how does one…" question about operating the app: איך מוסיפים מטופלת/פגישה/סיכום/תשלום, איך שולחים טופס הצטרפות, איך מורידים כרטיס מטופלת או דוח חודשי, איך מייבאים נתונים, איך עורכים רשימות/משתמשים בהגדרות, איך משהים איש צוות, איפה מוצאים משהו בתפריט, וכד׳. Pick the `topic` whose subject best matches. If the user asks a general "what can you help with / how do I use this" question, use topic="index" to list all guides. Do NOT use this for questions about specific patient/session/payment DATA — those have their own tools.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          enum: [...GUIDE_KEYS, 'index'],
+          description: 'The guide to return. Use "index" to list all available how-to topics.',
+        },
+      },
+      required: ['topic'],
+    },
+  },
+  {
     name: 'help',
-    description: 'Return the list of example questions the assistant can answer. Use only when the user explicitly asks for help or examples — not as a fallback.',
+    description: 'Return the list of example questions the assistant can answer. Use only when the user explicitly asks for examples of DATA questions ("מה אפשר לשאול"). For "how do I use the system" help, use getHowTo with topic="index" instead.',
     input_schema: { type: 'object', properties: {} },
   },
 ];

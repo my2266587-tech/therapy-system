@@ -44,9 +44,10 @@ interface AssistantMessage {
 interface PatientFocus { id: string; name: string }
 
 const EXAMPLES = [
+  'איך מוסיפים מטופלת חדשה?',
+  'איך שולחים טופס הצטרפות?',
+  'איך מפיקים דוח חודשי?',
   'מי אחראי על שירן?',
-  'מה היה בפגישה האחרונה של שירן?',
-  'פתח כרטיס של שירן',
   'אילו פגישות יש היום?',
   'למי חסר סיכום פגישה?',
 ] as const;
@@ -468,7 +469,7 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
           איך אפשר לעזור?
         </p>
         <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
-          אפשר לשאול בעברית טבעית — היום, מחר, יום שני, ושמות של מטופלות.
+          שאלי בעברית טבעית — גם איך עושים פעולות במערכת וגם מידע על מטופלות, פגישות ותשלומים.
         </p>
       </div>
       <p style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, margin: '0 0 6px',

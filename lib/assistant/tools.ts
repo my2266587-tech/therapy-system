@@ -24,6 +24,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DateRange } from './dates';
+import { GUIDES, getGuide } from './guides';
 
 export interface Link  { label: string; href: string; }
 export interface RowItem {
@@ -695,5 +696,40 @@ export function helpResult(): ToolResult {
   return {
     answer: 'אפשר לשאול אותי שאלות תפעוליות בעברית. למשל:',
     rows: EXAMPLE_QUESTIONS.map(q => ({ title: q })),
+  };
+}
+
+/* ── 15. How-to guides (usage help) ────────────────────────────────────── */
+
+/**
+ * Return a step-by-step usage guide for the system. Pure static lookup from
+ * lib/assistant/guides.ts — no DB access, no network. This is the "how do I
+ * do X in the system" path that saves the operator a support phone call.
+ *
+ * `topic` is a guide key (see GUIDE_KEYS). 'index' (or anything unknown)
+ * returns the menu of all available topics so the user can pick one.
+ */
+export function getHowToResult(topic: string): ToolResult {
+  if (!topic || topic === 'index') return howToIndexResult();
+
+  const guide = getGuide(topic);
+  if (!guide) return howToIndexResult();
+
+  // Number the steps so the bubble reads as an ordered guide.
+  const rows: RowItem[] = guide.steps.map((s, i) => ({ title: `${i + 1}. ${s}` }));
+  if (guide.note) rows.push({ title: '💡 ' + guide.note });
+
+  return {
+    answer: guide.title + ':',
+    rows,
+    links: guide.link ? [guide.link] : [],
+  };
+}
+
+/** The menu of every how-to topic — shown when no specific guide was picked. */
+export function howToIndexResult(): ToolResult {
+  return {
+    answer: 'אני יכול להדריך אותך שלב‑שלב על השימוש במערכת. על מה תרצי הסבר?',
+    rows: GUIDES.map(g => ({ title: g.title })),
   };
 }

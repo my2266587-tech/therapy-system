@@ -59,6 +59,7 @@ function PatientsInner() {
   const [open,    setOpen]    = useState(false);
   const [editing, setEditing] = useState<Patient | null>(null);
   const [search,  setSearch]  = useState('');
+  const [intakeOpen, setIntakeOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,6 +116,25 @@ function PatientsInner() {
               fileBase="patients"
               disabled={loading}
             />
+            <button
+              onClick={() => setIntakeOpen(true)}
+              style={{
+                backgroundColor: '#FFFFFF', color: '#0D9488',
+                border: '1px solid #99F6E4',
+                borderRadius: 10, padding: '10px 18px', fontSize: 14,
+                fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLElement;
+                el.style.backgroundColor = '#F0FDF9';
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLElement;
+                el.style.backgroundColor = '#FFFFFF';
+              }}
+            >
+              טופס הצטרפות
+            </button>
             <button
               onClick={() => { setEditing(null); setOpen(true); }}
               style={{
@@ -199,6 +219,110 @@ function PatientsInner() {
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'עריכת מטופלת' : 'הוספת מטופלת'} size="xl">
         <PatientForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} />
       </Modal>
+
+      <Modal open={intakeOpen} onClose={() => setIntakeOpen(false)} title="טופס הצטרפות — מטופלת חדשה" size="md">
+        <NewIntakeModal />
+      </Modal>
+    </div>
+  );
+}
+
+/**
+ * Onboarding action sheet for a NOT-YET-EXISTING patient. Generates a fresh
+ * intake form (no patient yet) and offers two flows: copy a secure personal
+ * link to send to the prospective patient, or fill it now from inside the
+ * system. The patient record is created when the form is submitted.
+ */
+function NewIntakeModal() {
+  const router = useRouter();
+  const [busy, setBusy]     = useState<null | 'copy' | 'fill'>(null);
+  const [error, setError]   = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const newToken = useCallback(async (): Promise<string | null> => {
+    setError(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) { setError('יש להתחבר מחדש'); return null; }
+    const res = await fetch('/api/intake', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) { setError(json?.error ?? 'שגיאה ביצירת קישור'); return null; }
+    return (json as { token: string }).token;
+  }, []);
+
+  const copyLink = useCallback(async () => {
+    setBusy('copy'); setCopied(null);
+    const t = await newToken();
+    if (t) {
+      const url = `${window.location.origin}/intake/${t}`;
+      try { await navigator.clipboard.writeText(url); setCopied(url); }
+      catch { setError(`העתקה ידנית: ${url}`); }
+    }
+    setBusy(null);
+  }, [newToken]);
+
+  const fillNow = useCallback(async () => {
+    setBusy('fill');
+    const t = await newToken();
+    if (t) { router.push(`/intake/${t}?mode=internal`); return; }
+    setBusy(null);
+  }, [newToken, router]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.6 }}>
+        טופס לרישום מטופלת חדשה. בעת השליחה תיווצר אוטומטית מטופלת חדשה (בסטטוס „ממתינה”),
+        ויישמרו התשובות, ההקלטות, החתימה וקובץ PDF מסכם.
+      </p>
+
+      {error && (
+        <div style={{
+          padding: '10px 14px', borderRadius: 10, fontSize: 13,
+          backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626',
+          wordBreak: 'break-all',
+        }}>
+          {error}
+        </div>
+      )}
+      {copied && (
+        <div style={{
+          padding: '10px 14px', borderRadius: 10, fontSize: 12.5,
+          backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', color: '#16A34A',
+          wordBreak: 'break-all',
+        }}>
+          ✓ הקישור הועתק — נשלח למטופלת:<br />{copied}
+        </div>
+      )}
+
+      <button
+        onClick={copyLink}
+        disabled={busy !== null}
+        style={{
+          width: '100%', padding: '13px', borderRadius: 11, fontSize: 14, fontWeight: 600,
+          color: '#0D9488', backgroundColor: '#FFFFFF', border: '1px solid #99F6E4',
+          cursor: busy ? 'wait' : 'pointer',
+        }}
+      >
+        {busy === 'copy' ? 'יוצר קישור...' : 'העתקת קישור למטופלת'}
+      </button>
+
+      <button
+        onClick={fillNow}
+        disabled={busy !== null}
+        style={{
+          width: '100%', padding: '13px', borderRadius: 11, fontSize: 14, fontWeight: 700,
+          color: '#FFFFFF', backgroundColor: '#0D9488', border: 'none',
+          cursor: busy ? 'wait' : 'pointer', boxShadow: '0 2px 8px rgba(13,148,136,0.22)',
+        }}
+      >
+        {busy === 'fill' ? 'פותח טופס...' : 'מילוי הטופס עכשיו'}
+      </button>
+
+      <p style={{ fontSize: 11.5, color: '#94A3B8', textAlign: 'center', margin: 0 }}>
+        הקישור מאובטח ואינו חושף מידע על מטופלות אחרות.
+      </p>
     </div>
   );
 }
