@@ -6,7 +6,7 @@
  * doc.save here). Reuses the shared Alef font loader + BiDi reorderer from
  * exportTable.ts so the Hebrew handling matches every other PDF in the app.
  *
- * A branded full-page letterhead (public/intake-letterhead.png) is drawn as the
+ * A branded full-page letterhead (public/intake-letterhead.jpg) is drawn as the
  * background of every page; the artwork sits top-left and the logo bottom-right,
  * so the text is laid out on the right/centre and kept clear of both. If the
  * image is missing the PDF still renders (just without the background).
@@ -27,7 +27,7 @@ const MARGIN = 48;
 const CONTENT_TOP = 150;
 const BOTTOM_SAFE = 96;
 
-export const LETTERHEAD_URL = '/intake-letterhead.png';
+export const LETTERHEAD_URL = '/intake-letterhead.jpg';
 
 export interface IntakePdfAnswer {
   question: string;
@@ -81,7 +81,7 @@ function loadLetterhead(): Promise<string | null> {
 function drawBackground(doc: Doc, bg: string | null) {
   if (!bg) return;
   try {
-    doc.addImage(bg, 'PNG', 0, 0, pageW(doc), pageH(doc));
+    doc.addImage(bg, 'JPEG', 0, 0, pageW(doc), pageH(doc));
   } catch {
     /* ignore a bad image — text still renders */
   }

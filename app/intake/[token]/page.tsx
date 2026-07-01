@@ -263,10 +263,10 @@ export default function IntakeFormPage() {
 }
 
 /** Branded letterhead as the page background (falls back to the cream tone if
- *  the image is missing). Add the image at public/intake-letterhead.png. */
+ *  the image is missing). Add the image at public/intake-letterhead.jpg. */
 const PAGE_BG: React.CSSProperties = {
   backgroundColor: '#E9E5DB',
-  backgroundImage: "url('/intake-letterhead.png')",
+  backgroundImage: "url('/intake-letterhead.jpg')",
   backgroundSize: 'cover',
   backgroundPosition: 'center top',
   backgroundRepeat: 'no-repeat',
