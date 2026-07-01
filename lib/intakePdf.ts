@@ -6,9 +6,13 @@
  * doc.save here). Reuses the shared Alef font loader + BiDi reorderer from
  * exportTable.ts so the Hebrew handling matches every other PDF in the app.
  *
- * Runs in the browser at submit time (both for the patient via the personal
- * link and for the therapist filling from inside the system), so the public
- * page needs no server-side font/filesystem work.
+ * A branded full-page letterhead (public/intake-letterhead.png) is drawn as the
+ * background of every page; the artwork sits top-left and the logo bottom-right,
+ * so the text is laid out on the right/centre and kept clear of both. If the
+ * image is missing the PDF still renders (just without the background).
+ *
+ * Runs in the browser at submit time, so the public page needs no server-side
+ * font/filesystem work.
  */
 
 import { jsPDF } from 'jspdf';
@@ -17,8 +21,13 @@ import { visualOrder, loadFonts } from './exportTable';
 const ACCENT: [number, number, number] = [13, 148, 136];
 const TEXT:   [number, number, number] = [26, 35, 50];
 const MUTED:  [number, number, number] = [100, 116, 139];
-const RULE:   [number, number, number] = [232, 236, 240];
-const MARGIN = 40;
+const RULE:   [number, number, number] = [210, 205, 193];
+const MARGIN = 48;
+// Keep content clear of the top-left artwork and the bottom-right logo.
+const CONTENT_TOP = 150;
+const BOTTOM_SAFE = 96;
+
+export const LETTERHEAD_URL = '/intake-letterhead.png';
 
 export interface IntakePdfAnswer {
   question: string;
@@ -47,15 +56,47 @@ function human(d: Date): string {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function ensureSpace(doc: Doc, c: Cursor, needed: number) {
-  if (c.y + needed > pageH(doc) - 40) {
+/** Load + cache the letterhead image as a PNG data-URL. Returns null if absent. */
+let _bgPromise: Promise<string | null> | null = null;
+function loadLetterhead(): Promise<string | null> {
+  if (_bgPromise) return _bgPromise;
+  _bgPromise = (async () => {
+    try {
+      const res = await fetch(LETTERHEAD_URL);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise<string | null>(resolve => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(typeof fr.result === 'string' ? fr.result : null);
+        fr.onerror = () => resolve(null);
+        fr.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  })();
+  return _bgPromise;
+}
+
+function drawBackground(doc: Doc, bg: string | null) {
+  if (!bg) return;
+  try {
+    doc.addImage(bg, 'PNG', 0, 0, pageW(doc), pageH(doc));
+  } catch {
+    /* ignore a bad image — text still renders */
+  }
+}
+
+function ensureSpace(doc: Doc, c: Cursor, needed: number, bg: string | null) {
+  if (c.y + needed > pageH(doc) - BOTTOM_SAFE) {
     doc.addPage();
-    c.y = 48;
+    drawBackground(doc, bg);
+    c.y = CONTENT_TOP;
   }
 }
 
 /** Right-aligned wrapped paragraph (wrap in logical order, BiDi per line). */
-function paragraph(doc: Doc, c: Cursor, text: string, size: number, color: [number, number, number]) {
+function paragraph(doc: Doc, c: Cursor, text: string, size: number, color: [number, number, number], bg: string | null) {
   const maxW = pageW(doc) - 2 * MARGIN;
   doc.setFont('Alef', 'normal');
   doc.setFontSize(size);
@@ -63,7 +104,7 @@ function paragraph(doc: Doc, c: Cursor, text: string, size: number, color: [numb
   for (const para of text.split(/\r?\n/)) {
     const wrapped = doc.splitTextToSize(para || ' ', maxW) as string[];
     for (const line of wrapped) {
-      ensureSpace(doc, c, size + 5);
+      ensureSpace(doc, c, size + 5, bg);
       doc.text(visualOrder(line), pageW(doc) - MARGIN, c.y, { align: 'right' });
       c.y += size + 5;
     }
@@ -71,7 +112,7 @@ function paragraph(doc: Doc, c: Cursor, text: string, size: number, color: [numb
 }
 
 export async function buildIntakePdfBlob(data: IntakePdfData): Promise<Blob> {
-  const { regular, bold } = await loadFonts();
+  const [{ regular, bold }, bg] = await Promise.all([loadFonts(), loadLetterhead()]);
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' }) as Doc;
   doc.addFileToVFS('Alef-Regular.ttf', regular);
@@ -80,28 +121,30 @@ export async function buildIntakePdfBlob(data: IntakePdfData): Promise<Blob> {
   doc.addFont('Alef-Bold.ttf', 'Alef', 'bold');
   doc.setFont('Alef', 'normal');
 
-  // ── Title block ──
+  drawBackground(doc, bg);
+
+  // ── Title block (kept on the right; artwork is top-left) ──
   doc.setFont('Alef', 'bold');
   doc.setFontSize(18);
   doc.setTextColor(...ACCENT);
-  doc.text(visualOrder('טופס הצטרפות'), pageW(doc) - MARGIN, 48, { align: 'right' });
-  doc.setFontSize(14);
+  doc.text(visualOrder('טופס הצטרפות'), pageW(doc) - MARGIN, 62, { align: 'right' });
+  doc.setFontSize(13);
   doc.setTextColor(...TEXT);
-  doc.text(visualOrder(data.patientName), pageW(doc) - MARGIN, 70, { align: 'right' });
+  doc.text(visualOrder(data.patientName), pageW(doc) - MARGIN, 84, { align: 'right' });
   doc.setFont('Alef', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...MUTED);
-  doc.text(visualOrder(`תאריך מילוי: ${human(data.submittedAt)}`), MARGIN, 60, { align: 'left' });
-  doc.text(visualOrder(data.filledByLabel), MARGIN, 74, { align: 'left' });
+  doc.text(visualOrder(`תאריך מילוי: ${human(data.submittedAt)}`), pageW(doc) - MARGIN, 102, { align: 'right' });
+  doc.text(visualOrder(data.filledByLabel), pageW(doc) - MARGIN, 115, { align: 'right' });
   doc.setDrawColor(...RULE);
   doc.setLineWidth(0.5);
-  doc.line(MARGIN, 84, pageW(doc) - MARGIN, 84);
+  doc.line(MARGIN, 128, pageW(doc) - MARGIN, 128);
 
-  const c: Cursor = { y: 104 };
+  const c: Cursor = { y: CONTENT_TOP };
 
   // ── Answers ──
   for (const a of data.answers) {
-    ensureSpace(doc, c, 30);
+    ensureSpace(doc, c, 30, bg);
     doc.setFont('Alef', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(...ACCENT);
@@ -109,12 +152,12 @@ export async function buildIntakePdfBlob(data: IntakePdfData): Promise<Blob> {
     c.y += 16;
 
     const hasText = !!a.text && a.text.trim().length > 0;
-    paragraph(doc, c, hasText ? a.text : '—', 10.5, hasText ? TEXT : MUTED);
+    paragraph(doc, c, hasText ? a.text : '—', 10.5, hasText ? TEXT : MUTED, bg);
     c.y += 8;
   }
 
-  // ── Signature ──
-  ensureSpace(doc, c, 130);
+  // ── Signature (drawn on the left to stay clear of the bottom-right logo) ──
+  ensureSpace(doc, c, 130, bg);
   c.y += 6;
   doc.setFont('Alef', 'bold');
   doc.setFontSize(11);
@@ -124,29 +167,29 @@ export async function buildIntakePdfBlob(data: IntakePdfData): Promise<Blob> {
 
   if (data.signatureDataUrl) {
     const sigW = 200;
-    const sigH = 90;
-    const x = pageW(doc) - MARGIN - sigW;
+    const sigH = 80;
+    const x = MARGIN;
     try {
       doc.addImage(data.signatureDataUrl, 'PNG', x, c.y, sigW, sigH);
     } catch {
-      // Ignore a malformed data-URL — the rest of the PDF is still valid.
+      /* ignore a malformed data-URL */
     }
     doc.setDrawColor(...RULE);
     doc.setLineWidth(0.5);
     doc.line(x, c.y + sigH + 4, x + sigW, c.y + sigH + 4);
     c.y += sigH + 16;
   } else {
-    paragraph(doc, c, '(ללא חתימה)', 10, MUTED);
+    paragraph(doc, c, '(ללא חתימה)', 10, MUTED, bg);
   }
 
-  // ── Footers ──
+  // ── Footers (bottom-left; logo occupies bottom-right) ──
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
     doc.setFont('Alef', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
-    doc.text(visualOrder(`עמוד ${i} מתוך ${total}`), pageW(doc) / 2, pageH(doc) - 16, { align: 'center' });
+    doc.text(visualOrder(`עמוד ${i} מתוך ${total}`), MARGIN, pageH(doc) - 24, { align: 'left' });
   }
 
   return doc.output('blob');

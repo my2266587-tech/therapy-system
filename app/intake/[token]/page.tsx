@@ -41,6 +41,8 @@ export default function IntakeFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [newPatientId, setNewPatientId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,17 +116,16 @@ export default function IntakeFormPage() {
       const json = await res.json().catch(() => null);
       if (!res.ok) { setSubmitError(json?.error ?? 'שגיאה בשליחת הטופס'); setSubmitting(false); return; }
 
-      // Filled from inside the system → jump straight to the new patient card.
-      if (internal && json?.patientId) {
-        router.push(`/patients/${json.patientId}`);
-        return;
-      }
+      // Keep the just-built PDF available for view/download on the done screen
+      // (no server round-trip needed — the client already has the bytes).
+      setPdfUrl(URL.createObjectURL(pdfBlob));
+      if (json?.patientId) setNewPatientId(json.patientId as string);
       setDone(true);
     } catch {
       setSubmitError('שגיאה בשליחת הטופס');
     }
     setSubmitting(false);
-  }, [def, texts, internal, token, router]);
+  }, [def, texts, internal, token]);
 
   /* ── Render states ── */
   if (loading) {
@@ -146,25 +147,53 @@ export default function IntakeFormPage() {
           <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: '0 0 8px' }}>
             {done ? 'הטופס נשלח בהצלחה' : 'הטופס כבר מולא'}
           </h2>
-          <p style={{ fontSize: 14, color: C.sub, margin: 0 }}>
-            תודה רבה! אין צורך בפעולה נוספת.
+          <p style={{ fontSize: 14, color: C.sub, margin: done && pdfUrl ? '0 0 18px' : 0 }}>
+            תודה רבה!{done ? ' הטופס נשמר במערכת.' : ' אין צורך בפעולה נוספת.'}
           </p>
+
+          {done && pdfUrl && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={btnStyle(C.accent, '#FFFFFF', 'none')}
+              >
+                צפייה ב-PDF
+              </a>
+              <a
+                href={pdfUrl}
+                download="טופס הצטרפות.pdf"
+                style={btnStyle(C.accent, C.card, `1px solid ${C.accentRim}`)}
+              >
+                הורדת PDF
+              </a>
+              {newPatientId && (
+                <button
+                  onClick={() => router.push(`/patients/${newPatientId}`)}
+                  style={{ ...btnStyle(C.sub, C.card, `1px solid ${C.border}`), cursor: 'pointer' }}
+                >
+                  מעבר לכרטיס המטופלת
+                </button>
+              )}
+            </div>
+          )}
         </Card>
       </Center>
     );
   }
 
   return (
-    <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '32px 16px', direction: 'rtl' }}>
+    <div style={{ ...PAGE_BG, minHeight: '100vh', padding: '32px 16px', direction: 'rtl' }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
         {/* Header */}
         <div style={{
-          backgroundColor: C.card, borderRadius: 16, border: `1px solid ${C.border}`,
+          backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 16, border: `1px solid ${C.border}`,
           padding: '24px 28px', marginBottom: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
         }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>טופס הצטרפות</h1>
           <p style={{ fontSize: 14, color: C.sub, margin: 0 }}>
-            נא למלא את פרטי ההצטרפות. ליד כל שאלה ניתן גם להקליט תשובה קולית.
+            נא למלא את פרטי ההצטרפות. ניתן גם להכתיב תשובה בקול (כפתור המיקרופון) במקום להקליד.
           </p>
         </div>
 
@@ -233,10 +262,29 @@ export default function IntakeFormPage() {
   );
 }
 
+/** Branded letterhead as the page background (falls back to the cream tone if
+ *  the image is missing). Add the image at public/intake-letterhead.png. */
+const PAGE_BG: React.CSSProperties = {
+  backgroundColor: '#E9E5DB',
+  backgroundImage: "url('/intake-letterhead.png')",
+  backgroundSize: 'cover',
+  backgroundPosition: 'center top',
+  backgroundRepeat: 'no-repeat',
+  backgroundAttachment: 'fixed',
+};
+
+function btnStyle(color: string, bg: string, border: string): React.CSSProperties {
+  return {
+    display: 'block', width: '100%', boxSizing: 'border-box',
+    padding: '12px', borderRadius: 11, fontSize: 14, fontWeight: 700,
+    textAlign: 'center', textDecoration: 'none', color, backgroundColor: bg, border,
+  };
+}
+
 function Center({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
-      backgroundColor: C.bg, minHeight: '100vh', display: 'flex',
+      ...PAGE_BG, minHeight: '100vh', display: 'flex',
       alignItems: 'center', justifyContent: 'center', direction: 'rtl', padding: 16,
     }}>
       <div style={{ textAlign: 'center' }}>{children}</div>
