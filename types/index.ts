@@ -174,6 +174,8 @@ export interface Task {
   id: string;
   title: string;
   description: string | null;
+  /** Free-text grouping label. Null/empty → shown under a default "כללי" group. */
+  category: string | null;
   priority: 'low' | 'medium' | 'high';
   due_date: string | null;
   /** Free-text "אחראי/ת" — who owns the task. */

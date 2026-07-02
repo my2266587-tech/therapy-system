@@ -15,6 +15,9 @@ create table if not exists tasks (
   id           uuid primary key default gen_random_uuid(),
   title        text not null,
   description  text,
+  -- Free-text grouping label ("קטגוריה"). Tasks are shown as cards grouped by
+  -- this. Null/empty tasks fall into a default "כללי" group in the UI.
+  category     text,
   -- low / medium / high — display labels live in the UI (form + list badge).
   priority     text not null check (priority in ('low','medium','high')) default 'medium',
   due_date     date,
@@ -31,6 +34,10 @@ create table if not exists tasks (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- For DBs where tasks was created before the category column existed. Safe /
+-- idempotent — a no-op once the column is present.
+alter table tasks add column if not exists category text;
 
 -- Open tasks first, then by due date (nulls last), newest created first.
 create index if not exists idx_tasks_board

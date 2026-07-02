@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
+import { Field, SelectField, ComboField, TextareaField } from '@/components/ui/FormField';
 import type { Task } from '@/types';
 
 type PatientOpt = { id: string; full_name: string };
@@ -13,12 +13,21 @@ const PRIORITY_OPTIONS = [
   { value: 'low',    label: 'נמוכה' },
 ];
 
-interface Props { initial: Task | null; onSave: () => void; onCancel: () => void; }
+interface Props {
+  initial: Task | null;
+  /** Pre-fill the category when adding a new task from a specific group card. */
+  defaultCategory?: string;
+  /** Existing category names, for the autocomplete list. */
+  categories: string[];
+  onSave: () => void;
+  onCancel: () => void;
+}
 
-export default function TaskForm({ initial, onSave, onCancel }: Props) {
+export default function TaskForm({ initial, defaultCategory, categories, onSave, onCancel }: Props) {
   const [form, setForm] = useState({
     title:       initial?.title       ?? '',
     description: initial?.description  ?? '',
+    category:    initial?.category    ?? defaultCategory ?? '',
     priority:    initial?.priority    ?? 'medium',
     due_date:    initial?.due_date     ?? '',
     assignee:    initial?.assignee    ?? '',
@@ -41,6 +50,7 @@ export default function TaskForm({ initial, onSave, onCancel }: Props) {
     const payload = {
       title:       form.title.trim(),
       description: form.description.trim() || null,
+      category:    form.category.trim() || null,
       priority:    form.priority,
       due_date:    form.due_date || null,
       assignee:    form.assignee.trim() || null,
@@ -62,11 +72,12 @@ export default function TaskForm({ initial, onSave, onCancel }: Props) {
       <Field label="כותרת *" value={form.title} onChange={v => set('title', v)} required placeholder="מה צריך לעשות?" />
       <TextareaField label="פירוט" value={form.description} onChange={v => set('description', v)} rows={3} placeholder="כל מה שצריך לדעת על המשימה..." />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <ComboField label="קטגוריה" value={form.category} onChange={v => set('category', v)} suggestions={categories} placeholder="בחרי קיימת או הקלידי חדשה" />
         <SelectField label="עדיפות" value={form.priority} onChange={v => set('priority', v)} options={PRIORITY_OPTIONS} />
         <Field label="תאריך יעד" type="date" value={form.due_date} onChange={v => set('due_date', v)} />
         <Field label="אחראי/ת" value={form.assignee} onChange={v => set('assignee', v)} placeholder="מי מטפל/ת במשימה" />
-        <SelectField label="מטופלת קשורה" value={form.patient_id} onChange={v => set('patient_id', v)} options={patientOptions} placeholder="ללא — משימה כללית" />
       </div>
+      <SelectField label="מטופלת קשורה" value={form.patient_id} onChange={v => set('patient_id', v)} options={patientOptions} placeholder="ללא — משימה כללית" />
       <div className="flex gap-3 pt-2 border-t border-slate-100">
         <button type="submit" disabled={saving} className="px-5 py-2 bg-teal-700 text-white text-sm font-medium rounded-lg hover:bg-teal-800 disabled:opacity-50 transition-colors">
           {saving ? 'שומר...' : initial?.id ? 'עדכן' : 'הוסף משימה'}

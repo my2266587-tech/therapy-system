@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 const base: React.CSSProperties = {
   border:          '1px solid #E2E8F0',
   borderRadius:    8,
@@ -90,6 +92,39 @@ function SelectField({
   );
 }
 
+/* ── Combo field (free text + autocomplete of existing values) ── */
+function ComboField({
+  label: labelText, value, onChange, suggestions, placeholder, required,
+}: {
+  label: string; value: string; onChange: (v: string) => void;
+  suggestions: string[]; placeholder?: string; required?: boolean;
+}) {
+  const listId = useId();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <label style={label}>
+        {labelText}{required && <Required />}
+      </label>
+      <input
+        list={listId}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        required={required}
+        placeholder={placeholder}
+        style={base}
+        onFocus={e => Object.assign(e.target.style, focused)}
+        onBlur={e => {
+          e.target.style.borderColor = '#E2E8F0';
+          e.target.style.boxShadow = '';
+        }}
+      />
+      <datalist id={listId}>
+        {suggestions.map(s => <option key={s} value={s} />)}
+      </datalist>
+    </div>
+  );
+}
+
 /* ── Textarea field ── */
 function TextareaField({
   label: labelText, value, onChange, rows = 3, placeholder,
@@ -116,4 +151,4 @@ function TextareaField({
   );
 }
 
-export { InputField as Field, SelectField, TextareaField };
+export { InputField as Field, SelectField, ComboField, TextareaField };
