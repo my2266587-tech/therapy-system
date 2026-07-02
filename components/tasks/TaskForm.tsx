@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Field, SelectField, ComboField, TextareaField } from '@/components/ui/FormField';
+import { Field, SelectField, ComboField } from '@/components/ui/FormField';
+import DictatedTextarea from '@/components/ui/DictatedTextarea';
 import type { Task } from '@/types';
 
 type PatientOpt = { id: string; full_name: string };
@@ -69,8 +70,8 @@ export default function TaskForm({ initial, defaultCategory, categories, onSave,
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>}
-      <Field label="כותרת *" value={form.title} onChange={v => set('title', v)} required placeholder="מה צריך לעשות?" />
-      <TextareaField label="פירוט" value={form.description} onChange={v => set('description', v)} rows={3} placeholder="כל מה שצריך לדעת על המשימה..." />
+      <DictatedTextarea label="כותרת * (אפשר להכתיב 🎙)" value={form.title} onChange={v => set('title', v)} rows={1} placeholder="מה צריך לעשות? — הקלידי או לחצי על המיקרופון" />
+      <DictatedTextarea label="פירוט (אפשר להכתיב 🎙)" value={form.description} onChange={v => set('description', v)} rows={3} placeholder="כל מה שצריך לדעת על המשימה — הקלידי או הכתיבי בקול..." />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <ComboField label="קטגוריה" value={form.category} onChange={v => set('category', v)} suggestions={categories} placeholder="בחרי קיימת או הקלידי חדשה" />
         <SelectField label="עדיפות" value={form.priority} onChange={v => set('priority', v)} options={PRIORITY_OPTIONS} />
