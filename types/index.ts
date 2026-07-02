@@ -170,6 +170,24 @@ export interface PrivateExpense {
   patient?: { full_name: string } | null;
 }
 
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: 'low' | 'medium' | 'high';
+  due_date: string | null;
+  /** Free-text "אחראי/ת" — who owns the task. */
+  assignee: string | null;
+  /** Optional link to a patient (set null on patient delete, not cascade). */
+  patient_id: string | null;
+  /** Toggled by the "הושלם" checkbox. completed_at is stamped on completion. */
+  is_done: boolean;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  patient?: { full_name: string } | null;
+}
+
 export interface PatientDocument {
   id: string;
   patient_id: string;

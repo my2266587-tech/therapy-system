@@ -55,6 +55,7 @@ const shortcuts = [
   { href: '/sessions',   label: 'פגישות'    },
   { href: '/summaries',  label: 'סיכומים'   },
   { href: '/quarterly',  label: 'רבעוני'    },
+  { href: '/tasks',      label: 'משימות'    },
   { href: '/staff',      label: 'צוות'      },
 ];
 
@@ -247,7 +248,7 @@ export default function DashboardPage() {
           }}>
             ניווט מהיר
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
             {shortcuts.map(s => (
               <Link key={s.href} href={s.href} style={{
                 display: 'block', padding: '14px 10px', borderRadius: 10,
