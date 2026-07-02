@@ -49,6 +49,7 @@ function Icon({ name, size = 18, style }: { name: string; size?: number; style?:
 }
 
 const navItems = [
+  { href: '/tasks',          label: 'לוח משימות',       icon: 'tasks'       },
   { href: '/',               label: 'דשבורד',          icon: 'dashboard'   },
   { href: '/patients',       label: 'מטופלות',          icon: 'patients'    },
   { href: '/staff',          label: 'צוות',             icon: 'staff'       },
@@ -57,7 +58,6 @@ const navItems = [
   { href: '/summaries',      label: 'סיכומי פגישות',    icon: 'summaries'   },
   { href: '/summaries/phone-pending', label: 'טלפוניים ממתינים', icon: 'phone' },
   { href: '/quarterly',      label: 'סיכום רבעון',      icon: 'quarterly'   },
-  { href: '/tasks',          label: 'לוח משימות',       icon: 'tasks'       },
   { href: '/payments',       label: 'תשלומי שיראל',     icon: 'payments'    },
   { href: '/expenses',       label: 'הוצאות פרטיות',    icon: 'expenses'    },
   { href: '/petty-cash',     label: 'מעשר געלט',        icon: 'petty-cash'  },
