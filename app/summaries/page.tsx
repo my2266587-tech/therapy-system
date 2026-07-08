@@ -110,14 +110,27 @@ export default function SummariesPage() {
 
   // Free-text search across patient name, date and every text field of the
   // summary, so a single box finds a summary by who/when/what.
+  //
+  // Name takes precedence: if the query matches any patient's name, we return
+  // only that patient's summaries. Otherwise a name search leaks in unrelated
+  // patients whose notes merely mention that name — e.g. searching "אבישג"
+  // surfaced sister "אודליה" because her summary text referenced אבישג. Only
+  // when the query matches no patient name do we fall back to a full-text
+  // search over the content fields (topic / note / date).
   const q = search.trim().toLowerCase();
-  const filtered = q === '' ? records : records.filter(r => {
-    const haystack = [
-      r.patient?.full_name, r.date, r.start_time, r.end_time,
-      r.main_topics, r.treatment_actions, r.progress, r.next_steps, r.notes,
-    ].filter(Boolean).join(' ').toLowerCase();
-    return haystack.includes(q);
-  });
+  const filtered = (() => {
+    if (q === '') return records;
+    const nameMatches = records.filter(r =>
+      (r.patient?.full_name ?? '').toLowerCase().includes(q));
+    if (nameMatches.length > 0) return nameMatches;
+    return records.filter(r => {
+      const haystack = [
+        r.date, r.start_time, r.end_time,
+        r.main_topics, r.treatment_actions, r.progress, r.next_steps, r.notes,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  })();
 
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
