@@ -21,6 +21,7 @@ const iconPaths: Record<string, string> = {
   expenses:    'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9h6m-6 4h3',
   'petty-cash':'M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm1 5v2m0 4v2m-4-8h5.5a2.5 2.5 0 0 1 0 5H9m4 0h1.5a2.5 2.5 0 0 1 0 5H9',
   reports:     'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h8M8 9h2',
+  'hour-bank': 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 5v5l3 2',
   import:      'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   settings:    'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm4.95-1.95 1.41 1.41-1.06 1.06-1.41-1.41M17 12h2m-2.05 2.95-1.41 1.41-1.06-1.06 1.41-1.41M15 19l-1-1.73M12 20v-2m-3 1-1-1.73M7.05 16.95l1.41-1.41 1.06 1.06-1.41 1.41M5 12H3m2.05-2.95 1.41 1.41L8.52 9.4 7.1 8M9 5l1 1.73M12 4v2m3-1 1 1.73',
   chevronLeft: 'M15 18l-6-6 6-6',
@@ -50,6 +51,7 @@ function Icon({ name, size = 18, style }: { name: string; size?: number; style?:
 
 const navItems = [
   { href: '/tasks',          label: 'לוח משימות',       icon: 'tasks'       },
+  { href: '/hour-bank',      label: 'בנק שעות',         icon: 'hour-bank'   },
   { href: '/',               label: 'דשבורד',          icon: 'dashboard'   },
   { href: '/patients',       label: 'מטופלות',          icon: 'patients'    },
   { href: '/staff',          label: 'צוות',             icon: 'staff'       },

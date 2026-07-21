@@ -218,6 +218,63 @@ export interface PettyCash {
   patient?: { full_name: string } | null;
 }
 
+/**
+ * Hour Bank — "בנק שעות". A SINGLE work-hours bank for the clinician's work
+ * against the client (not a general attendance system). All amounts are stored
+ * in whole SECONDS so arithmetic stays exact — never a decimal number of hours.
+ * See supabase/hour-bank.sql.
+ */
+export interface HourBank {
+  id: string;
+  /** Total seconds ever granted (base quota + reloads + manual additions). */
+  quota_seconds: number;
+  /** Total seconds consumed (completed work timers + manual subtractions). */
+  used_seconds: number;
+  /** When the bank was last (re)loaded. */
+  last_loaded_at: string | null;
+  /** Non-null ⇒ a timer is currently running, started at this server timestamp. */
+  active_started_at: string | null;
+  /** Optional note captured when the current timer was started. */
+  active_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One completed work session recorded from the timer (or added manually). */
+export interface WorkTimeEntry {
+  id: string;
+  bank_id: string;
+  started_at: string;
+  ended_at: string;
+  duration_seconds: number;
+  note: string | null;
+  /** Email of the user who performed the work (server-derived from the JWT). */
+  performed_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type HourBankTxType =
+  | 'load_reset'       // reload: reset quota, zero usage
+  | 'load_add'         // reload: added to the existing balance
+  | 'manual_add'       // manual correction: time added
+  | 'manual_subtract'  // manual correction: time removed
+  | 'work'             // a work timer was stopped
+  | 'entry_edit'       // a work record's duration was edited
+  | 'entry_delete';    // a work record was deleted (time refunded)
+
+/** Append-only ledger line. amount_seconds is signed (+added / −removed). */
+export interface HourBankTransaction {
+  id: string;
+  bank_id: string;
+  entry_id: string | null;
+  type: HourBankTxType;
+  amount_seconds: number;
+  note: string | null;
+  performed_by: string | null;
+  created_at: string;
+}
+
 export interface PhoneSummaryDraft {
   id: string;
   spoken_patient_name: string | null;
