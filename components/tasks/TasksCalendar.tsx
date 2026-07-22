@@ -7,8 +7,11 @@ import type { Task } from '@/types';
 
 /**
  * Personal calendar view for the task board ("לוח משימות – אישי").
- * Month / week / day views over tasks that have a due date. Standalone and
- * personal — no sessions, patients or the appointments calendar involved.
+ * Month / week / day views over tasks that have a due date, styled like a
+ * physical day-planner: clean day separation and readable, airy task cards.
+ * Tasks can be dragged between days (due_date updates via onMove) and deleted
+ * straight from the card. Standalone and personal — no sessions, patients or
+ * the appointments calendar involved.
  */
 
 const C = {
@@ -18,7 +21,8 @@ const C = {
   shadow: '0 1px 4px rgba(0,0,0,0.05)',
 };
 
-const DAY_LABELS   = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+const DAY_LABELS      = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+const DAY_LABELS_LONG = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const MONTH_LABELS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
 type View = 'month' | 'week' | 'day';
@@ -35,6 +39,17 @@ function sameDay(a: Date, b: Date) { return ymd(a) === ymd(b); }
 /** "HH:MM" from a "HH:MM:SS" time column value. */
 function hm(t: string | null): string { return t ? t.slice(0, 5) : ''; }
 
+/* ── Drag-and-drop plumbing (mirrors the appointments calendar pattern) ── */
+interface DndProps {
+  draggingId:  string | null;
+  dragOverYmd: string | null;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragEnd:   () => void;
+  onDragOver:  (e: React.DragEvent, target: string) => void;
+  onDragLeave: (target: string) => void;
+  onDrop:      (e: React.DragEvent, target: string) => void;
+}
+
 interface Props {
   records: Task[];
   loading: boolean;
@@ -42,12 +57,19 @@ interface Props {
   onAdd: (date: string) => void;
   onEdit: (t: Task) => void;
   onToggleDone: (t: Task) => void;
+  /** Delete (the handler shows its own short confirm). */
   onDelete: (id: string) => void;
+  /** Move a task to a new day — persists due_date. */
+  onMove: (id: string, newDate: string) => void;
 }
 
-export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggleDone, onDelete }: Props) {
+export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggleDone, onDelete, onMove }: Props) {
   const [view,   setView]   = useState<View>('month');
   const [anchor, setAnchor] = useState(new Date());
+
+  /* Drag-and-drop */
+  const [draggingId,  setDraggingId]  = useState<string | null>(null);
+  const [dragOverYmd, setDragOverYmd] = useState<string | null>(null);
 
   /* Only dated tasks can be placed on the calendar. Sorted: timed first
      (by time), then date-only, done items keep their slot. */
@@ -98,6 +120,33 @@ export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggl
     if (view === 'day')   x.setDate(x.getDate() + dir);
     setAnchor(x);
   }
+
+  /* DnD handlers */
+  function onDragStart(e: React.DragEvent, id: string) {
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  }
+  function onDragEnd() { setDraggingId(null); setDragOverYmd(null); }
+  function onDragOver(e: React.DragEvent, target: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverYmd !== target) setDragOverYmd(target);
+  }
+  function onDragLeave(target: string) {
+    if (dragOverYmd === target) setDragOverYmd(null);
+  }
+  function onDrop(e: React.DragEvent, target: string) {
+    e.preventDefault();
+    const id = draggingId ?? e.dataTransfer.getData('text/plain');
+    setDraggingId(null); setDragOverYmd(null);
+    if (!id) return;
+    const cur = records.find(r => r.id === id);
+    if (!cur || cur.due_date === target) return;
+    onMove(id, target);
+  }
+
+  const dnd: DndProps = { draggingId, dragOverYmd, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop };
 
   return (
     <div>
@@ -177,13 +226,16 @@ export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggl
         border: `1px solid ${C.border}`, boxShadow: C.shadow, overflow: 'hidden',
       }}>
         {view === 'month' && (
-          <MonthView anchor={anchor} byDate={byDate} loading={loading} onDayClick={onAdd} onTask={onEdit} />
+          <MonthView anchor={anchor} byDate={byDate} loading={loading}
+            onDayClick={onAdd} onTask={onEdit} onDelete={onDelete} dnd={dnd} />
         )}
         {view === 'week' && (
-          <WeekView anchor={anchor} byDate={byDate} loading={loading} onDayClick={onAdd} onTask={onEdit} onToggleDone={onToggleDone} />
+          <WeekView anchor={anchor} byDate={byDate} loading={loading}
+            onDayClick={onAdd} onTask={onEdit} onToggleDone={onToggleDone} onDelete={onDelete} dnd={dnd} />
         )}
         {view === 'day' && (
-          <DayView anchor={anchor} byDate={byDate} loading={loading} onAdd={onAdd} onTask={onEdit} onToggleDone={onToggleDone} onDelete={onDelete} />
+          <DayView anchor={anchor} byDate={byDate} loading={loading}
+            onAdd={onAdd} onTask={onEdit} onToggleDone={onToggleDone} onDelete={onDelete} />
         )}
       </div>
     </div>
@@ -191,9 +243,10 @@ export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggl
 }
 
 /* ── Month view ── */
-function MonthView({ anchor, byDate, onDayClick, onTask, loading }: {
+function MonthView({ anchor, byDate, onDayClick, onTask, onDelete, loading, dnd }: {
   anchor: Date; byDate: Map<string, Task[]>;
-  onDayClick: (d: string) => void; onTask: (t: Task) => void; loading: boolean;
+  onDayClick: (d: string) => void; onTask: (t: Task) => void;
+  onDelete: (id: string) => void; loading: boolean; dnd: DndProps;
 }) {
   const cells = useMemo(() => {
     const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -218,26 +271,34 @@ function MonthView({ anchor, byDate, onDayClick, onTask, loading }: {
       {/* Cells */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
         {cells.map((d, i) => {
-          const inMonth = d.getMonth() === m;
-          const isToday = sameDay(d, today);
-          const tasks   = byDate.get(ymd(d)) ?? [];
-          const row     = Math.floor(i / 7);
+          const inMonth   = d.getMonth() === m;
+          const isToday   = sameDay(d, today);
+          const tasks     = byDate.get(ymd(d)) ?? [];
+          const row       = Math.floor(i / 7);
+          const isDropTgt = dnd.dragOverYmd === ymd(d);
           return (
             <div
               key={i}
               onClick={() => onDayClick(ymd(d))}
+              onDragOver={e => dnd.onDragOver(e, ymd(d))}
+              onDragLeave={() => dnd.onDragLeave(ymd(d))}
+              onDrop={e => dnd.onDrop(e, ymd(d))}
               title="הוספת משימה ביום זה"
               style={{
-                minHeight: 110, padding: '8px 8px 6px',
+                minHeight: 118, padding: '8px 8px 8px',
                 borderBottom: row < 5 ? `1px solid ${C.border}` : 'none',
                 borderLeft:   i % 7 < 6 ? `1px solid ${C.border}` : 'none',
-                backgroundColor: !inMonth ? '#FAFCFF' : C.card,
+                backgroundColor: isDropTgt ? C.accentSub
+                  : isToday ? '#FBFFFE'
+                  : !inMonth ? '#FAFCFF' : C.card,
+                outline: isDropTgt ? `2px solid ${C.accent}` : 'none',
+                outlineOffset: isDropTgt ? '-2px' : 0,
                 cursor: 'pointer', transition: 'background-color 0.1s',
               }}
-              onMouseEnter={e => { if (inMonth) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = inMonth ? C.card : '#FAFCFF'; }}
+              onMouseEnter={e => { if (inMonth && !isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
+              onMouseLeave={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = isToday ? '#FBFFFE' : inMonth ? C.card : '#FAFCFF'; }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   width: 24, height: 24, borderRadius: '50%',
@@ -254,9 +315,15 @@ function MonthView({ anchor, byDate, onDayClick, onTask, loading }: {
                   {hebrewDay(d)}
                 </span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {tasks.slice(0, 3).map(t => (
-                  <TaskChip key={t.id} task={t} onClick={e => { e.stopPropagation(); onTask(t); }} />
+                  <TaskChip key={t.id} task={t}
+                    dragging={dnd.draggingId === t.id}
+                    onDragStart={e => dnd.onDragStart(e, t.id)}
+                    onDragEnd={dnd.onDragEnd}
+                    onClick={e => { e.stopPropagation(); onTask(t); }}
+                    onDelete={e => { e.stopPropagation(); onDelete(t.id); }}
+                  />
                 ))}
                 {tasks.length > 3 && (
                   <div style={{ fontSize: 11, color: C.muted, paddingRight: 4 }}>
@@ -274,10 +341,11 @@ function MonthView({ anchor, byDate, onDayClick, onTask, loading }: {
 }
 
 /* ── Week view ── */
-function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, loading }: {
+function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, onDelete, loading, dnd }: {
   anchor: Date; byDate: Map<string, Task[]>;
   onDayClick: (d: string) => void; onTask: (t: Task) => void;
-  onToggleDone: (t: Task) => void; loading: boolean;
+  onToggleDone: (t: Task) => void; onDelete: (id: string) => void;
+  loading: boolean; dnd: DndProps;
 }) {
   const days = useMemo(() => {
     const start = startOfWeek(anchor);
@@ -296,7 +364,7 @@ function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, loading }:
               borderLeft: i < 6 ? `1px solid ${C.border}` : 'none',
             }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 4 }}>
-                {DAY_LABELS[d.getDay()]}
+                {DAY_LABELS_LONG[d.getDay()]}
               </div>
               <div style={{
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -316,26 +384,38 @@ function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, loading }:
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', minHeight: 540 }}>
         {days.map((d, i) => {
-          const tasks = byDate.get(ymd(d)) ?? [];
+          const tasks     = byDate.get(ymd(d)) ?? [];
+          const isToday   = sameDay(d, today);
+          const isDropTgt = dnd.dragOverYmd === ymd(d);
           return (
             <div
               key={i}
               onClick={() => onDayClick(ymd(d))}
+              onDragOver={e => dnd.onDragOver(e, ymd(d))}
+              onDragLeave={() => dnd.onDragLeave(ymd(d))}
+              onDrop={e => dnd.onDrop(e, ymd(d))}
               title="הוספת משימה ביום זה"
               style={{
                 padding: 8, borderLeft: i < 6 ? `1px solid ${C.border}` : 'none',
                 cursor: 'pointer', transition: 'background-color 0.1s',
-                display: 'flex', flexDirection: 'column', gap: 4,
+                display: 'flex', flexDirection: 'column', gap: 6,
+                backgroundColor: isDropTgt ? C.accentSub : isToday ? '#FBFFFE' : 'transparent',
+                outline: isDropTgt ? `2px solid ${C.accent}` : 'none',
+                outlineOffset: isDropTgt ? '-2px' : 0,
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#FAFCFF'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
+              onMouseEnter={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = '#FAFCFF'; }}
+              onMouseLeave={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = isToday ? '#FBFFFE' : ''; }}
             >
               {tasks.length === 0 ? (
                 <div style={{ fontSize: 11, color: C.muted, padding: 4, opacity: 0.6 }}>—</div>
               ) : tasks.map(t => (
                 <TaskCard key={t.id} task={t}
+                  dragging={dnd.draggingId === t.id}
+                  onDragStart={e => dnd.onDragStart(e, t.id)}
+                  onDragEnd={dnd.onDragEnd}
                   onClick={e => { e.stopPropagation(); onTask(t); }}
                   onToggle={e => { e.stopPropagation(); onToggleDone(t); }}
+                  onDelete={e => { e.stopPropagation(); onDelete(t.id); }}
                 />
               ))}
             </div>
@@ -360,7 +440,7 @@ function DayView({ anchor, byDate, onAdd, onTask, onToggleDone, onDelete, loadin
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 12, color: C.muted, marginBottom: 2 }}>
-            {DAY_LABELS[anchor.getDay()] === 'ש׳' ? 'שבת' : `יום ${DAY_LABELS[anchor.getDay()]}`}
+            {anchor.getDay() === 6 ? 'שבת' : `יום ${DAY_LABELS_LONG[anchor.getDay()]}`}
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>
             {formatGregorian(anchor, { day: 'numeric', month: 'long' })}
@@ -406,53 +486,115 @@ function DayView({ anchor, byDate, onAdd, onTask, onToggleDone, onDelete, loadin
   );
 }
 
-/* ── Small chip (month cells) ── */
-function TaskChip({ task, onClick }: { task: Task; onClick: (e: React.MouseEvent) => void }) {
+/* ── Tiny × delete button, revealed on card hover via [data-del] ── */
+function DeleteX({ onClick, size = 16 }: { onClick: (e: React.MouseEvent) => void; size?: number }) {
+  return (
+    <button
+      data-del
+      onClick={onClick}
+      title="מחק משימה"
+      style={{
+        width: size + 2, height: size + 2, flexShrink: 0, padding: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: 'none', borderRadius: 5, cursor: 'pointer',
+        backgroundColor: 'transparent', color: C.muted,
+        opacity: 0, transition: 'opacity 0.12s, color 0.12s, background-color 0.12s',
+      }}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.color = '#DC2626'; el.style.backgroundColor = '#FEF2F2';
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.color = C.muted; el.style.backgroundColor = 'transparent';
+      }}
+    >
+      <svg width={size - 6} height={size - 6} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 6L6 18M6 6l12 12" />
+      </svg>
+    </button>
+  );
+}
+
+/** Show/hide any [data-del] children on hover of the card. */
+function revealDel(e: React.MouseEvent, show: boolean) {
+  e.currentTarget.querySelectorAll('[data-del]').forEach(el => {
+    (el as HTMLElement).style.opacity = show ? '1' : '0';
+  });
+}
+
+/* ── Small planner card (month cells) — draggable ── */
+function TaskChip({ task, dragging, onDragStart, onDragEnd, onClick, onDelete }: {
+  task: Task; dragging: boolean;
+  onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
+  onClick: (e: React.MouseEvent) => void; onDelete: (e: React.MouseEvent) => void;
+}) {
   return (
     <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={onClick}
+      onMouseEnter={e => revealDel(e, true)}
+      onMouseLeave={e => revealDel(e, false)}
       title={task.title}
       style={{
         display: 'flex', alignItems: 'center', gap: 5,
-        padding: '3px 7px', borderRadius: 6, cursor: 'pointer',
-        backgroundColor: task.is_done ? '#F4F6F9' : C.accentSub,
-        border: `1px solid ${task.is_done ? C.border : C.accentRim}`,
-        overflow: 'hidden',
+        padding: '4px 7px', borderRadius: 7, cursor: 'grab',
+        backgroundColor: task.is_done ? '#FAFBFD' : C.card,
+        border: `1px solid ${task.is_done ? C.border : '#D6F5EE'}`,
+        borderRight: `3px solid ${task.is_done ? '#CBD5E1' : C.accent}`,
+        boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
+        opacity: dragging ? 0.4 : 1,
+        overflow: 'hidden', transition: 'opacity 0.1s',
       }}
     >
-      {task.is_done ? (
-        <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      ) : (
-        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: C.accent, flexShrink: 0 }} />
-      )}
       {task.due_time && !task.is_done && (
         <span style={{ fontSize: 10.5, fontWeight: 700, color: C.accent, flexShrink: 0 }}>{hm(task.due_time)}</span>
       )}
+      {task.is_done && (
+        <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      )}
       <span style={{
+        flex: 1, minWidth: 0,
         fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         color: task.is_done ? C.muted : C.text,
         textDecoration: task.is_done ? 'line-through' : 'none',
       }}>
         {task.title}
       </span>
+      <DeleteX onClick={onDelete} size={15} />
     </div>
   );
 }
 
-/* ── Card (week columns) ── */
-function TaskCard({ task, onClick, onToggle }: {
-  task: Task; onClick: (e: React.MouseEvent) => void; onToggle: (e: React.MouseEvent) => void;
+/* ── Planner card (week columns) — draggable ── */
+function TaskCard({ task, dragging, onDragStart, onDragEnd, onClick, onToggle, onDelete }: {
+  task: Task; dragging: boolean;
+  onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
+  onClick: (e: React.MouseEvent) => void; onToggle: (e: React.MouseEvent) => void;
+  onDelete: (e: React.MouseEvent) => void;
 }) {
   return (
     <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={onClick}
+      onMouseEnter={e => revealDel(e, true)}
+      onMouseLeave={e => revealDel(e, false)}
       style={{
-        display: 'flex', alignItems: 'flex-start', gap: 6,
-        padding: '6px 8px', borderRadius: 8, cursor: 'pointer',
-        backgroundColor: task.is_done ? '#F4F6F9' : C.accentSub,
-        border: `1px solid ${task.is_done ? C.border : C.accentRim}`,
+        display: 'flex', alignItems: 'flex-start', gap: 7,
+        padding: '8px 9px', borderRadius: 9, cursor: 'grab',
+        backgroundColor: task.is_done ? '#FAFBFD' : C.card,
+        border: `1px solid ${task.is_done ? C.border : '#D6F5EE'}`,
+        borderRight: `3px solid ${task.is_done ? '#CBD5E1' : C.accent}`,
+        boxShadow: '0 1px 3px rgba(15,23,42,0.07)',
+        opacity: dragging ? 0.4 : 1,
+        transition: 'opacity 0.1s',
       }}
     >
       <button
@@ -471,25 +613,26 @@ function TaskCard({ task, onClick, onToggle }: {
           </svg>
         )}
       </button>
-      <div style={{ minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         {task.due_time && (
           <div style={{ fontSize: 10.5, fontWeight: 700, color: task.is_done ? C.muted : C.accent }}>
             {hm(task.due_time)}
           </div>
         )}
         <div style={{
-          fontSize: 12, fontWeight: 600, lineHeight: 1.3, wordBreak: 'break-word',
+          fontSize: 12, fontWeight: 600, lineHeight: 1.35, wordBreak: 'break-word',
           color: task.is_done ? C.muted : C.text,
           textDecoration: task.is_done ? 'line-through' : 'none',
         }}>
           {task.title}
         </div>
       </div>
+      <DeleteX onClick={onDelete} size={16} />
     </div>
   );
 }
 
-/* ── Large card (day view) ── */
+/* ── Large planner card (day view) ── */
 function TaskCardLarge({ task, onClick, onToggle, onDelete }: {
   task: Task; onClick: () => void; onToggle: () => void; onDelete: () => void;
 }) {
@@ -500,7 +643,9 @@ function TaskCardLarge({ task, onClick, onToggle, onDelete }: {
         display: 'flex', alignItems: 'flex-start', gap: 12,
         padding: '13px 16px', borderRadius: 12, cursor: 'pointer',
         backgroundColor: task.is_done ? '#FAFBFD' : C.card,
-        border: `1px solid ${task.is_done ? C.border : C.accentRim}`,
+        border: `1px solid ${task.is_done ? C.border : '#D6F5EE'}`,
+        borderRight: `3px solid ${task.is_done ? '#CBD5E1' : C.accent}`,
+        boxShadow: '0 1px 3px rgba(15,23,42,0.07)',
         transition: 'background-color 0.1s',
       }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}

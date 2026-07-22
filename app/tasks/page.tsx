@@ -79,6 +79,14 @@ export default function TasksPage() {
     if (error) load();
   }
 
+  /* Calendar drag-and-drop: move a task to another day (date only). */
+  async function moveTask(id: string, newDate: string) {
+    const prev = records;
+    setRecords(rs => rs.map(r => r.id === id ? { ...r, due_date: newDate } : r));  // optimistic
+    const { error } = await supabase.from('tasks').update({ due_date: newDate }).eq('id', id);
+    if (error) { setRecords(prev); alert('שגיאה בעדכון התאריך'); }
+  }
+
   function openAdd(category?: string) { setEditing(null); setAddCategory(category); setOpen(true); }
   function openEdit(t: Task)          { setEditing(t);   setAddCategory(undefined); setOpen(true); }
 
@@ -202,6 +210,7 @@ export default function TasksPage() {
             onEdit={openPlanEdit}
             onToggleDone={toggleDone}
             onDelete={handleDelete}
+            onMove={moveTask}
           />
         ) : loading ? (
           <GroupSkeleton />
