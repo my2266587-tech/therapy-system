@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import TaskForm from '@/components/tasks/TaskForm';
+import PersonalPlanForm from '@/components/tasks/PersonalPlanForm';
+import TasksCalendar from '@/components/tasks/TasksCalendar';
 import { IconBtn, TrashIcon } from '@/components/ui/Icons';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { hebrewDay } from '@/lib/dateUtils';
@@ -38,6 +40,12 @@ export default function TasksPage() {
   const [addCategory, setAddCategory] = useState<string | undefined>(undefined);
   // Which groups have their "completed" section expanded.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Board (list) or personal calendar view.
+  const [mode, setMode] = useState<'board' | 'calendar'>('board');
+  // Personal-plan modal (calendar view): task being edited / pre-filled date.
+  const [planOpen, setPlanOpen] = useState(false);
+  const [planEditing, setPlanEditing] = useState<Task | null>(null);
+  const [planDate, setPlanDate] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +81,10 @@ export default function TasksPage() {
 
   function openAdd(category?: string) { setEditing(null); setAddCategory(category); setOpen(true); }
   function openEdit(t: Task)          { setEditing(t);   setAddCategory(undefined); setOpen(true); }
+
+  /* Personal calendar view: slim add/edit (title, date + time, notes, status) */
+  function openPlanAdd(date?: string) { setPlanEditing(null); setPlanDate(date); setPlanOpen(true); }
+  function openPlanEdit(t: Task)      { setPlanEditing(t);    setPlanDate(undefined); setPlanOpen(true); }
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -124,29 +136,56 @@ export default function TasksPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: '0 0 3px', letterSpacing: '-0.3px' }}>
-              לוח משימות
+              לוח משימות – אישי
             </h1>
             <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
               {loading ? '' : `${totals.open} פתוחות · ${totals.done} הושלמו`}
             </p>
           </div>
-          <button
-            onClick={() => openAdd()}
-            style={{
-              backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
-              borderRadius: 10, padding: '10px 20px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer',
-              boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-          >
-            + הוסף משימה
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={() => setMode(m => m === 'board' ? 'calendar' : 'board')}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                backgroundColor: mode === 'calendar' ? C.accentSub : C.card,
+                color: mode === 'calendar' ? C.accent : C.sub,
+                border: `1px solid ${mode === 'calendar' ? C.accentRim : C.border}`,
+                borderRadius: 10, padding: '9px 16px', fontSize: 13.5,
+                fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLElement;
+                el.style.borderColor = C.accentRim; el.style.color = C.accent;
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLElement;
+                if (mode !== 'calendar') { el.style.borderColor = C.border; el.style.color = C.sub; }
+              }}
+            >
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+              </svg>
+              {mode === 'board' ? 'תצוגת לוח שנה' : 'תצוגת רשימה'}
+            </button>
+            <button
+              onClick={() => mode === 'board' ? openAdd() : openPlanAdd()}
+              style={{
+                backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
+                borderRadius: 10, padding: '10px 20px', fontSize: 14,
+                fontWeight: 600, cursor: 'pointer',
+                boxShadow: `0 2px 8px rgba(13,148,136,0.22)`, transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            >
+              + הוסף משימה
+            </button>
+          </div>
         </div>
 
-        {/* Free-text search */}
-        {!loading && hasAny && (
+        {/* Free-text search (board view only) */}
+        {mode === 'board' && !loading && hasAny && (
           <SearchBar
             value={search}
             onChange={setSearch}
@@ -155,7 +194,16 @@ export default function TasksPage() {
         )}
 
         {/* Content */}
-        {loading ? (
+        {mode === 'calendar' ? (
+          <TasksCalendar
+            records={records}
+            loading={loading}
+            onAdd={openPlanAdd}
+            onEdit={openPlanEdit}
+            onToggleDone={toggleDone}
+            onDelete={handleDelete}
+          />
+        ) : loading ? (
           <GroupSkeleton />
         ) : !hasAny ? (
           <EmptyState onAdd={() => openAdd()} />
@@ -187,6 +235,16 @@ export default function TasksPage() {
           categories={categories}
           onSave={() => { setOpen(false); load(); }}
           onCancel={() => setOpen(false)}
+        />
+      </Modal>
+
+      {/* Personal calendar: slim add/edit modal */}
+      <Modal open={planOpen} onClose={() => setPlanOpen(false)} title={planEditing ? 'עריכת משימה' : 'משימה / תוכנית אישית'}>
+        <PersonalPlanForm
+          initial={planEditing}
+          defaultDate={planDate}
+          onSave={() => { setPlanOpen(false); load(); }}
+          onCancel={() => setPlanOpen(false)}
         />
       </Modal>
     </div>

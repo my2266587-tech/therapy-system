@@ -178,6 +178,8 @@ export interface Task {
   category: string | null;
   priority: 'low' | 'medium' | 'high';
   due_date: string | null;
+  /** Optional time-of-day ("HH:MM:SS") for the personal calendar view. */
+  due_time: string | null;
   /** Free-text "אחראי/ת" — who owns the task. */
   assignee: string | null;
   /** Optional link to a patient (set null on patient delete, not cascade). */

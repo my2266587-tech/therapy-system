@@ -39,6 +39,10 @@ create table if not exists tasks (
 -- idempotent — a no-op once the column is present.
 alter table tasks add column if not exists category text;
 
+-- Optional time-of-day for the personal calendar view ("תצוגת לוח שנה") on the
+-- task board. Date-only tasks stay valid — time is purely optional.
+alter table tasks add column if not exists due_time time;
+
 -- Open tasks first, then by due date (nulls last), newest created first.
 create index if not exists idx_tasks_board
   on tasks (is_done, due_date, created_at desc);

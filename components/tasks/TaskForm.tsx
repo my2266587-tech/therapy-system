@@ -31,6 +31,7 @@ export default function TaskForm({ initial, defaultCategory, categories, onSave,
     category:    initial?.category    ?? defaultCategory ?? '',
     priority:    initial?.priority    ?? 'medium',
     due_date:    initial?.due_date     ?? '',
+    due_time:    initial?.due_time?.slice(0, 5) ?? '',
     assignee:    initial?.assignee    ?? '',
     patient_id:  initial?.patient_id   ?? '',
   });
@@ -54,6 +55,7 @@ export default function TaskForm({ initial, defaultCategory, categories, onSave,
       category:    form.category.trim() || null,
       priority:    form.priority,
       due_date:    form.due_date || null,
+      due_time:    form.due_time || null,
       assignee:    form.assignee.trim() || null,
       patient_id:  form.patient_id || null,
     };
@@ -76,6 +78,7 @@ export default function TaskForm({ initial, defaultCategory, categories, onSave,
         <ComboField label="קטגוריה" value={form.category} onChange={v => set('category', v)} suggestions={categories} placeholder="בחרי קיימת או הקלידי חדשה" />
         <SelectField label="עדיפות" value={form.priority} onChange={v => set('priority', v)} options={PRIORITY_OPTIONS} />
         <Field label="תאריך יעד" type="date" value={form.due_date} onChange={v => set('due_date', v)} />
+        <Field label="שעה (אופציונלי)" type="time" value={form.due_time} onChange={v => set('due_time', v)} />
         <Field label="אחראי/ת" value={form.assignee} onChange={v => set('assignee', v)} placeholder="מי מטפל/ת במשימה" />
       </div>
       <SelectField label="מטופלת קשורה" value={form.patient_id} onChange={v => set('patient_id', v)} options={patientOptions} placeholder="ללא — משימה כללית" />
