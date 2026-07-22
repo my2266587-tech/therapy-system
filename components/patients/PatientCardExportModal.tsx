@@ -43,6 +43,8 @@ export default function PatientCardExportModal({
     details: true, sessions: true, summaries: true,
     documents: true, payments: true, notes: true,
   });
+  // How many of the most-recent summaries to include. Empty = all.
+  const [summariesCount, setSummariesCount] = useState('');
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,8 +108,14 @@ export default function PatientCardExportModal({
     try {
       const documents = checked.documents ? await fetchDocuments() : [];
       const payments  = checked.payments  ? await fetchPayments()  : [];
+      // Limit to the N most recent summaries (newest → oldest) when a count
+      // was entered. A count larger than what exists simply includes all.
+      const n = parseInt(summariesCount, 10);
+      const limitedSummaries = checked.summaries && Number.isFinite(n) && n > 0
+        ? [...summaries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, n)
+        : summaries;
       await exportPatientCardPdf(
-        { patient, linkedStaff, sessions, summaries, documents, payments },
+        { patient, linkedStaff, sessions, summaries: limitedSummaries, documents, payments },
         selected,
       );
       onClose();
@@ -149,24 +157,56 @@ export default function PatientCardExportModal({
         {/* Checkboxes */}
         <div style={{ padding: '14px 24px' }}>
           {SECTIONS.map(s => (
-            <label
-              key={s.key}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 11,
-                padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
-                border: `1px solid ${checked[s.key] ? '#99F6E4' : C.border}`,
-                backgroundColor: checked[s.key] ? '#F0FDF9' : '#FFFFFF',
-                marginBottom: 8, transition: 'all 0.1s',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={checked[s.key]}
-                onChange={() => toggle(s.key)}
-                style={{ width: 17, height: 17, accentColor: C.accent, cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{s.label}</span>
-            </label>
+            <div key={s.key}>
+              <label
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 11,
+                  padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                  border: `1px solid ${checked[s.key] ? '#99F6E4' : C.border}`,
+                  backgroundColor: checked[s.key] ? '#F0FDF9' : '#FFFFFF',
+                  marginBottom: 8, transition: 'all 0.1s',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked[s.key]}
+                  onChange={() => toggle(s.key)}
+                  style={{ width: 17, height: 17, accentColor: C.accent, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{s.label}</span>
+              </label>
+
+              {/* How many recent summaries to include (empty = all) */}
+              {s.key === 'summaries' && checked.summaries && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 9,
+                  margin: '-2px 0 8px', padding: '8px 12px 8px 12px',
+                  marginRight: 24,
+                  borderRight: `2px solid #99F6E4`,
+                }}>
+                  <span style={{ fontSize: 12.5, color: C.sub, whiteSpace: 'nowrap' }}>
+                    כמה סיכומים אחרונים?
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={summariesCount}
+                    onChange={e => setSummariesCount(e.target.value)}
+                    placeholder={`הכל (${summaries.length})`}
+                    style={{
+                      width: 90, padding: '6px 10px', borderRadius: 8, fontSize: 13,
+                      border: `1px solid ${C.border}`, color: C.text, outline: 'none',
+                      fontFamily: 'inherit',
+                    }}
+                    onFocus={e => { e.target.style.borderColor = '#0F766E'; }}
+                    onBlur={e => { e.target.style.borderColor = C.border; }}
+                  />
+                  <span style={{ fontSize: 11.5, color: C.muted }}>
+                    ריק = הכל · מהחדש לישן
+                  </span>
+                </div>
+              )}
+            </div>
           ))}
 
           {error && (
