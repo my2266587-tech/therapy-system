@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Modal from '@/components/ui/Modal';
 import QuarterlyForm from '@/components/quarterly/QuarterlyForm';
+import QuarterlyAiForm from '@/components/quarterly/QuarterlyAiForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import DateDisplay from '@/components/ui/DateDisplay';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
@@ -30,6 +31,8 @@ export default function QuarterlyPage() {
   const [open,    setOpen]    = useState(false);
   const [editing, setEditing] = useState<QuarterlySummary | null>(null);
   const [openDetail, setOpenDetail] = useState<QuarterlySummary | null>(null);
+  // AI-assisted add flow (patient pick → auto quarter → editable draft).
+  const [addOpen, setAddOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,7 +83,7 @@ export default function QuarterlyPage() {
             </p>
           </div>
           <button
-            onClick={() => { setEditing(null); setOpen(true); }}
+            onClick={() => setAddOpen(true)}
             style={{
               backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
               borderRadius: 10, padding: '10px 20px', fontSize: 14,
@@ -116,7 +119,7 @@ export default function QuarterlyPage() {
         {loading ? (
           <ListSkeleton />
         ) : records.length === 0 ? (
-          <EmptyState onAdd={() => { setEditing(null); setOpen(true); }} />
+          <EmptyState onAdd={() => setAddOpen(true)} />
         ) : filtered.length === 0 ? (
           <SearchEmpty query={search} onClear={() => setSearch('')} />
         ) : (
@@ -204,6 +207,11 @@ export default function QuarterlyPage() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'עריכת סיכום רבעון' : 'הוספת סיכום רבעון'}>
         <QuarterlyForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} />
+      </Modal>
+
+      {/* AI-assisted add: patient only → auto quarter → editable draft */}
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="הוספת סיכום רבעון" size="xl">
+        <QuarterlyAiForm onSave={() => { setAddOpen(false); load(); }} onCancel={() => setAddOpen(false)} />
       </Modal>
 
       <Modal
