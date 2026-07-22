@@ -17,6 +17,9 @@ export interface Column<T> {
   accessor: (row: T) => string | number | Date | null | undefined;
   /** Optional: hint for column width in characters (Excel only). */
   width?: number;
+  /** Optional: URL for this cell — rendered as an Excel hyperlink and as a
+   *  clickable link annotation over the cell in the PDF. */
+  link?: (row: T) => string | null | undefined;
 }
 
 export interface ExportOptions<T> {
@@ -110,7 +113,17 @@ export async function exportToExcel<T>(opts: ExportOptions<T>): Promise<void> {
         cells[col.header] = v == null ? null : String(v);
       }
     }
-    ws.addRow(cells);
+    const added = ws.addRow(cells);
+
+    // Link cells become real Excel hyperlinks
+    columns.forEach((col, idx) => {
+      const url = col.link?.(row);
+      if (!url) return;
+      const text = formatCell(col.accessor(row)) || 'קישור';
+      const cell = added.getCell(idx + 1);
+      cell.value = { text, hyperlink: url };
+      cell.font = { color: { argb: 'FF0D9488' }, underline: true };
+    });
   }
 
   // Auto-width: widen any column whose content is longer than the default
@@ -121,7 +134,9 @@ export async function exportToExcel<T>(opts: ExportOptions<T>): Promise<void> {
       const value = cell.value;
       const s = value instanceof Date
         ? 'DD/MM/YYYY'.length
-        : value != null ? String(value).length : 0;
+        : value != null && typeof value === 'object' && 'text' in value
+          ? String((value as { text: unknown }).text ?? '').length
+          : value != null ? String(value).length : 0;
       if (s > max) max = s;
     });
     col.width = Math.min(60, Math.max(columns[i].width ?? 12, max + 2));
@@ -246,6 +261,10 @@ export async function exportToPdf<T>(opts: ExportOptions<T>): Promise<void> {
     visualCols.map(c => visualOrder(formatCell(c.accessor(row))))
   );
 
+  // links[rowIndex][visualColIndex] — URL to lay over the cell, if any.
+  const links = rows.map(row => visualCols.map(c => c.link?.(row) ?? null));
+  const hasLinks = links.some(r => r.some(Boolean));
+
   autoTable(doc, {
     head,
     body,
@@ -271,6 +290,13 @@ export async function exportToPdf<T>(opts: ExportOptions<T>): Promise<void> {
       halign: 'right',
     },
     alternateRowStyles: { fillColor: [248, 250, 252] },
+    didDrawCell: hasLinks ? (data) => {
+      if (data.section !== 'body') return;
+      const url = links[data.row.index]?.[data.column.index];
+      if (url) {
+        doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url });
+      }
+    } : undefined,
     didDrawPage: () => {
       drawHeader();
 

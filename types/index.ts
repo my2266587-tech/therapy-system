@@ -232,6 +232,9 @@ export interface Trip {
   trip_type: TripType;
   amount: number;
   notes: string | null;
+  /** Receipt file (image/PDF) in Storage — path under trips/ + original name. */
+  receipt_path: string | null;
+  receipt_name: string | null;
   created_at: string;
   updated_at: string;
   patient?: { full_name: string } | null;

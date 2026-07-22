@@ -26,6 +26,9 @@ const TRIP_EXPORT_COLUMNS: Column<Trip>[] = [
   { header: 'הערות',     accessor: r => r.notes ?? '', width: 28 },
 ];
 
+/** Signed receipt URLs in the employer report stay valid this long. */
+const EXPORT_LINK_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
 const filterInput: React.CSSProperties = {
   border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 10px',
   fontSize: 13, backgroundColor: '#FFFFFF', color: C.text,
@@ -37,6 +40,9 @@ export default function TripsPage() {
   const [loading, setLoading] = useState(true);
   const [open,    setOpen]    = useState(false);
   const [editing, setEditing] = useState<Trip | null>(null);
+  // Signed URL per receipt_path — used by the list indicator and embedded
+  // as links in the employer export.
+  const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({});
 
   // Filters: date range + patient
   const [fromDate,  setFromDate]  = useState('');
@@ -49,17 +55,64 @@ export default function TripsPage() {
       .from('trips')
       .select('*, patient:patient_id(full_name)')
       .order('date', { ascending: false });
-    setRecords((data ?? []) as Trip[]);
+    const rows = (data ?? []) as Trip[];
+    setRecords(rows);
     setLoading(false);
+
+    // Resolve signed URLs for all receipts (long TTL so exported reports
+    // keep working). Best-effort — failure leaves rows without a link.
+    const paths = rows.map(r => r.receipt_path).filter((p): p is string => !!p);
+    if (paths.length === 0) { setReceiptUrls({}); return; }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+      const res = await fetch('/api/trips/sign-receipts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ paths, expires_in: EXPORT_LINK_TTL_SECONDS }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.urls) setReceiptUrls(json.urls as Record<string, string>);
+    } catch {
+      // Indicator still shows; opening will just be unavailable.
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
     if (!confirm('האם למחוק נסיעה זו?')) return;
-    await supabase.from('trips').delete().eq('id', id);
+    const rec = records.find(r => r.id === id);
+    const { error } = await supabase.from('trips').delete().eq('id', id);
+    // Clean up the orphaned receipt object (best-effort).
+    if (!error && rec?.receipt_path) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          await fetch('/api/trips/delete-receipt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ path: rec.receipt_path }),
+          });
+        }
+      } catch { /* best-effort */ }
+    }
     load();
   }
+
+  // Export columns: the shared set + a receipt column whose cells link to
+  // the signed receipt URL (Excel hyperlink / PDF link annotation).
+  const exportColumns = useMemo<Column<Trip>[]>(() => [
+    ...TRIP_EXPORT_COLUMNS,
+    {
+      header: 'קבלה',
+      accessor: r => r.receipt_path ? 'צפייה בקבלה' : '',
+      width: 16,
+      link: r => (r.receipt_path ? receiptUrls[r.receipt_path] ?? null : null),
+    },
+  ], [receiptUrls]);
 
   // Patient options are derived from the loaded records so the filter only
   // offers names that actually appear in the list.
@@ -101,7 +154,7 @@ export default function TripsPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ExportButton<Trip>
               rows={filtered}
-              columns={TRIP_EXPORT_COLUMNS}
+              columns={exportColumns}
               title="נסיעות"
               fileBase="trips"
               summary={`סה"כ: ${totalLabel}`}
@@ -243,6 +296,30 @@ export default function TripsPage() {
                     {r.notes ? r.notes.slice(0, 50) : '—'}{r.notes && r.notes.length > 50 ? '…' : ''}
                   </p>
                 </div>
+
+                {/* Receipt indicator — click opens the file */}
+                {r.receipt_path && (
+                  <span
+                    onClick={e => {
+                      e.stopPropagation();
+                      const url = receiptUrls[r.receipt_path!];
+                      if (url) window.open(url, '_blank', 'noopener');
+                    }}
+                    title={r.receipt_name ? `קבלה: ${r.receipt_name}` : 'צפייה בקבלה'}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      fontSize: 11.5, fontWeight: 700, color: '#B45309', flexShrink: 0,
+                      backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
+                      borderRadius: 999, padding: '4px 10px', whiteSpace: 'nowrap',
+                      cursor: receiptUrls[r.receipt_path] ? 'pointer' : 'default',
+                    }}
+                  >
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                    קבלה
+                  </span>
+                )}
 
                 {/* Trip type badge */}
                 <span style={{

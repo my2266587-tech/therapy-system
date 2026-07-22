@@ -25,6 +25,12 @@ create table if not exists trips (
   updated_at timestamptz not null default now()
 );
 
+-- Receipt attachment (image / PDF) stored in the private patient-documents
+-- bucket under a trips/ prefix; the row keeps the storage path + original
+-- file name. For DBs created before these columns existed — idempotent.
+alter table trips add column if not exists receipt_path text;
+alter table trips add column if not exists receipt_name text;
+
 -- The list is ordered by date (newest first) and filtered by patient.
 create index if not exists idx_trips_date    on trips (date desc);
 create index if not exists idx_trips_patient on trips (patient_id, date desc);
