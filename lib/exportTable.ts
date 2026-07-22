@@ -26,6 +26,9 @@ export interface ExportOptions<T> {
   title: string;
   /** ASCII slug used as filename base. e.g. "patients" → "patients-2026-05-08.xlsx". */
   fileBase: string;
+  /** Optional totals line, e.g. `סה"כ: ₪1,234.00` — shown in the PDF header and
+   *  appended as a bold final row in Excel. */
+  summary?: string;
 }
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -65,7 +68,7 @@ function triggerDownload(blob: Blob, filename: string) {
 /* ── Excel ─────────────────────────────────────────────────────────────── */
 
 export async function exportToExcel<T>(opts: ExportOptions<T>): Promise<void> {
-  const { rows, columns, title, fileBase } = opts;
+  const { rows, columns, title, fileBase, summary } = opts;
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'מחר אחר – שדה חמד';
@@ -123,6 +126,13 @@ export async function exportToExcel<T>(opts: ExportOptions<T>): Promise<void> {
     });
     col.width = Math.min(60, Math.max(columns[i].width ?? 12, max + 2));
   });
+
+  // Optional totals row — added after auto-width so it doesn't inflate columns
+  if (summary) {
+    ws.addRow({});
+    const totalRow = ws.addRow({ [columns[0].header]: summary });
+    totalRow.font = { bold: true };
+  }
 
   // Date format on Date-valued cells
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -198,7 +208,7 @@ function arrayBufferToBase64(buf: ArrayBuffer): string {
 }
 
 export async function exportToPdf<T>(opts: ExportOptions<T>): Promise<void> {
-  const { rows, columns, title, fileBase } = opts;
+  const { rows, columns, title, fileBase, summary } = opts;
 
   const { regular, bold } = await loadFonts();
 
@@ -222,7 +232,10 @@ export async function exportToPdf<T>(opts: ExportOptions<T>): Promise<void> {
     doc.setFontSize(9);
     doc.setTextColor(100, 116, 139);
     doc.text(visualOrder(`תאריך הפקה: ${nowHuman()}`), pageW - 32, 54, { align: 'right' });
-    doc.text(visualOrder(`סה"כ רשומות: ${rows.length}`), 32, 54, { align: 'left' });
+    const leftText = summary
+      ? `סה"כ רשומות: ${rows.length} · ${summary}`
+      : `סה"כ רשומות: ${rows.length}`;
+    doc.text(visualOrder(leftText), 32, 54, { align: 'left' });
   };
 
   // Build column defs in visual (right-to-left) order so the FIRST defined

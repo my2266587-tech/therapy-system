@@ -218,6 +218,23 @@ export interface PettyCash {
   patient?: { full_name: string } | null;
 }
 
+/** taxi / car / public — Hebrew display labels live in lib/trips.ts. */
+export type TripType = 'taxi' | 'car' | 'public';
+
+/** One patient trip (נסיעה) — see supabase/trips.sql. */
+export interface Trip {
+  id: string;
+  /** Required in the UI (set null on patient delete, not cascade). */
+  patient_id: string | null;
+  date: string;
+  trip_type: TripType;
+  amount: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  patient?: { full_name: string } | null;
+}
+
 /**
  * Hour Bank — "בנק שעות". A SINGLE work-hours bank for the clinician's work
  * against the client (not a general attendance system). All amounts are stored

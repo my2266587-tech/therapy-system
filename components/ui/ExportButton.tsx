@@ -11,7 +11,7 @@ interface Props<T> extends ExportOptions<T> {
 }
 
 export default function ExportButton<T>({
-  rows, columns, title, fileBase, disabled,
+  rows, columns, title, fileBase, summary, disabled,
 }: Props<T>) {
   const [open, setOpen]       = useState(false);
   const [busy, setBusy]       = useState<'excel' | 'pdf' | null>(null);
@@ -50,7 +50,7 @@ export default function ExportButton<T>({
     setBusy(kind);
     setError(null);
     try {
-      const opts: ExportOptions<T> = { rows, columns, title, fileBase };
+      const opts: ExportOptions<T> = { rows, columns, title, fileBase, summary };
       if (kind === 'excel') await exportToExcel(opts);
       else                  await exportToPdf(opts);
     } catch (e) {
