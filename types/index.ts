@@ -91,6 +91,8 @@ export interface Session {
   travel_cost: number | null;
   /** Legacy column kept for compatibility — no UI uses it now. */
   travel_distance_km: number | null;
+  /** Stamped when a reminder was sent from the calendar (see session-reminders.sql). */
+  reminder_sent_at: string | null;
   created_at: string;
   updated_at: string;
   patient?: { full_name: string } | null;

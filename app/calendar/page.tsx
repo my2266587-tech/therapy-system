@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useSessionsLiveSync } from '@/lib/useSessionsLiveSync';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
+import SessionReminder from '@/components/calendar/SessionReminder';
 import { formatGregorian, formatHebrew, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
 import type { Session } from '@/types';
 
@@ -353,6 +354,8 @@ export default function CalendarPage() {
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing?.id ? 'עריכת פגישה' : 'פגישה חדשה'}>
+        {/* Manual reminder (WhatsApp / email / copy) for an existing session */}
+        {editing?.id && <SessionReminder key={editing.id} session={editing} onSent={load} />}
         <SessionForm initial={editing} onSave={() => { setOpen(false); load(); }} onCancel={() => setOpen(false)} onDelete={() => { setOpen(false); load(); }} />
       </Modal>
     </div>
