@@ -38,6 +38,128 @@ function ddmmyyyy(iso: string): string {
 /** "HH:MM" from a time column value. */
 function hm(t: string | null | undefined): string { return t ? t.slice(0, 5) : ''; }
 
+const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+/** "יום רביעי" from an ISO date, timezone-safe (parsed as local midnight). */
+function hebrewDayName(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return '';
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return `יום ${HEBREW_DAYS[d.getDay()]}`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * RTL HTML email in the same visual language as the system's day-before
+ * reminder: teal gradient header, white rounded card, quiet footer.
+ * Table-based + inline styles so it renders correctly in Gmail/Outlook.
+ */
+function renderReminderEmail(opts: {
+  patientName: string;
+  dateLabel: string;   // DD/MM/YYYY
+  dayLabel: string;    // יום רביעי
+  timeLabel: string;   // HH:MM
+}): string {
+  const { patientName, dateLabel, dayLabel, timeLabel } = opts;
+  return `<!doctype html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>תזכורת לפגישה</title>
+</head>
+<body style="margin:0;padding:0;background:#F6F8FB;direction:rtl;font-family:Arial,Helvetica,'Heebo','Open Sans Hebrew',sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F6F8FB;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560"
+               style="max-width:560px;width:100%;background:#FFFFFF;border-radius:16px;overflow:hidden;
+                      box-shadow:0 4px 14px rgba(15,23,42,0.06);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#0D9488 0%,#0F766E 100%);padding:26px 32px;" dir="rtl">
+              <div style="font-size:12px;color:rgba(255,255,255,0.78);font-weight:600;letter-spacing:0.10em;margin-bottom:6px;">
+                מחר אחר – שדה חמד
+              </div>
+              <h1 style="margin:0;color:#FFFFFF;font-size:23px;font-weight:700;letter-spacing:-0.01em;">
+                תזכורת לפגישה
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="padding:26px 32px 6px;" dir="rtl">
+              <div style="font-size:16px;font-weight:700;color:#0F172A;margin-bottom:6px;">
+                שלום ${escapeHtml(patientName)},
+              </div>
+              <div style="font-size:14px;color:#475569;line-height:1.7;">
+                תזכורת לפגישה שנקבעה עבורך:
+              </div>
+            </td>
+          </tr>
+
+          <!-- Appointment card -->
+          <tr>
+            <td style="padding:16px 32px 8px;" dir="rtl">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                     style="background:#F0FDF9;border:1px solid #99F6E4;border-radius:12px;border-right:4px solid #0D9488;">
+                <tr>
+                  <td style="padding:18px 20px;" dir="rtl">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <tr>
+                        <td dir="rtl" style="padding-bottom:10px;">
+                          <span style="font-size:11px;font-weight:700;color:#0F766E;letter-spacing:0.08em;">תאריך</span><br>
+                          <span style="font-size:19px;font-weight:700;color:#0F172A;">${escapeHtml(dateLabel)}</span>
+                          <span style="font-size:13px;color:#475569;">&nbsp;·&nbsp;${escapeHtml(dayLabel)}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td dir="rtl">
+                          <span style="font-size:11px;font-weight:700;color:#0F766E;letter-spacing:0.08em;">שעה</span><br>
+                          <span style="font-size:19px;font-weight:700;color:#0F172A;">${escapeHtml(timeLabel)}</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Closing -->
+          <tr>
+            <td style="padding:14px 32px 26px;" dir="rtl">
+              <div style="font-size:14px;color:#475569;line-height:1.7;">
+                נשמח לראותך! אם אינך יכולה להגיע — נשמח לעדכון מראש.
+              </div>
+              <div style="font-size:14px;color:#0F172A;font-weight:600;margin-top:14px;">
+                בברכה,<br>צוות מחר אחר – שדה חמד
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 32px;background:#FAFBFD;border-top:1px solid #E8ECF0;" dir="rtl">
+              <div style="font-size:11px;color:#94A3B8;line-height:1.55;">
+                הודעה זו נשלחה ממערכת מחר אחר – שדה חמד.
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 export async function POST(req: NextRequest) {
   const user = await getAuthorizedUser(req);
   if (!user) return NextResponse.json({ error: 'לא מורשה' }, { status: 401 });
@@ -77,14 +199,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'אין כתובת מייל שמורה בכרטיס המטופלת' }, { status: 400 });
   }
 
+  const dateLabel = ddmmyyyy(session.date);
+  const timeLabel = hm(session.start_time);
   const message =
-    `שלום ${patient.full_name}, תזכורת לפגישה שנקבעה לתאריך ${ddmmyyyy(session.date)} בשעה ${hm(session.start_time)}.`;
+    `שלום ${patient.full_name}, תזכורת לפגישה שנקבעה לתאריך ${dateLabel} בשעה ${timeLabel}.`;
 
-  const html = `
-    <div dir="rtl" style="font-family: Arial, sans-serif; font-size: 15px; color: #1A2332; line-height: 1.7;">
-      <p>${message}</p>
-      <p style="color:#64748B; font-size:12px; margin-top:24px;">הודעה זו נשלחה ממערכת מחר אחר – שדה חמד.</p>
-    </div>`;
+  const html = renderReminderEmail({
+    patientName: patient.full_name,
+    dateLabel,
+    dayLabel: hebrewDayName(session.date),
+    timeLabel,
+  });
 
   // Same fixed Gmail SMTP transport as the day-before reminder route.
   const transporter = nodemailer.createTransport({
