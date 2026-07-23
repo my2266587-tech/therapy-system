@@ -9,11 +9,12 @@ import type { Session } from '@/types';
  * from the appointments calendar.
  *
  * Clicking the button builds a ready-made Hebrew reminder from the patient's
- * name + the session date and time, and offers three manual channels:
- * WhatsApp (wa.me), email (mailto) or copying the text — using the phone and
- * email already stored on the patient card. Any of the three stamps
- * sessions.reminder_sent_at so the UI shows "תזכורת נשלחה" with date+time.
- * No automatic sending / SMS at this stage.
+ * name + the session date and time, and offers three channels:
+ * WhatsApp (wa.me), email — sent DIRECTLY from the system via
+ * /api/reminders/send-session-reminder (no mail-client popup) — or copying
+ * the text; using the phone and email already stored on the patient card.
+ * Any of the three stamps sessions.reminder_sent_at so the UI shows
+ * "תזכורת נשלחה" with date+time. No automatic sending / SMS at this stage.
  */
 
 const C = {
@@ -56,6 +57,7 @@ export default function SessionReminder({ session, onSent }: Props) {
   const [open,    setOpen]    = useState(false);
   const [sentAt,  setSentAt]  = useState<string | null>(session.reminder_sent_at ?? null);
   const [copied,  setCopied]  = useState(false);
+  const [mailing, setMailing] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error,   setError]   = useState('');
 
   // The caller passes key={session.id}, so this component remounts per
@@ -94,11 +96,34 @@ export default function SessionReminder({ session, onSent }: Props) {
     markSent();
   }
 
-  function handleEmail() {
-    if (!contact?.email) return;
-    window.location.href =
-      `mailto:${contact.email}?subject=${encodeURIComponent('תזכורת לפגישה')}&body=${encodeURIComponent(message)}`;
-    markSent();
+  /** Send the email straight from the system — no mail-client popup. */
+  async function handleEmail() {
+    if (!contact?.email || mailing === 'sending') return;
+    setMailing('sending'); setError('');
+    try {
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      const token = authSession?.access_token;
+      if (!token) { setMailing('idle'); setError('נדרשת התחברות מחדש'); return; }
+      const res = await fetch('/api/reminders/send-session-reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ session_id: session.id }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMailing('idle');
+        setError(json?.error ?? 'שליחת המייל נכשלה');
+        return;
+      }
+      // The route already stamped reminder_sent_at — just reflect it.
+      setMailing('sent');
+      setSentAt(json?.sent_at ?? new Date().toISOString());
+      setTimeout(() => setMailing('idle'), 4000);  // allow a re-send later
+      onSent();
+    } catch {
+      setMailing('idle');
+      setError('שגיאה בתקשורת עם השרת');
+    }
   }
 
   async function handleCopy() {
@@ -172,10 +197,14 @@ export default function SessionReminder({ session, onSent }: Props) {
               onClick={handleWhatsApp}
             />
             <ChannelBtn
-              label="שליחה במייל"
+              label={
+                mailing === 'sending' ? 'שולח מייל...' :
+                mailing === 'sent'    ? 'המייל נשלח ✓' :
+                'שליחה במייל'
+              }
               color="#2563EB"
-              disabled={!contact?.email}
-              title={contact?.email ? contact.email : 'אין מייל בכרטיס המטופלת'}
+              disabled={!contact?.email || mailing !== 'idle'}
+              title={contact?.email ? `שליחה ישירה מהמערכת אל ${contact.email}` : 'אין מייל בכרטיס המטופלת'}
               onClick={handleEmail}
             />
             <ChannelBtn
