@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import { formatGregorian, formatHebrew, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
+import { getHolidaysInRange, type HolidayInfo, type HolidayTier } from '@/lib/hebcalHolidays';
 import type { Task } from '@/types';
 
 /**
@@ -12,6 +13,10 @@ import type { Task } from '@/types';
  * Tasks can be dragged between days (due_date updates via onMove) and deleted
  * straight from the card. Standalone and personal — no sessions, patients or
  * the appointments calendar involved.
+ *
+ * Synced with the Hebrew calendar (Hebcal): Shabbat and every Jewish holiday,
+ * fast day, Chol HaMoed and Rosh Chodesh are marked directly on the grid —
+ * see lib/hebcalHolidays.ts.
  */
 
 const C = {
@@ -24,6 +29,15 @@ const C = {
 const DAY_LABELS      = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 const DAY_LABELS_LONG = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const MONTH_LABELS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+
+/* ── Hebcal holiday styling — one look per event tier ── */
+const HOLIDAY_STYLE: Record<HolidayTier, { bg: string; fg: string; border: string }> = {
+  yomtov:     { bg: '#FDECC8', fg: '#92400E', border: '#F6D9A0' }, // Yom Tov — work-restricted
+  fast:       { bg: '#FEE2E2', fg: '#991B1B', border: '#FCA5A5' }, // fast days
+  cholHamoed: { bg: '#FEF6E0', fg: '#92400E', border: '#FBE7B4' }, // Chol HaMoed
+  note:       { bg: 'transparent', fg: '#0D9488', border: 'transparent' }, // Rosh Chodesh, minor/modern holidays
+};
+const SHABBAT_BG = '#FBF8F1';
 
 type View = 'month' | 'week' | 'day';
 
@@ -242,6 +256,27 @@ export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggl
   );
 }
 
+/* ── Hebcal holiday/Shabbat badge — shown on any day with a Jewish-calendar event ── */
+function HolidayBadge({ holiday, style }: { holiday: HolidayInfo; style?: React.CSSProperties }) {
+  const s = HOLIDAY_STYLE[holiday.tier];
+  return (
+    <div
+      title={holiday.name}
+      style={{
+        fontSize: 9.5, fontWeight: 700, lineHeight: 1.3,
+        color: s.fg, backgroundColor: s.bg,
+        border: s.border !== 'transparent' ? `1px solid ${s.border}` : 'none',
+        borderRadius: 5, padding: s.bg !== 'transparent' ? '1px 5px' : 0,
+        display: 'inline-block', maxWidth: '100%',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        ...style,
+      }}
+    >
+      {holiday.name}
+    </div>
+  );
+}
+
 /* ── Month view ── */
 function MonthView({ anchor, byDate, onDayClick, onTask, onDelete, loading, dnd }: {
   anchor: Date; byDate: Map<string, Task[]>;
@@ -253,6 +288,11 @@ function MonthView({ anchor, byDate, onDayClick, onTask, onDelete, loading, dnd 
     const start = addDays(first, -first.getDay());
     return Array.from({ length: 42 }, (_, i) => addDays(start, i));
   }, [anchor]);
+
+  const holidays = useMemo(
+    () => getHolidaysInRange(cells[0], cells[cells.length - 1]),
+    [cells],
+  );
 
   const today = new Date();
   const m = anchor.getMonth();
@@ -273,9 +313,16 @@ function MonthView({ anchor, byDate, onDayClick, onTask, onDelete, loading, dnd 
         {cells.map((d, i) => {
           const inMonth   = d.getMonth() === m;
           const isToday   = sameDay(d, today);
+          const isShabbat = d.getDay() === 6;
+          const holiday   = holidays.get(ymd(d));
           const tasks     = byDate.get(ymd(d)) ?? [];
           const row       = Math.floor(i / 7);
           const isDropTgt = dnd.dragOverYmd === ymd(d);
+          const restBg    = holiday?.tier === 'yomtov' ? HOLIDAY_STYLE.yomtov.bg
+            : holiday?.tier === 'cholHamoed' ? HOLIDAY_STYLE.cholHamoed.bg
+            : isShabbat ? SHABBAT_BG
+            : null;
+          const baseBg = isToday ? '#FBFFFE' : !inMonth ? '#FAFCFF' : (restBg ?? C.card);
           return (
             <div
               key={i}
@@ -288,17 +335,15 @@ function MonthView({ anchor, byDate, onDayClick, onTask, onDelete, loading, dnd 
                 minHeight: 118, padding: '8px 8px 8px',
                 borderBottom: row < 5 ? `1px solid ${C.border}` : 'none',
                 borderLeft:   i % 7 < 6 ? `1px solid ${C.border}` : 'none',
-                backgroundColor: isDropTgt ? C.accentSub
-                  : isToday ? '#FBFFFE'
-                  : !inMonth ? '#FAFCFF' : C.card,
+                backgroundColor: isDropTgt ? C.accentSub : baseBg,
                 outline: isDropTgt ? `2px solid ${C.accent}` : 'none',
                 outlineOffset: isDropTgt ? '-2px' : 0,
                 cursor: 'pointer', transition: 'background-color 0.1s',
               }}
               onMouseEnter={e => { if (inMonth && !isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC'; }}
-              onMouseLeave={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = isToday ? '#FBFFFE' : inMonth ? C.card : '#FAFCFF'; }}
+              onMouseLeave={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = baseBg; }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: holiday ? 2 : 7 }}>
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   width: 24, height: 24, borderRadius: '50%',
@@ -315,6 +360,7 @@ function MonthView({ anchor, byDate, onDayClick, onTask, onDelete, loading, dnd 
                   {hebrewDay(d)}
                 </span>
               </div>
+              {holiday && <HolidayBadge holiday={holiday} style={{ marginBottom: 6 }} />}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {tasks.slice(0, 3).map(t => (
                   <TaskChip key={t.id} task={t}
@@ -351,17 +397,26 @@ function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, onDelete, 
     const start = startOfWeek(anchor);
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }, [anchor]);
+  const holidays = useMemo(
+    () => getHolidaysInRange(days[0], days[days.length - 1]),
+    [days],
+  );
   const today = new Date();
 
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: `1px solid ${C.border}`, backgroundColor: '#F8FAFC' }}>
         {days.map((d, i) => {
-          const isToday = sameDay(d, today);
+          const isToday   = sameDay(d, today);
+          const isShabbat = d.getDay() === 6;
+          const holiday   = holidays.get(ymd(d));
           return (
             <div key={i} style={{
               padding: '12px 8px', textAlign: 'center',
               borderLeft: i < 6 ? `1px solid ${C.border}` : 'none',
+              backgroundColor: holiday?.tier === 'yomtov' ? HOLIDAY_STYLE.yomtov.bg
+                : holiday?.tier === 'cholHamoed' ? HOLIDAY_STYLE.cholHamoed.bg
+                : isShabbat ? SHABBAT_BG : 'transparent',
             }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 4 }}>
                 {DAY_LABELS_LONG[d.getDay()]}
@@ -378,6 +433,11 @@ function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, onDelete, 
               <div style={{ fontSize: 10, color: C.muted, marginTop: 3, fontWeight: 500 }}>
                 {hebrewDay(d)}
               </div>
+              {holiday && (
+                <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center' }}>
+                  <HolidayBadge holiday={holiday} />
+                </div>
+              )}
             </div>
           );
         })}
@@ -386,7 +446,13 @@ function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, onDelete, 
         {days.map((d, i) => {
           const tasks     = byDate.get(ymd(d)) ?? [];
           const isToday   = sameDay(d, today);
+          const isShabbat = d.getDay() === 6;
+          const holiday   = holidays.get(ymd(d));
           const isDropTgt = dnd.dragOverYmd === ymd(d);
+          const restBg = holiday?.tier === 'yomtov' ? '#FEF8EC'
+            : holiday?.tier === 'cholHamoed' ? '#FFFCF3'
+            : isShabbat ? '#FEFDFA'
+            : 'transparent';
           return (
             <div
               key={i}
@@ -399,12 +465,12 @@ function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, onDelete, 
                 padding: 8, borderLeft: i < 6 ? `1px solid ${C.border}` : 'none',
                 cursor: 'pointer', transition: 'background-color 0.1s',
                 display: 'flex', flexDirection: 'column', gap: 6,
-                backgroundColor: isDropTgt ? C.accentSub : isToday ? '#FBFFFE' : 'transparent',
+                backgroundColor: isDropTgt ? C.accentSub : isToday ? '#FBFFFE' : restBg,
                 outline: isDropTgt ? `2px solid ${C.accent}` : 'none',
                 outlineOffset: isDropTgt ? '-2px' : 0,
               }}
               onMouseEnter={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = '#FAFCFF'; }}
-              onMouseLeave={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = isToday ? '#FBFFFE' : ''; }}
+              onMouseLeave={e => { if (!isDropTgt) (e.currentTarget as HTMLElement).style.backgroundColor = isToday ? '#FBFFFE' : restBg; }}
             >
               {tasks.length === 0 ? (
                 <div style={{ fontSize: 11, color: C.muted, padding: 4, opacity: 0.6 }}>—</div>
@@ -434,6 +500,7 @@ function DayView({ anchor, byDate, onAdd, onTask, onToggleDone, onDelete, loadin
   onToggleDone: (t: Task) => void; onDelete: (id: string) => void; loading: boolean;
 }) {
   const tasks = byDate.get(ymd(anchor)) ?? [];
+  const holiday = useMemo(() => getHolidaysInRange(anchor, anchor).get(ymd(anchor)), [anchor]);
 
   return (
     <div style={{ padding: '24px 28px' }}>
@@ -448,6 +515,7 @@ function DayView({ anchor, byDate, onAdd, onTask, onToggleDone, onDelete, loadin
           <div style={{ fontSize: 13, color: C.sub, marginTop: 2, fontWeight: 500 }}>
             {hebrewLong(anchor)}
           </div>
+          {holiday && <HolidayBadge holiday={holiday} style={{ marginTop: 6, fontSize: 11.5, padding: '3px 8px' }} />}
         </div>
         <button
           onClick={() => onAdd(ymd(anchor))}
