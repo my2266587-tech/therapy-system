@@ -348,11 +348,6 @@ function PatientsTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync selection with linked when picker opens
-  useEffect(() => {
-    if (pickerOpen) setSelectedIds(new Set(linked.map(p => p.id)));
-  }, [pickerOpen, linked]);
-
   // Fetch all patients on first picker open
   useEffect(() => {
     if (!pickerOpen || allPatients.length > 0) return;
@@ -415,7 +410,11 @@ function PatientsTab({
           </p>
         </div>
         <button
-          onClick={() => setPickerOpen(true)}
+          onClick={() => {
+            // Start from the current links every time the picker opens.
+            setSelectedIds(new Set(linked.map(p => p.id)));
+            setPickerOpen(true);
+          }}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
             backgroundColor: C.accent, color: '#FFFFFF', border: 'none',
@@ -433,7 +432,7 @@ function PatientsTab({
           backgroundColor: '#F8FAFC', borderRadius: 12, border: `1px dashed #CBD5E1`,
           color: C.muted, fontSize: 13,
         }}>
-          לא קושרו מטופלות לאיש צוות זה. לחצי על "ניהול קישורים" כדי להוסיף.
+          לא קושרו מטופלות לאיש צוות זה. לחצי על &quot;ניהול קישורים&quot; כדי להוסיף.
         </div>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -644,7 +643,7 @@ function DocumentsTab({
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     for (const f of Array.from(files)) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await upload(f);
     }
   }, [upload]);

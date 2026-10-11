@@ -194,7 +194,7 @@ function SessionsInner() {
                   {/* Patient + time */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2332', margin: 0, lineHeight: 1.3 }}>
-                      {(r.patient as any)?.full_name ?? '—'}
+                      {r.patient?.full_name ?? '—'}
                     </p>
                     <p style={{ fontSize: 12, color: '#94A3B8', margin: '3px 0 0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span>

@@ -35,7 +35,7 @@ import type { RawSheet } from './types';
  *   - LRM/RLM marks (U+200E/F) — they break exact-match comparison silently
  *   - Other format chars in the U+2060–U+206F block
  */
-// eslint-disable-next-line no-misleading-character-class
+ 
 const INVISIBLE = /[​‌‍‎‏⁠-⁯﻿]/g;
 
 function sanitizeCell(v: string): string {

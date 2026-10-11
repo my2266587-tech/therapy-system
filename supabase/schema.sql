@@ -6,6 +6,16 @@
 
 create extension if not exists "pgcrypto";
 
+-- ── updated_at auto-bump ──────────────────────────────────────────────────────
+-- Defined first: several blocks below attach it as a trigger.
+create or replace function update_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
 -- ── Staff ─────────────────────────────────────────────────────────────────────
 create table if not exists staff (
   id          uuid primary key default gen_random_uuid(),
@@ -338,9 +348,8 @@ create table if not exists staff_documents (
 create index if not exists idx_staff_documents_staff
   on staff_documents (staff_id, uploaded_at desc);
 
--- updated_at auto-bump (the function update_updated_at exists from
--- the patients block at the bottom of this file — wrap in a guard
--- so re-runs don't error).
+-- updated_at auto-bump (update_updated_at is defined at the top of this
+-- file — wrap in a guard so re-runs don't error).
 do $$
 begin
   if not exists (
@@ -521,14 +530,7 @@ create table if not exists authorized_users (
 );
 
 -- ── Auto-update updated_at trigger ───────────────────────────────────────────
-create or replace function update_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
+-- (function defined at the top of this file). Drop-then-create keeps re-runs safe.
 do $$
 declare t text;
 begin
@@ -537,6 +539,7 @@ begin
     'quarterly_summaries','payments','private_expenses','petty_cash',
     'authorized_users','patient_documents','staff_documents'
   ] loop
+    execute format('drop trigger if exists trg_%s_updated_at on %s;', t, t);
     execute format(
       'create trigger trg_%s_updated_at before update on %s for each row execute function update_updated_at();',
       t, t

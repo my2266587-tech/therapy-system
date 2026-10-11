@@ -22,7 +22,7 @@
  * fully functional for typed input.
  */
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 
 /* ── Minimal types for the Web Speech API (TS lib.dom doesn't ship them yet) ── */
 interface SRAlternative { transcript: string; confidence: number }
@@ -49,6 +49,11 @@ function getSpeechRecognition(): SRConstructor | null {
     webkitSpeechRecognition?: SRConstructor;
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+/** Subscription for a value that never changes (see useSyncExternalStore). */
+function subscribeNever(): () => void {
+  return () => {};
 }
 
 /**
@@ -99,7 +104,13 @@ export default function DictatedTextarea({
   const [recording, setRecording] = useState(false);
   const [interim,   setInterim]   = useState('');
   const [error,     setError]     = useState<string | null>(null);
-  const [supported, setSupported] = useState<boolean>(true);
+  // Browser support never changes at runtime; read it on the client, and
+  // assume "supported" on the server so the first render matches.
+  const supported = useSyncExternalStore(
+    subscribeNever,
+    () => getSpeechRecognition() !== null,
+    () => true,
+  );
 
   const recRef     = useRef<SRInstance | null>(null);
   // Cache the latest `value` + `onChange` for the recognition callbacks
@@ -109,11 +120,6 @@ export default function DictatedTextarea({
   const onChangeRef = useRef(onChange);
   useEffect(() => { valueRef.current = value; }, [value]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
-
-  // Detect API support on mount (client-only).
-  useEffect(() => {
-    setSupported(getSpeechRecognition() !== null);
-  }, []);
 
   // Listen for "another field started" events so we stop our own
   // recognizer and there's never more than one mic active at a time.
@@ -138,10 +144,7 @@ export default function DictatedTextarea({
 
   function start() {
     const Ctor = getSpeechRecognition();
-    if (!Ctor) {
-      setSupported(false);
-      return;
-    }
+    if (!Ctor) return; // unsupported → the mic button isn't rendered anyway
     // Broadcast so any other field stops dictating.
     window.dispatchEvent(new CustomEvent<StopOthersDetail>(STOP_OTHERS, {
       detail: { exceptId: instanceId },

@@ -96,7 +96,10 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   const pathname     = usePathname();
   const router       = useRouter();
   const [collapsed,  setCollapsed]  = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  /* The mobile menu remembers the page it was opened on, so navigating
+     anywhere closes it — no effect needed. */
+  const [mobileOpenOn, setMobileOpenOn] = useState<string | null>(null);
+  const mobileOpen = mobileOpenOn !== null && mobileOpenOn === pathname;
   const [access,     setAccess]     = useState<Access>({ state: 'loading' });
 
   /* Hide sidebar on auth pages and on the standalone intake form (it is
@@ -105,9 +108,6 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   const noSidebar = pathname === '/login'
     || pathname?.startsWith('/auth/')
     || pathname?.startsWith('/intake/');
-
-  /* Close mobile panel when route changes */
-  useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   /* Access check: signed in? listed in authorized_users? which role? */
   useEffect(() => {
@@ -159,11 +159,13 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
   const sidebarW = collapsed ? 56 : 216;
 
-  /* ── Single nav item ── */
-  function NavItem({ item }: { item: typeof navItems[0] }) {
+  /* ── Single nav item ── (render helpers, not components, so React keeps the
+     same DOM between renders instead of remounting the whole menu) */
+  function renderNavItem(item: typeof navItems[0]) {
     const active = isActive(item.href);
     return (
       <Link
+        key={item.href}
         href={item.href}
         title={collapsed ? item.label : undefined}
         style={{
@@ -209,7 +211,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   }
 
   /* ── Sidebar inner content (reused for desktop + mobile overlay) ── */
-  function SidebarContent() {
+  function renderSidebarContent() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -244,7 +246,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
         {/* Nav items */}
         <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed ? '4px 8px' : '4px 10px' }}>
           {visibleItems.map(item => (
-            <NavItem key={item.href} item={item} />
+            renderNavItem(item)
           ))}
         </nav>
 
@@ -296,7 +298,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
             zIndex:          40,
             backdropFilter:  'blur(2px)',
           }}
-          onClick={() => setMobileOpen(false)}
+          onClick={() => setMobileOpenOn(null)}
         />
       )}
 
@@ -316,7 +318,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
           overflowX:       'hidden',
         }}
       >
-        <SidebarContent />
+        {renderSidebarContent()}
       </aside>
 
       {/* ── Desktop sidebar (sticky) ── */}
@@ -335,7 +337,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
           zIndex:          10,
         }}
       >
-        <SidebarContent />
+        {renderSidebarContent()}
       </aside>
 
       {/* ── Main content area ── */}
@@ -364,7 +366,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
             <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>מחר אחר</span>
           </div>
           <button
-            onClick={() => setMobileOpen(o => !o)}
+            onClick={() => setMobileOpenOn(o => (o === pathname ? null : pathname))}
             style={{ width: 36, height: 36, border: 'none', background: 'none', cursor: 'pointer', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}
           >
             <Icon name={mobileOpen ? 'x' : 'menu'} size={20} />

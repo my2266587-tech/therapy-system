@@ -13,6 +13,16 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Pages load their data with `useEffect(() => { load(); }, [load])`, and
+      // load() starts with setLoading(true). On mount that state is already
+      // true, so React bails out — no real cascading render. Kept visible as a
+      // warning (prefer event handlers / derived state in new code) so that
+      // genuine errors aren't drowned out.
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;

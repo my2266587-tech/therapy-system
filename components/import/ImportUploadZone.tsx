@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type DragEvent } from 'react';
+import { useRef, useState } from 'react';
 
 interface Props {
   busy?: boolean;

@@ -351,7 +351,7 @@ export default function TripsPage() {
               display: 'flex', justifyContent: 'space-between',
             }}>
               <span>{filtered.length} נסיעות</span>
-              <span style={{ fontWeight: 600, color: C.sub }}>סה"כ: {totalLabel}</span>
+              <span style={{ fontWeight: 600, color: C.sub }}>סה״כ: {totalLabel}</span>
             </div>
           </div>
         )}

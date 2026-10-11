@@ -37,8 +37,7 @@ async function authorize(req: NextRequest): Promise<{ ok: true; userEmail: strin
 
 const ALLOWED_STATUSES = ['draft_ready', 'needs_match', 'failed', 'approved'] as const;
 type Status = typeof ALLOWED_STATUSES[number];
-const ALLOWED_MATCH = ['matched', 'ambiguous', 'not_found'] as const;
-type MatchStatus = typeof ALLOWED_MATCH[number];
+type MatchStatus = 'matched' | 'ambiguous' | 'not_found';
 
 /* ── GET ──────────────────────────────────────────────────────────── */
 

@@ -10,7 +10,7 @@
  *   - No multi-select, no ZIP, no per-staff exports.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 const C = {
@@ -76,11 +76,11 @@ export default function MonthlyReportsPage() {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
-  const yearOptions = useMemo(() => {
-    const y = now.getFullYear();
+  // Fixed for the lifetime of the page (computed once on mount).
+  const [yearOptions] = useState(() => {
+    const y = new Date().getFullYear();
     return [y - 2, y - 1, y, y + 1];
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
   const generate = useCallback(async () => {
     if (status.kind === 'pending') return;
@@ -257,7 +257,7 @@ function Select({
 
 function StatusLine({ status }: { status: Status }) {
   if (status.kind === 'idle') {
-    return <span style={{ fontSize: 12, color: C.muted }}>בחרי חודש ולחצי "הפק דוח"</span>;
+    return <span style={{ fontSize: 12, color: C.muted }}>בחרי חודש ולחצי &quot;הפק דוח&quot;</span>;
   }
   if (status.kind === 'pending') {
     return <span style={{ fontSize: 12, color: C.muted }}>שולפת נתונים ומייצרת את הקובץ...</span>;
@@ -321,7 +321,7 @@ function HistoryList({ runs, loading }: { runs: HistoryRun[]; loading: boolean }
           border: `1px dashed ${C.border}`,
         }}>
           עוד לא הופקו דוחות. הדוח הראשון ייכנס לכאן אחרי הלחיצה על
-          "הפק דוח" או אחרי ה-cron של 1 בחודש.
+          &quot;הפק דוח&quot; או אחרי ה-cron של 1 בחודש.
         </div>
       ) : (
         <div style={{

@@ -218,7 +218,7 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: C.accent, display: 'inline-block', flexShrink: 0 }} />
                   <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
-                    {(s.patient as any)?.full_name ?? '—'}
+                    {s.patient?.full_name ?? '—'}
                   </span>
                 </div>
                 <DateDisplay

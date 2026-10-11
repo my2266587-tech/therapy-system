@@ -380,9 +380,9 @@ function PatientRow({ patient, divider, onEdit, onDelete }: {
       </div>
 
       {/* Coordinator */}
-      {(patient.coordinator as any)?.full_name && (
+      {patient.coordinator?.full_name && (
         <span style={{ fontSize: 12, color: '#94A3B8', flexShrink: 0, whiteSpace: 'nowrap' }}>
-          {(patient.coordinator as any).full_name}
+          {patient.coordinator?.full_name}
         </span>
       )}
 

@@ -159,7 +159,7 @@ export default function QuarterlyPage() {
                   {/* Patient + date */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: 0, lineHeight: 1.3 }}>
-                      {(r.patient as any)?.full_name ?? '—'}
+                      {r.patient?.full_name ?? '—'}
                     </p>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
                       <DateDisplay date={r.date} size="sm" />
@@ -260,7 +260,7 @@ function QuarterlyDetail({ record }: { record: QuarterlySummary }) {
         padding: '14px 16px', marginBottom: 18,
         backgroundColor: '#F8FAFC', borderRadius: 10, border: `1px solid ${C.border}`,
       }}>
-        <MetaItem label="מטופלת" value={(record.patient as any)?.full_name ?? '—'} />
+        <MetaItem label="מטופלת" value={record.patient?.full_name ?? '—'} />
         <MetaItem label="רבעון" value={quarterOf(record.date)} />
         <MetaItem label="תאריך" value={<DateDisplay date={record.date} size="sm" />} />
         {record.duration_minutes && <MetaItem label="משך" value={`${record.duration_minutes} דק'`} />}

@@ -55,7 +55,7 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!form.patient_id) { setSessions([]); return; }
+    if (!form.patient_id) return; // no patient → the list is hidden below
     supabase.from('sessions').select('id, date, start_time').eq('patient_id', form.patient_id).order('date', { ascending: false })
       .then(({ data }) => setSessions(data ?? []));
   }, [form.patient_id]);
@@ -171,7 +171,7 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
   }
 
   const patientOptions = patients.map(p => ({ value: p.id, label: p.full_name }));
-  const sessionOptions = sessions.map(s => ({ value: s.id, label: `${s.date} ${s.start_time}` }));
+  const sessionOptions = (form.patient_id ? sessions : []).map(s => ({ value: s.id, label: `${s.date} ${s.start_time}` }));
 
   const attachmentSection = (
     <FormGroup title="קובץ מצורף">

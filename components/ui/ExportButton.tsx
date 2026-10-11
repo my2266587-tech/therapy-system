@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  exportToExcel, exportToPdf, type Column, type ExportOptions,
+  exportToExcel, exportToPdf, type ExportOptions,
 } from '@/lib/exportTable';
 
 interface Props<T> extends ExportOptions<T> {

@@ -115,7 +115,7 @@ export default function ExpensesPage() {
               fontSize: 11, fontWeight: 600, color: '#92400E', margin: '0 0 10px',
               textTransform: 'uppercase', letterSpacing: '0.07em',
             }}>
-              סה"כ הוצאות
+              סה״כ הוצאות
             </p>
             <p style={{
               fontSize: 32, fontWeight: 700, margin: 0, lineHeight: 1,
@@ -190,9 +190,9 @@ export default function ExpensesPage() {
                 </div>
 
                 {/* Patient */}
-                {(r.patient as any)?.full_name && (
+                {r.patient?.full_name && (
                   <span style={{ fontSize: 12, color: C.sub, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    {(r.patient as any).full_name}
+                    {r.patient?.full_name}
                   </span>
                 )}
 

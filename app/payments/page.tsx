@@ -254,7 +254,7 @@ export default function PaymentsPage() {
                     <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0' }}>
                       {r.payment_method ? (paymentMethodLabels[r.payment_method] ?? r.payment_method) : '—'}
                       {r.received_date && ` · ${r.received_date}`}
-                      {(r.coordinator as any)?.full_name && ` · ${(r.coordinator as any).full_name}`}
+                      {r.coordinator?.full_name && ` · ${r.coordinator?.full_name}`}
                     </p>
                     {r.notes && (
                       <p style={{
