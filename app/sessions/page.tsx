@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { fetchAll } from '@/lib/fetchAll';
 import { useSessionsLiveSync } from '@/lib/useSessionsLiveSync';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
@@ -12,6 +13,7 @@ import DateDisplay from '@/components/ui/DateDisplay';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { hebrewDay } from '@/lib/dateUtils';
 import type { Session } from '@/types';
+import { useFeedback } from '@/components/ui/Feedback';
 
 function travelModeLabel(mode: string | null | undefined): string {
   if (mode === 'taxi')  return 'מונית';
@@ -47,6 +49,7 @@ export default function SessionsPage() {
 }
 
 function SessionsInner() {
+  const { confirm, toast } = useFeedback();
   const router = useRouter();
   const sp     = useSearchParams();
   const filter = sp.get('filter') ?? 'all';
@@ -59,10 +62,12 @@ function SessionsInner() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await fetchAll((from, to) => supabase
       .from('sessions')
       .select('*, patient:patient_id(full_name)')
-      .order('date', { ascending: false });
+      .order('date', { ascending: false })
+      .order('id')
+      .range(from, to));
     setRecords((data ?? []) as Session[]);
     setLoading(false);
   }, []);
@@ -74,8 +79,9 @@ function SessionsInner() {
   useSessionsLiveSync(load);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק פגישה זו?')) return;
-    await supabase.from('sessions').delete().eq('id', id);
+    if (!(await confirm({ message: 'האם למחוק פגישה זו?' }))) return;
+    const { error } = await supabase.from('sessions').delete().eq('id', id);
+    if (error) { toast.error(`המחיקה נכשלה: ${error.message}`); return; }
     load();
   }
 

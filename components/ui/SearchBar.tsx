@@ -1,17 +1,13 @@
 'use client';
 
+import { colors as C } from '@/lib/theme';
+
 /**
  * Shared free-text search box + "no results" card, used across the list
  * pages (summaries, staff, sessions, payments, expenses, petty-cash,
  * quarterly, phone-pending). Keeps the search affordance visually identical
  * everywhere — a single teal-focused input.
  */
-
-const C = {
-  card: '#FFFFFF', border: '#E8ECF0', accent: '#0D9488',
-  accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', muted: '#94A3B8',
-};
 
 export default function SearchBar({
   value, onChange, placeholder = 'חיפוש חופשי...', width = 320,

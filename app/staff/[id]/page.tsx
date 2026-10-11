@@ -21,13 +21,8 @@ import DocumentPreviewModal from '@/components/ui/DocumentPreviewModal';
 import { STAFF_ROLE_STYLE } from '@/lib/staffRoles';
 import { formatGregorian, PRESETS } from '@/lib/dateUtils';
 import type { StaffMember, StaffDocumentWithUrl } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 const TABS = ['פרטים', 'מטופלות', 'מסמכים'] as const;
 type Tab = typeof TABS[number];
@@ -52,6 +47,7 @@ function initials(name: string) {
 }
 
 export default function StaffDetailPage() {
+  const { confirm } = useFeedback();
   const { id } = useParams<{ id: string }>();
 
   const [staff,    setStaff]    = useState<StaffMember | null>(null);
@@ -95,12 +91,12 @@ export default function StaffDetailPage() {
     const msg = next
       ? `להחזיר את ${staff.full_name} לפעילות?`
       : `להשהות את ${staff.full_name}? הקישורים למטופלות, המסמכים והתיעוד הקיימים יישארו — היא רק תוסתר מבחירה חדשה.`;
-    if (!window.confirm(msg)) return;
+    if (!(await confirm({ message: msg }))) return;
     setToggling(true);
     await supabase.from('staff').update({ is_active: next }).eq('id', staff.id);
     setToggling(false);
     load();
-  }, [staff, load]);
+  }, [staff, load, confirm]);
 
   if (loading) {
     return (
@@ -341,6 +337,7 @@ function PatientsTab({
   onChange: () => void;
   getToken: () => Promise<string | null>;
 }) {
+  const { confirm } = useFeedback();
   const [allPatients, setAllPatients] = useState<PatientOption[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -386,7 +383,7 @@ function PatientsTab({
   }
 
   async function unlink(patientId: string) {
-    if (!window.confirm('להסיר את הקישור למטופלת?')) return;
+    if (!(await confirm({ message: 'להסיר את הקישור למטופלת?' }))) return;
     const token = await getToken();
     if (!token) return;
     const res = await fetch(`/api/staff/${staffId}/patients`, {
@@ -605,6 +602,7 @@ function DocumentsTab({
   setDocs: React.Dispatch<React.SetStateAction<StaffDocumentWithUrl[]>>;
   getToken: () => Promise<string | null>;
 }) {
+  const { confirm } = useFeedback();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -655,7 +653,7 @@ function DocumentsTab({
   }, [handleFiles]);
 
   const remove = useCallback(async (doc: StaffDocumentWithUrl) => {
-    if (!window.confirm(`למחוק את "${doc.file_name}"? פעולה זו אינה הפיכה.`)) return;
+    if (!(await confirm({ message: `למחוק את "${doc.file_name}"? פעולה זו אינה הפיכה.` }))) return;
     const token = await getToken();
     if (!token) return;
     setDeletingId(doc.id);
@@ -671,7 +669,7 @@ function DocumentsTab({
       setDocs(prev => prev.filter(d => d.id !== doc.id));
     }
     setDeletingId(null);
-  }, [staffId, getToken, setDocs]);
+  }, [staffId, getToken, setDocs, confirm]);
 
   return (
     <div>

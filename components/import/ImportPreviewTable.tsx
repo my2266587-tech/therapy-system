@@ -1,6 +1,7 @@
 'use client';
 
 import type { ValidatedRow } from '@/lib/import/types';
+import { colors as C } from '@/lib/theme';
 
 interface FieldDef { key: string; label: string }
 
@@ -10,11 +11,6 @@ interface Props {
   /** Show only rows of these statuses (undefined = all). */
   filter?: ('valid' | 'duplicate' | 'error' | 'warning')[];
 }
-
-const C = {
-  card: '#FFFFFF', border: '#E8ECF0', text: '#1A2332',
-  sub: '#64748B', muted: '#94A3B8',
-};
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; border: string; label: string }> = {
   valid:     { bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0', label: 'תקין' },

@@ -11,16 +11,13 @@ import {
   TX_META,
 } from '@/lib/hourBank';
 import type { HourBank, WorkTimeEntry, HourBankTransaction } from '@/types';
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors } from '@/lib/theme';
 
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  pos: '#0D9488', neg: '#DC2626',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+const C = { ...colors, pos: '#0D9488', neg: '#DC2626' };
 
 export default function HourBankPage() {
+  const { confirm, toast } = useFeedback();
   const [bank, setBank] = useState<HourBank | null>(null);
   const [entries, setEntries] = useState<WorkTimeEntry[]>([]);
   const [txs, setTxs] = useState<HourBankTransaction[]>([]);
@@ -70,7 +67,7 @@ export default function HourBankPage() {
       await load();
     } catch (err) {
       const message = (err as { message?: string })?.message;
-      alert(friendlyRpcError(message));
+      toast.error(friendlyRpcError(message));
     } finally {
       setBusy(false);
     }
@@ -100,10 +97,10 @@ export default function HourBankPage() {
     run(() => rpcUpdateEntry(id, startedAt, endedAt, note));
   }
 
-  function handleDeleteEntry() {
+  async function handleDeleteEntry() {
     const id = editEntry?.id;
     if (!id) return;
-    if (!confirm('האם למחוק רשומת עבודה זו? הזמן יוחזר לבנק.')) return;
+    if (!(await confirm({ message: 'האם למחוק רשומת עבודה זו? הזמן יוחזר לבנק.' }))) return;
     setEditEntry(null);
     run(() => rpcDeleteEntry(id));
   }

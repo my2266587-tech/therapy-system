@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchAll } from '@/lib/fetchAll';
 import Modal from '@/components/ui/Modal';
 import SummaryForm from '@/components/summaries/SummaryForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
@@ -10,13 +11,8 @@ import DateDisplay from '@/components/ui/DateDisplay';
 import SummaryDetailCard from '@/components/summaries/SummaryDetailCard';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import type { SessionSummary } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 interface SummaryWithRel extends SessionSummary {
   patient: { full_name: string } | null;
@@ -42,6 +38,7 @@ const SUMMARY_EXPORT_COLUMNS: Column<SummaryWithRel>[] = [
 /* ── Main page ── */
 
 export default function SummariesPage() {
+  const { confirm, toast } = useFeedback();
   const [records, setRecords] = useState<SummaryWithRel[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState('');
@@ -51,9 +48,11 @@ export default function SummariesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('session_summaries')
+    const { data } = await fetchAll((from, to) => supabase.from('session_summaries')
       .select('*, patient:patient_id(full_name)')
-      .order('date', { ascending: false });
+      .order('date', { ascending: false })
+      .order('id')
+      .range(from, to));
     let rows = (data ?? []) as unknown as SummaryWithRel[];
 
     // Resolve fresh signed URLs for any uploaded attachments. We do this in
@@ -94,8 +93,9 @@ export default function SummariesPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק סיכום זה?')) return;
-    await supabase.from('session_summaries').delete().eq('id', id);
+    if (!(await confirm({ message: 'האם למחוק סיכום זה?' }))) return;
+    const { error } = await supabase.from('session_summaries').delete().eq('id', id);
+    if (error) { toast.error(`המחיקה נכשלה: ${error.message}`); return; }
     load();
   }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchAll } from '@/lib/fetchAll';
 import Modal from '@/components/ui/Modal';
 import PaymentForm from '@/components/payments/PaymentForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
@@ -11,6 +12,8 @@ import { paymentMethodLabels, emailStatusLabels } from '@/lib/labels';
 import { useSettings } from '@/lib/settings/SettingsProvider';
 import { hebrewLong } from '@/lib/dateUtils';
 import type { Payment } from '@/types';
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 /**
  * Resolve the date to show for a payment row. Prefer a real day over the
@@ -32,13 +35,6 @@ function paymentDisplayDate(r: Payment): { greg: string; hebrew: string } {
   }
   return { greg: r.month ?? '', hebrew: '' };
 }
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
 
 const PAID_STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
   true:  { label: 'שולם',    bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0', dot: '#16A34A' },
@@ -63,6 +59,7 @@ const PAYMENT_EXPORT_COLUMNS: Column<Payment>[] = [
 ];
 
 export default function PaymentsPage() {
+  const { confirm, toast } = useFeedback();
   const { settings, labelMaps } = useSettings();
   // live, admin-editable labels/title (override the static defaults above)
   const paymentMethodLabels = labelMaps.paymentMethod;
@@ -76,10 +73,12 @@ export default function PaymentsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await fetchAll((from, to) => supabase
       .from('payments')
       .select('*, coordinator:coordinator_id(full_name), summary:summary_id(date)')
-      .order('month', { ascending: false });
+      .order('month', { ascending: false })
+      .order('id')
+      .range(from, to));
     setRecords((data ?? []) as Payment[]);
     setLoading(false);
   }, []);
@@ -87,8 +86,9 @@ export default function PaymentsPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק תשלום זה?')) return;
-    await supabase.from('payments').delete().eq('id', id);
+    if (!(await confirm({ message: 'האם למחוק תשלום זה?' }))) return;
+    const { error } = await supabase.from('payments').delete().eq('id', id);
+    if (error) { toast.error(`המחיקה נכשלה: ${error.message}`); return; }
     load();
   }
 

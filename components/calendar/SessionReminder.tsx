@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@/types';
+import { colors as C } from '@/lib/theme';
 
 /**
  * "שליחת תזכורת" bar shown above the session form when a session is opened
@@ -16,11 +17,6 @@ import type { Session } from '@/types';
  * Any of the three stamps sessions.reminder_sent_at so the UI shows
  * "תזכורת נשלחה" with date+time. No automatic sending / SMS at this stage.
  */
-
-const C = {
-  border: '#E8ECF0', accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-};
 
 interface PatientContact { full_name: string; phone: string | null; email: string | null; }
 

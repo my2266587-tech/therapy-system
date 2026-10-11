@@ -9,13 +9,8 @@ import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { hebrewDay } from '@/lib/dateUtils';
 import type { PrivateExpense } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 const EXPENSE_EXPORT_COLUMNS: Column<PrivateExpense>[] = [
   { header: 'תאריך',       accessor: r => r.date, width: 14 },
@@ -29,6 +24,7 @@ const EXPENSE_EXPORT_COLUMNS: Column<PrivateExpense>[] = [
 ];
 
 export default function ExpensesPage() {
+  const { confirm, toast } = useFeedback();
   const [records, setRecords] = useState<PrivateExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState('');
@@ -48,8 +44,9 @@ export default function ExpensesPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק הוצאה זו?')) return;
-    await supabase.from('private_expenses').delete().eq('id', id);
+    if (!(await confirm({ message: 'האם למחוק הוצאה זו?' }))) return;
+    const { error } = await supabase.from('private_expenses').delete().eq('id', id);
+    if (error) { toast.error(`המחיקה נכשלה: ${error.message}`); return; }
     load();
   }
 

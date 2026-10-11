@@ -1,19 +1,13 @@
 'use client';
 
 import type { HourBank } from '@/types';
+import { colors } from '@/lib/theme';
 import {
   remainingSeconds, remainingFraction, isEmpty,
   formatDuration, formatClock, formatDateTime,
 } from '@/lib/hourBank';
 
-const C = {
-  card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  danger: '#DC2626', dangerSub: '#FEF2F2', dangerRim: '#FECACA',
-  track: '#EEF2F6',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+const C = { ...colors, dangerSub: '#FEF2F2', dangerRim: '#FECACA', track: '#EEF2F6' };
 
 /** Big pill button used for the primary timer actions. */
 function ActionButton({

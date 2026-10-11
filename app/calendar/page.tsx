@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchAll } from '@/lib/fetchAll';
 import { useSessionsLiveSync } from '@/lib/useSessionsLiveSync';
 import Modal from '@/components/ui/Modal';
 import SessionForm from '@/components/sessions/SessionForm';
@@ -9,13 +10,8 @@ import SessionReminder from '@/components/calendar/SessionReminder';
 import { formatGregorian, formatHebrew, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
 import { getHolidaysInRange, type HolidayInfo, type HolidayTier } from '@/lib/hebcalHolidays';
 import type { Session } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 const SESSION_STATUS: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
   planned:   { label: 'מתוכננת',  bg: '#F0FDF9', text: '#0D9488', border: '#99F6E4', dot: '#0D9488' },
@@ -76,6 +72,7 @@ interface DndProps {
 }
 
 export default function CalendarPage() {
+  const { confirm, toast } = useFeedback();
   const [view,    setView]    = useState<View>('month');
   const [anchor,  setAnchor]  = useState(new Date());
   const [records, setRecords] = useState<SessionWithRel[]>([]);
@@ -97,11 +94,13 @@ export default function CalendarPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [s, p, st] = await Promise.all([
-      supabase
+      fetchAll((from, to) => supabase
         .from('sessions')
         .select('*, patient:patient_id(full_name, staff_member:staff_id(id, full_name))')
         .order('date', { ascending: true })
-        .order('start_time', { ascending: true }),
+        .order('start_time', { ascending: true })
+        .order('id')
+        .range(from, to)),
       supabase.from('patients').select('id, full_name').order('full_name'),
       supabase.from('staff').select('id, full_name').order('full_name'),
     ]);
@@ -179,17 +178,17 @@ export default function CalendarPage() {
     const prev = records;
     setRecords(rs => rs.map(r => r.id === id ? { ...r, date: newDate } : r));
     const { error } = await supabase.from('sessions').update({ date: newDate }).eq('id', id);
-    if (error) { setRecords(prev); alert('שגיאה בעדכון הפגישה'); return; }
+    if (error) { setRecords(prev); toast.error('שגיאה בעדכון הפגישה'); return; }
     await load();
   }
 
   /* Delete a session straight from a calendar card (optimistic). */
   async function deleteSession(id: string) {
-    if (!confirm('האם למחוק פגישה זו?')) return;
+    if (!(await confirm({ message: 'האם למחוק פגישה זו?' }))) return;
     const prev = records;
     setRecords(rs => rs.filter(r => r.id !== id));
     const { error } = await supabase.from('sessions').delete().eq('id', id);
-    if (error) { setRecords(prev); alert('שגיאה במחיקת הפגישה'); return; }
+    if (error) { setRecords(prev); toast.error('שגיאה במחיקת הפגישה'); return; }
     await load();
   }
 

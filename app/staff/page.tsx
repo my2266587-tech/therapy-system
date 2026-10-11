@@ -10,6 +10,7 @@ import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { STAFF_ROLE_STYLE as ROLE_STYLE } from '@/lib/staffRoles';
 import type { StaffMember } from '@/types';
+import { useFeedback } from '@/components/ui/Feedback';
 
 const STAFF_EXPORT_COLUMNS: Column<StaffMember>[] = [
   { header: 'שם מלא', accessor: r => r.full_name, width: 24 },
@@ -25,6 +26,7 @@ function initials(name: string) {
 }
 
 export default function StaffPage() {
+  const { confirm, toast } = useFeedback();
   const router = useRouter();
   const [records, setRecords] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,8 +44,9 @@ export default function StaffPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק איש צוות זה?')) return;
-    await supabase.from('staff').delete().eq('id', id);
+    if (!(await confirm({ message: 'האם למחוק איש צוות זה?' }))) return;
+    const { error } = await supabase.from('staff').delete().eq('id', id);
+    if (error) { toast.error(`המחיקה נכשלה: ${error.message}`); return; }
     load();
   }
 
@@ -52,7 +55,7 @@ export default function StaffPage() {
     const msg = next
       ? `להחזיר את ${r.full_name} לפעילות?`
       : `להשהות את ${r.full_name}? הקישורים למטופלות, המסמכים והתיעוד הקיימים יישארו — היא רק תוסתר מבחירה חדשה.`;
-    if (!confirm(msg)) return;
+    if (!(await confirm({ message: msg }))) return;
     await supabase.from('staff').update({ is_active: next }).eq('id', r.id);
     load();
   }

@@ -9,13 +9,8 @@ import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import DateDisplay from '@/components/ui/DateDisplay';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import type { QuarterlySummary } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 function quarterOf(dateStr: string) {
   const d = new Date(dateStr);
@@ -25,6 +20,7 @@ function quarterOf(dateStr: string) {
 }
 
 export default function QuarterlyPage() {
+  const { confirm, toast } = useFeedback();
   const [records, setRecords] = useState<QuarterlySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState('');
@@ -47,8 +43,9 @@ export default function QuarterlyPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק סיכום רבעון זה?')) return;
-    await supabase.from('quarterly_summaries').delete().eq('id', id);
+    if (!(await confirm({ message: 'האם למחוק סיכום רבעון זה?' }))) return;
+    const { error } = await supabase.from('quarterly_summaries').delete().eq('id', id);
+    if (error) { toast.error(`המחיקה נכשלה: ${error.message}`); return; }
     load();
   }
 

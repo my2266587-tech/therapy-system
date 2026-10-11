@@ -3,11 +3,13 @@
 import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { fetchAll } from '@/lib/fetchAll';
 import Modal from '@/components/ui/Modal';
 import PatientForm from '@/components/patients/PatientForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import type { Patient } from '@/types';
+import { useFeedback } from '@/components/ui/Feedback';
 
 const AVATAR_COLORS = [
   { bg: '#E6F7F5', text: '#0D9488', border: '#99F6E4' },
@@ -50,6 +52,7 @@ export default function PatientsPage() {
 }
 
 function PatientsInner() {
+  const { confirm, toast } = useFeedback();
   const router = useRouter();
   const sp     = useSearchParams();
   const statusFilter = sp.get('status') ?? 'all';
@@ -63,10 +66,12 @@ function PatientsInner() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await fetchAll((from, to) => supabase
       .from('patients')
       .select('*, coordinator:coordinator_id(full_name)')
-      .order('full_name');
+      .order('full_name')
+      .order('id')
+      .range(from, to));
     setRecords((data ?? []) as Patient[]);
     setLoading(false);
   }, []);
@@ -74,8 +79,9 @@ function PatientsInner() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק את המטופלת? פעולה זו אינה ניתנת לביטול.')) return;
-    await supabase.from('patients').delete().eq('id', id);
+    if (!(await confirm({ message: 'האם למחוק את המטופלת? פעולה זו אינה ניתנת לביטול.' }))) return;
+    const { error } = await supabase.from('patients').delete().eq('id', id);
+    if (error) { toast.error(`המחיקה נכשלה: ${error.message}`); return; }
     load();
   }
 

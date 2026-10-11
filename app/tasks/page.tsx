@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { fetchAll } from '@/lib/fetchAll';
 import Modal from '@/components/ui/Modal';
 import TaskForm from '@/components/tasks/TaskForm';
 import PersonalPlanForm from '@/components/tasks/PersonalPlanForm';
@@ -11,13 +12,8 @@ import { IconBtn, TrashIcon } from '@/components/ui/Icons';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { hebrewDay } from '@/lib/dateUtils';
 import type { Task } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 const PRIORITY = {
   high:   { label: 'גבוהה',  bg: '#FEF2F2', color: '#DC2626', rim: '#FECACA' },
@@ -32,6 +28,7 @@ const groupOf = (t: Task) => (t.category?.trim() || DEFAULT_GROUP);
 interface Group { name: string; open: Task[]; done: Task[]; }
 
 export default function TasksPage() {
+  const { confirm, toast } = useFeedback();
   const [records, setRecords] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState('');
@@ -49,11 +46,13 @@ export default function TasksPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await fetchAll((from, to) => supabase
       .from('tasks')
       .select('*, patient:patient_id(full_name)')
       .order('due_date', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id')
+      .range(from, to));
     setRecords((data ?? []) as Task[]);
     setLoading(false);
   }, []);
@@ -73,7 +72,7 @@ export default function TasksPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק משימה זו?')) return;
+    if (!(await confirm({ message: 'האם למחוק משימה זו?' }))) return;
     setRecords(rs => rs.filter(r => r.id !== id));  // optimistic
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) load();
@@ -84,7 +83,7 @@ export default function TasksPage() {
     const prev = records;
     setRecords(rs => rs.map(r => r.id === id ? { ...r, due_date: newDate } : r));  // optimistic
     const { error } = await supabase.from('tasks').update({ due_date: newDate }).eq('id', id);
-    if (error) { setRecords(prev); alert('שגיאה בעדכון התאריך'); }
+    if (error) { setRecords(prev); toast.error('שגיאה בעדכון התאריך'); }
   }
 
   function openAdd(category?: string) { setEditing(null); setAddCategory(category); setOpen(true); }

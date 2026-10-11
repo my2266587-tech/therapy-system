@@ -5,6 +5,7 @@ import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import { formatGregorian, formatHebrew, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
 import { getHolidaysInRange, type HolidayInfo, type HolidayTier } from '@/lib/hebcalHolidays';
 import type { Task } from '@/types';
+import { colors as C } from '@/lib/theme';
 
 /**
  * Personal calendar view for the task board ("לוח משימות – אישי").
@@ -18,13 +19,6 @@ import type { Task } from '@/types';
  * fast day, Chol HaMoed and Rosh Chodesh are marked directly on the grid —
  * see lib/hebcalHolidays.ts.
  */
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
 
 const DAY_LABELS      = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 const DAY_LABELS_LONG = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];

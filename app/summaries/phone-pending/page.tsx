@@ -19,13 +19,7 @@ import { Field, SelectField } from '@/components/ui/FormField';
 import DictatedTextarea from '@/components/ui/DictatedTextarea';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import type { PhoneSummaryDraft } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { colors as C } from '@/lib/theme';
 
 type FilterKey = 'pending' | 'all' | 'draft_ready' | 'needs_match' | 'failed' | 'approved';
 

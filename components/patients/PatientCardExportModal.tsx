@@ -9,6 +9,7 @@ import {
   type PatientCardPayment,
 } from '@/lib/patientCardPdf';
 import type { Patient, Session, SessionSummary } from '@/types';
+import { colors as C } from '@/lib/theme';
 
 interface Props {
   open: boolean;
@@ -30,11 +31,6 @@ const SECTIONS: { key: PatientCardSection; label: string }[] = [
   { key: 'payments',  label: 'תשלומים' },
   { key: 'notes',     label: 'הערות כלליות' },
 ];
-
-const C = {
-  accent: '#0D9488', border: '#E8ECF0', text: '#1A2332',
-  sub: '#64748B', muted: '#94A3B8',
-};
 
 export default function PatientCardExportModal({
   open, onClose, patient, linkedStaff, sessions, summaries,

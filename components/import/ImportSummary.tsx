@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { colors as C } from '@/lib/theme';
 
 interface Props {
   inserted:  number;
@@ -10,12 +11,6 @@ interface Props {
   targetLabel: string;
   onReset:   () => void;
 }
-
-const C = {
-  card: '#FFFFFF', border: '#E8ECF0', text: '#1A2332',
-  sub: '#64748B', muted: '#94A3B8',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-};
 
 const TARGET_PAGE: Record<string, string> = {
   patients: '/patients',

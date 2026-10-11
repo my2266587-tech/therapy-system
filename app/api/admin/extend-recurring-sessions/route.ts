@@ -23,6 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseServer';
+import { fetchAll } from '@/lib/fetchAll';
 
 export const maxDuration = 60;
 
@@ -75,17 +76,23 @@ export async function POST(req: NextRequest) {
     // the patient still wants that weekly time. No date filter — past
     // sessions are valid pattern carriers; we just skip generating any
     // copy whose computed date lands before today.
-    const { data: source, error: srcErr } = await supabase
+    // Paged: PostgREST caps each response at 1000 rows.
+    const { data: source, error: srcErr } = await fetchAll((from, to) => supabase
       .from('sessions')
       .select('id, patient_id, date, start_time, end_time, status, notes, duration_minutes, is_travel, travel_mode, travel_distance_km, travel_cost')
-      .in('status', ['planned', 'completed']);
+      .in('status', ['planned', 'completed'])
+      .order('id')
+      .range(from, to));
     if (srcErr) throw new Error(`fetch source sessions: ${srcErr.message}`);
 
     // Existing dedup key set across ALL planned sessions (past + future)
     // so we never insert a clash if the clinic already has it.
-    const { data: existingAll, error: existErr } = await supabase
+    // Must be complete — a missing row here means a duplicate insert below.
+    const { data: existingAll, error: existErr } = await fetchAll((from, to) => supabase
       .from('sessions')
-      .select('patient_id, date, start_time');
+      .select('patient_id, date, start_time')
+      .order('id')
+      .range(from, to));
     if (existErr) throw new Error(`fetch all sessions: ${existErr.message}`);
 
     const keys = new Set<string>(

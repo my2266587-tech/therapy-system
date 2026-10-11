@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 're
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors } from '@/lib/theme';
 
 /**
  * Floating side assistant — does not block the page.
@@ -52,24 +54,10 @@ const EXAMPLES = [
   'למי חסר סיכום פגישה?',
 ] as const;
 
-const C = {
-  card:        '#FFFFFF',
-  border:      '#E8ECF0',
-  text:        '#1A2332',
-  sub:         '#64748B',
-  muted:       '#94A3B8',
-  accent:      '#0D9488',
-  accentSub:   '#F0FDF9',
-  accentRim:   '#99F6E4',
-  bg:          '#F6F8FB',
-  userBubble:  '#0D9488',
-  userText:    '#FFFFFF',
-  botBubble:   '#FFFFFF',
-  errorBubble: '#FEF2F2',
-  errorText:   '#DC2626',
-};
+const C = { ...colors, userBubble: '#0D9488', userText: '#FFFFFF', botBubble: '#FFFFFF', errorBubble: '#FEF2F2', errorText: '#DC2626' };
 
 export default function AssistantDrawer() {
+  const { confirm } = useFeedback();
   const router = useRouter();
   const [open, setOpen]       = useState(false);
   const [input, setInput]     = useState('');
@@ -211,12 +199,12 @@ export default function AssistantDrawer() {
     }
   }, [sending, router]);
 
-  const clearChat = useCallback(() => {
+  const clearChat = useCallback(async () => {
     if (messages.length === 0) return;
-    if (!window.confirm('למחוק את היסטוריית השיחה?')) return;
+    if (!(await confirm({ message: 'למחוק את היסטוריית השיחה?' }))) return;
     setMessages([]);
     setFocus(null);
-  }, [messages.length]);
+  }, [messages.length, confirm]);
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchAll } from '@/lib/fetchAll';
 import Modal from '@/components/ui/Modal';
 import TripForm from '@/components/trips/TripForm';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
@@ -9,13 +10,8 @@ import ExportButton, { type Column } from '@/components/ui/ExportButton';
 import { hebrewDay } from '@/lib/dateUtils';
 import { tripTypeLabel } from '@/lib/trips';
 import type { Trip } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 const TRIP_EXPORT_COLUMNS: Column<Trip>[] = [
   { header: 'תאריך',     accessor: r => new Date(r.date), width: 14 },
@@ -36,6 +32,7 @@ const filterInput: React.CSSProperties = {
 };
 
 export default function TripsPage() {
+  const { confirm } = useFeedback();
   const [records, setRecords] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [open,    setOpen]    = useState(false);
@@ -51,10 +48,12 @@ export default function TripsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await fetchAll((from, to) => supabase
       .from('trips')
       .select('*, patient:patient_id(full_name)')
-      .order('date', { ascending: false });
+      .order('date', { ascending: false })
+      .order('id')
+      .range(from, to));
     const rows = (data ?? []) as Trip[];
     setRecords(rows);
     setLoading(false);
@@ -82,7 +81,7 @@ export default function TripsPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק נסיעה זו?')) return;
+    if (!(await confirm({ message: 'האם למחוק נסיעה זו?' }))) return;
     const rec = records.find(r => r.id === id);
     const { error } = await supabase.from('trips').delete().eq('id', id);
     // Clean up the orphaned receipt object (best-effort).

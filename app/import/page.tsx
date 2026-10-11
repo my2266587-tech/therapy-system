@@ -9,12 +9,7 @@ import ImportUploadZone     from '@/components/import/ImportUploadZone';
 import ImportMappingTable   from '@/components/import/ImportMappingTable';
 import ImportPreviewTable   from '@/components/import/ImportPreviewTable';
 import ImportSummary        from '@/components/import/ImportSummary';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-};
+import { colors as C } from '@/lib/theme';
 
 type Step = 'target' | 'upload' | 'review' | 'done';
 type StatusFilter = 'all' | 'valid' | 'duplicate' | 'error';

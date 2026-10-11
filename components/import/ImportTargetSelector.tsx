@@ -1,5 +1,7 @@
 'use client';
 
+import { colors as C } from '@/lib/theme';
+
 interface TargetCard {
   key:         string;
   label:       string;
@@ -12,12 +14,6 @@ interface Props {
   selected: string | null;
   onPick:   (key: string) => void;
 }
-
-const C = {
-  card: '#FFFFFF', border: '#E8ECF0', text: '#1A2332',
-  sub: '#64748B', muted: '#94A3B8',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-};
 
 export default function ImportTargetSelector({ targets, selected, onPick }: Props) {
   return (

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import SidebarLayout from '@/components/layout/SidebarLayout';
 import { SettingsProvider } from '@/lib/settings/SettingsProvider';
+import { FeedbackProvider } from '@/components/ui/Feedback';
 
 export const metadata: Metadata = {
   title: 'מחר אחר – שדה חמד',
@@ -26,9 +27,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <SettingsProvider>
-          <SidebarLayout>
-            {children}
-          </SidebarLayout>
+          <FeedbackProvider>
+            <SidebarLayout>
+              {children}
+            </SidebarLayout>
+          </FeedbackProvider>
         </SettingsProvider>
       </body>
     </html>

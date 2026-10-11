@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Field, SelectField, TextareaField } from '@/components/ui/FormField';
 import { useSettings } from '@/lib/settings/SettingsProvider';
 import type { Session } from '@/types';
+import { useFeedback } from '@/components/ui/Feedback';
 type PatientOpt = { id: string; full_name: string };
 
 export const TRAVEL_MODE_LABEL: Record<string, string> = {
@@ -24,6 +25,7 @@ function calcDuration(start: string, end: string): number | null {
 interface Props { initial: Session | null; onSave: () => void; onCancel: () => void; onDelete?: () => void; }
 
 export default function SessionForm({ initial, onSave, onCancel, onDelete }: Props) {
+  const { confirm } = useFeedback();
   const { settings } = useSettings();
   const STATUS_OPTIONS = settings.options.sessionStatus;
   const TRAVEL_MODE_OPTIONS = [{ value: '', label: 'ללא נסיעה' }, ...settings.options.travelMode];
@@ -90,7 +92,7 @@ export default function SessionForm({ initial, onSave, onCancel, onDelete }: Pro
 
   async function handleDelete() {
     if (!initial?.id) return;
-    if (!confirm('האם למחוק פגישה זו?')) return;
+    if (!(await confirm({ message: 'האם למחוק פגישה זו?' }))) return;
     setDeleting(true); setError('');
     const { error: err } = await supabase.from('sessions').delete().eq('id', initial.id);
     setDeleting(false);

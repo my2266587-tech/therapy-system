@@ -8,15 +8,11 @@ import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { hebrewDay } from '@/lib/dateUtils';
 import type { PettyCash } from '@/types';
-
-const C = {
-  bg: '#F6F8FB', card: '#FFFFFF', border: '#E8ECF0',
-  accent: '#0D9488', accentSub: '#F0FDF9', accentRim: '#99F6E4',
-  text: '#1A2332', sub: '#64748B', muted: '#94A3B8',
-  shadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
+import { useFeedback } from '@/components/ui/Feedback';
+import { colors as C } from '@/lib/theme';
 
 export default function PettyCashPage() {
+  const { confirm, toast } = useFeedback();
   const [records, setRecords] = useState<PettyCash[]>([]);
   const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState('');
@@ -36,8 +32,9 @@ export default function PettyCashPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm('האם למחוק רשומה זו?')) return;
-    await supabase.from('petty_cash').delete().eq('id', id);
+    if (!(await confirm({ message: 'האם למחוק רשומה זו?' }))) return;
+    const { error } = await supabase.from('petty_cash').delete().eq('id', id);
+    if (error) { toast.error(`המחיקה נכשלה: ${error.message}`); return; }
     load();
   }
 

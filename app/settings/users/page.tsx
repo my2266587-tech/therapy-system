@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useFeedback } from '@/components/ui/Feedback';
 
 interface AuthUser {
   id: string;
@@ -74,6 +75,7 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 export default function UsersSettingsPage() {
+  const { confirm } = useFeedback();
   const [loading, setLoading]           = useState(true);
   const [accessToken, setAccessToken]   = useState<string | null>(null);
   const [currentEmail, setCurrentEmail] = useState<string | null>(null);
@@ -200,7 +202,7 @@ export default function UsersSettingsPage() {
 
   async function handleDelete(user: AuthUser) {
     if (!accessToken) return;
-    if (!window.confirm(`למחוק את ${user.email}? פעולה זו בלתי הפיכה.`)) return;
+    if (!(await confirm({ message: `למחוק את ${user.email}? פעולה זו בלתי הפיכה.` }))) return;
 
     setActionId(user.id);
     setActionError(null);
