@@ -11,13 +11,17 @@ export default function LoginPage() {
   async function handleGoogleLogin() {
     setLoading(true);
     setError(null);
+    // Remember the page that sent us here; /auth/callback reads (and
+    // validates) it. A cookie keeps the OAuth redirectTo URL unchanged, so it
+    // still matches the Supabase redirect allow-list exactly.
+    const next = new URLSearchParams(window.location.search).get('next');
+    document.cookie = next
+      ? `post_login_next=${encodeURIComponent(next)}; path=/; max-age=600; samesite=lax`
+      : 'post_login_next=; path=/; max-age=0';
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: typeof window !== 'undefined'
-          ? `${window.location.origin}/auth/callback`
-          : '/auth/callback',
-      },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) {
       setError(error.message);

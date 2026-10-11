@@ -113,8 +113,6 @@ export function matchPatient(spokenRaw: string, patients: PatientRow[]): MatchRe
   const spokenNorm = normalizeName(spokenRaw);
   const cleanedName = shortenSpoken(spokenNorm) || spokenRaw.trim();
 
-  console.log(`[phone-match] spoken raw: ${spokenRaw}`);
-  console.log(`[phone-match] spoken normalized: ${spokenNorm}`);
 
   if (!spokenNorm || patients.length === 0) {
     console.log('[phone-match] result: not_found (no spoken name or no patients)');
@@ -139,7 +137,6 @@ export function matchPatient(spokenRaw: string, patients: PatientRow[]): MatchRe
 
   const contenders = scored.filter((s) => s.score >= CONTENDER);
   const top = scored[0];
-  console.log(`[phone-match] best candidate: ${top.norm}`);
   console.log(`[phone-match] score: ${top.score.toFixed(3)}`);
 
   if (contenders.length === 0) {

@@ -253,6 +253,6 @@ export async function POST(req: NextRequest) {
     .eq('id', sessionId);
   if (upErr) console.error(`${TAG} stamp failed:`, upErr.message);
 
-  console.log(`${TAG} sent to ${patient.email} for session ${sessionId} by ${user.email}`);
+  console.log(`${TAG} sent for session ${sessionId}`);
   return NextResponse.json({ ok: true, sent_at: sentAt, to: patient.email });
 }

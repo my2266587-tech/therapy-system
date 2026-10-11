@@ -57,5 +57,8 @@ create trigger trg_tasks_updated_at
 -- bypasses). Same shape as the data-table policies in rls-policies.sql.
 alter table tasks enable row level security;
 drop policy if exists tasks_authenticated_all on tasks;
-create policy tasks_authenticated_all on tasks
-  for all to authenticated using (true) with check (true);
+drop policy if exists tasks_authorized on tasks;
+create policy tasks_authorized on tasks
+  for all to authenticated
+  using ((select public.is_authorized_user()))
+  with check ((select public.is_authorized_user()));

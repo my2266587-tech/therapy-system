@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/components/ui/Logo';
+import { supabase } from '@/lib/supabase';
 import AssistantDrawer from '@/components/ui/AssistantDrawer';
 
 /* ── Icon paths (24×24 viewBox, stroke) ── */
@@ -52,7 +53,6 @@ function Icon({ name, size = 18, style }: { name: string; size?: number; style?:
 
 const navItems = [
   { href: '/tasks',          label: 'לוח משימות',       icon: 'tasks'       },
-  { href: '/hour-bank',      label: 'בנק שעות',         icon: 'hour-bank'   },
   { href: '/',               label: 'דשבורד',          icon: 'dashboard'   },
   { href: '/patients',       label: 'מטופלות',          icon: 'patients'    },
   { href: '/staff',          label: 'צוות',             icon: 'staff'       },
@@ -62,11 +62,12 @@ const navItems = [
   { href: '/summaries/phone-pending', label: 'טלפוניים ממתינים', icon: 'phone' },
   { href: '/quarterly',      label: 'סיכום רבעון',      icon: 'quarterly'   },
   { href: '/payments',       label: 'תשלומי שיראל',     icon: 'payments'    },
-  { href: '/expenses',       label: 'הוצאות פרטיות',    icon: 'expenses'    },
-  { href: '/petty-cash',     label: 'מעשר געלט',        icon: 'petty-cash'  },
+  { href: '/expenses',       label: 'הוצאות פרטיות',    icon: 'expenses',   adminOnly: true },
+  { href: '/petty-cash',     label: 'מעשר געלט',        icon: 'petty-cash', adminOnly: true },
   { href: '/trips',          label: 'נסיעות',           icon: 'trips'       },
   { href: '/reports/monthly', label: 'דוחות חודשיים',   icon: 'reports'     },
   { href: '/import',         label: 'ייבוא נתונים',     icon: 'import'      },
+  { href: '/hour-bank',      label: 'בנק שעות',         icon: 'hour-bank'   },
   { href: '/settings',       label: 'הגדרות',           icon: 'settings'    },
 ];
 
@@ -84,13 +85,19 @@ const SB = {
   logoMark:     '#0D9488',
 };
 
+/* Who is using the app. role 'unknown' = the check itself failed (network
+   etc.); the UI stays usable then — RLS still enforces access on every query. */
+type Access =
+  | { state: 'loading' }
+  | { state: 'denied' }
+  | { state: 'granted'; role: 'admin' | 'staff' | 'unknown' };
+
 export default function SidebarLayout({ children }: { children: React.ReactNode }) {
   const pathname     = usePathname();
+  const router       = useRouter();
   const [collapsed,  setCollapsed]  = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  /* Close mobile panel when route changes */
-  useEffect(() => { setMobileOpen(false); }, [pathname]);
+  const [access,     setAccess]     = useState<Access>({ state: 'loading' });
 
   /* Hide sidebar on auth pages and on the standalone intake form (it is
      opened both by patients via a public link and by therapists in a
@@ -98,7 +105,52 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   const noSidebar = pathname === '/login'
     || pathname?.startsWith('/auth/')
     || pathname?.startsWith('/intake/');
+
+  /* Close mobile panel when route changes */
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  /* Access check: signed in? listed in authorized_users? which role? */
+  useEffect(() => {
+    if (noSidebar) return;
+    let cancelled = false;
+    const toLogin = () =>
+      router.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (!session) { toLogin(); return; }
+      try {
+        const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${session.access_token}` } });
+        if (cancelled) return;
+        if (res.status === 401) toLogin();
+        else if (res.status === 403) setAccess({ state: 'denied' });
+        else if (!res.ok) setAccess({ state: 'granted', role: 'unknown' });
+        else {
+          const me = await res.json();
+          if (!cancelled) setAccess({ state: 'granted', role: me.role === 'admin' ? 'admin' : 'staff' });
+        }
+      } catch {
+        if (!cancelled) setAccess({ state: 'granted', role: 'unknown' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [noSidebar, router]);
+
   if (noSidebar) return <>{children}</>;
+  if (access.state === 'loading') return <AccessScreen title="טוען..." />;
+  if (access.state === 'denied') {
+    return (
+      <AccessScreen
+        title="אין הרשאה"
+        text="החשבון שאיתו נכנסת אינו מורשה במערכת. יש לפנות למנהלת המערכת."
+        onSignOut={async () => { await supabase.auth.signOut(); router.replace('/login'); }}
+      />
+    );
+  }
+
+  const isAdmin         = access.role === 'admin';
+  const visibleItems    = navItems.filter(item => !item.adminOnly || isAdmin);
+  const onAdminOnlyPage = navItems.some(item => item.adminOnly && pathname?.startsWith(item.href));
 
   function isActive(href: string) {
     if (href === '/') return pathname === '/';
@@ -191,7 +243,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
         {/* Nav items */}
         <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed ? '4px 8px' : '4px 10px' }}>
-          {navItems.map(item => (
+          {visibleItems.map(item => (
             <NavItem key={item.href} item={item} />
           ))}
         </nav>
@@ -321,13 +373,47 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
         {/* Page content */}
         <main style={{ flex: 1 }}>
-          {children}
+          {onAdminOnlyPage && access.role === 'staff'
+            ? <AccessScreen title="אין הרשאה" text="הדף הזה זמין למנהלת המערכת בלבד." inline />
+            : children}
         </main>
       </div>
 
       {/* Floating Assistant — only mounted on authenticated pages,
           since this layout already returns early on /login and /auth/*. */}
       <AssistantDrawer />
+    </div>
+  );
+}
+
+/* ── Status screen: loading / no access (full page, or inside <main>) ── */
+function AccessScreen({ title, text, onSignOut, inline }: {
+  title: string;
+  text?: string;
+  onSignOut?: () => void;
+  inline?: boolean;
+}) {
+  return (
+    <div style={{
+      minHeight: inline ? 320 : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: '#F6F8FB', padding: 16,
+    }}>
+      <div style={{ textAlign: 'center', maxWidth: 380 }}>
+        {!inline && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}><Logo size={56} /></div>}
+        <div style={{ fontSize: 18, fontWeight: 700, color: '#0F172A', marginBottom: 8 }}>{title}</div>
+        {text && <div style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6 }}>{text}</div>}
+        {onSignOut && (
+          <button
+            onClick={onSignOut}
+            style={{
+              marginTop: 20, padding: '10px 20px', borderRadius: 8, border: '1px solid #E2E8F0',
+              backgroundColor: '#FFFFFF', color: '#0F172A', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            התנתקות וכניסה עם חשבון אחר
+          </button>
+        )}
+      </div>
     </div>
   );
 }

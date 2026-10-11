@@ -45,5 +45,8 @@ create trigger trg_trips_updated_at
 -- bypasses). Same shape as the data-table policies in rls-policies.sql.
 alter table trips enable row level security;
 drop policy if exists trips_authenticated_all on trips;
-create policy trips_authenticated_all on trips
-  for all to authenticated using (true) with check (true);
+drop policy if exists trips_authorized on trips;
+create policy trips_authorized on trips
+  for all to authenticated
+  using ((select public.is_authorized_user()))
+  with check ((select public.is_authorized_user()));

@@ -18,10 +18,26 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const ONE_YEAR_SECONDS  = 365 * 24 * 60 * 60;
 
+/**
+ * Only same-site paths are allowed after login. Without this, ?next=//evil.com
+ * (or https://evil.com) would turn the login flow into an open redirect.
+ */
+function safeNextPath(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return '/';
+  return raw;
+}
+
+function safeDecode(v: string | undefined): string | null {
+  if (!v) return null;
+  try { return decodeURIComponent(v); } catch { return null; }
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = req.nextUrl;
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/';
+  const next = safeNextPath(
+    searchParams.get('next') ?? safeDecode(req.cookies.get('post_login_next')?.value),
+  );
 
   console.log('[auth/callback] received', {
     origin,
@@ -36,6 +52,7 @@ export async function GET(req: NextRequest) {
   }
 
   const response = NextResponse.redirect(new URL(next, origin));
+  response.cookies.set('post_login_next', '', { path: '/', maxAge: 0 });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,7 +110,6 @@ export async function GET(req: NextRequest) {
   }
 
   console.log('[auth/callback] exchange OK', {
-    user:           data.session?.user?.email,
     expiresIn:      data.session?.expires_in,
     refreshPresent: !!data.session?.refresh_token,
     responseSetCookieHeader: response.headers.get('set-cookie')?.length ?? 0,

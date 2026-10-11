@@ -195,7 +195,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   // without a migration — log it so the future Yemot integration team
   // can debug missing data once the column lands.
   if (fields.caller_phone) {
-    console.log(`${TAG} caller_phone received (not persisted; no column yet): ${fields.caller_phone}`);
+    console.log(`${TAG} caller_phone received (not persisted; no column yet)`);
   }
 
   const name = (fields.spoken_patient_name ?? '').trim();
@@ -221,7 +221,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       matched_patient_id = list[0].id;
       match_status = 'matched';
       status = 'draft_ready';
-      console.log(`${TAG} patient matched: id=${list[0].id} name="${list[0].full_name}"`);
+      console.log(`${TAG} patient matched: id=${list[0].id}`);
     } else if (list.length > 1) {
       match_status = 'ambiguous';
       status = 'needs_match';

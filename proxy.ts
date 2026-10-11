@@ -2,12 +2,16 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /**
- * Runs on every request. Its ONLY job is to silently refresh the Supabase
- * access token when it has expired, and forward the (now-updated) cookies
- * onto the response so the browser sees the new tokens.
+ * Runs on every request. It silently refreshes the Supabase access token
+ * when it has expired, and forwards the (now-updated) cookies onto the
+ * response so the browser sees the new tokens.
  *
- * It does NOT redirect to /login. Authorization checks live in the API
- * routes (getAdminUser) and in the page components themselves.
+ * Signed-out visitors to an app PAGE are redirected to /login?next=<path>.
+ * Public paths (login, OAuth callback, the patient intake link) and all
+ * /api/* routes are left alone — API routes enforce their own auth (Bearer
+ * token, CRON_SECRET, webhook secret) and must answer JSON, not a redirect.
+ * Whether a signed-in user is actually AUTHORIZED is decided by RLS +
+ * authorized_users (see SidebarLayout and /api/me), not here.
  *
  * Defensive choices:
  *   - If Supabase env vars are missing, skip the work entirely.
@@ -69,10 +73,12 @@ export async function proxy(request: NextRequest) {
   });
 
   let user: { email?: string } | null = null;
+  let authCheckFailed = false;
   try {
     const { data } = await supabase.auth.getUser();
     user = data.user ?? null;
   } catch (e) {
+    authCheckFailed = true;
     console.warn('[proxy] supabase.auth.getUser failed:', (e as Error).message);
   }
 
@@ -86,11 +92,26 @@ export async function proxy(request: NextRequest) {
     });
   }
 
+  // Don't lock people out on a transient Supabase/network error — without a
+  // valid session the page (and RLS) still won't show any data.
+  if (!user && !authCheckFailed && !isPublicPath(path)) {
+    const loginUrl = new URL('/login', request.url);
+    if (path !== '/') loginUrl.searchParams.set('next', path + request.nextUrl.search);
+    return NextResponse.redirect(loginUrl);
+  }
+
   return response;
+}
+
+function isPublicPath(path: string): boolean {
+  return path === '/login'
+    || path.startsWith('/auth/')
+    || path.startsWith('/intake/')
+    || path.startsWith('/api/');
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|ttf|woff|woff2|xlsx|txt)$).*)',
   ],
 };

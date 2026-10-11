@@ -21,10 +21,11 @@ create trigger app_settings_set_updated_at
   before update on app_settings
   for each row execute function update_updated_at();
 
--- RLS: reads allowed to any authenticated user (labels are non-sensitive UI text);
+-- RLS: reads allowed to authorized users only (is_authorized_user(), defined in
+-- rls-policies.sql / schema.sql);
 -- writes go through the server (service-role) API which enforces admin-only.
 alter table app_settings enable row level security;
 
 drop policy if exists app_settings_read on app_settings;
 create policy app_settings_read on app_settings
-  for select to authenticated using (true);
+  for select to authenticated using ((select public.is_authorized_user()));

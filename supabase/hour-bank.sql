@@ -108,22 +108,31 @@ create trigger trg_work_time_entries_updated_at
   before update on work_time_entries
   for each row execute function update_updated_at();
 
--- ── RLS: authenticated full access; anon denied; service_role bypasses ───────
+-- ── RLS: authorized users only (rls-policies.sql); anon denied; service_role bypasses ───────
 alter table hour_banks             enable row level security;
 alter table work_time_entries      enable row level security;
 alter table hour_bank_transactions enable row level security;
 
 drop policy if exists hour_banks_authenticated_all on hour_banks;
-create policy hour_banks_authenticated_all on hour_banks
-  for all to authenticated using (true) with check (true);
+drop policy if exists hour_banks_authorized on hour_banks;
+create policy hour_banks_authorized on hour_banks
+  for all to authenticated
+  using ((select public.is_authorized_user()))
+  with check ((select public.is_authorized_user()));
 
 drop policy if exists work_time_entries_authenticated_all on work_time_entries;
-create policy work_time_entries_authenticated_all on work_time_entries
-  for all to authenticated using (true) with check (true);
+drop policy if exists work_time_entries_authorized on work_time_entries;
+create policy work_time_entries_authorized on work_time_entries
+  for all to authenticated
+  using ((select public.is_authorized_user()))
+  with check ((select public.is_authorized_user()));
 
 drop policy if exists hour_bank_transactions_authenticated_all on hour_bank_transactions;
-create policy hour_bank_transactions_authenticated_all on hour_bank_transactions
-  for all to authenticated using (true) with check (true);
+drop policy if exists hour_bank_transactions_authorized on hour_bank_transactions;
+create policy hour_bank_transactions_authorized on hour_bank_transactions
+  for all to authenticated
+  using ((select public.is_authorized_user()))
+  with check ((select public.is_authorized_user()));
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- RPCs — every mutation. SECURITY DEFINER + a per-transaction advisory lock so
