@@ -1,0 +1,41 @@
+# Runs on every push / PR to main. Vercel deploys main independently — this
+# check is the early warning that a commit is broken (red ✗ on the commit in
+# GitHub, plus an email to the committer), not a deploy gate.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint (errors fail, warnings are reported only)
+        run: npx eslint .
+
+      - name: SQL files — clean install, re-run, access rules
+        run: npm run check:sql
+
+      - name: Build
+        run: npm run build
+        env:
+          # Placeholders: the build only needs the variables to exist.
+          # Real values live in Vercel and are never needed here.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder

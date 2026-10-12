@@ -37,6 +37,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withFailureAlert } from '@/lib/cronAlert';
 import nodemailer from 'nodemailer';
 import { createServerClient } from '@/lib/supabaseServer';
 
@@ -258,7 +259,9 @@ function renderEmail(opts: {
 </html>`;
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withFailureAlert('תזכורות לפגישות של מחר', handle);
+
+async function handle(req: NextRequest) {
   try {
     // ── Resolve the request up front so we can trace EVERY call ──────────
     //

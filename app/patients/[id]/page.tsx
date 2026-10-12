@@ -206,8 +206,8 @@ export default function PatientDetailPage() {
                   {patient.phone && <span>{patient.phone}</span>}
                   {patient.email && <span>{patient.email}</span>}
                   {patient.housing_type && <span>{housingTypeLabels[patient.housing_type]}</span>}
-                  {(patient.coordinator as any)?.full_name && (
-                    <span>רכזת: {(patient.coordinator as any).full_name}</span>
+                  {patient.coordinator?.full_name && (
+                    <span>רכזת: {patient.coordinator?.full_name}</span>
                   )}
                 </div>
                 {linkedStaff.length > 0 && (
@@ -1050,7 +1050,7 @@ function ComingSoon({ label }: { label: string }) {
       <p style={{ fontSize: 14, fontWeight: 600, color: '#1A2332', margin: '0 0 4px' }}>
         {label} — בקרוב
       </p>
-      <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>פיצ'ר זה יתווסף בגרסה הבאה</p>
+      <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>פיצ׳ר זה יתווסף בגרסה הבאה</p>
     </div>
   );
 }

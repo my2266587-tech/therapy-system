@@ -38,6 +38,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withFailureAlert } from '@/lib/cronAlert';
 import { Resend } from 'resend';
 import { createServerClient } from '@/lib/supabaseServer';
 import { buildMonthlyReport } from '@/lib/reports/buildFromTemplate';
@@ -65,7 +66,9 @@ function isAuthorized(req: NextRequest): boolean {
   return req.headers.get('authorization') === `Bearer ${secret}`;
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withFailureAlert('הדוח החודשי', handle);
+
+async function handle(req: NextRequest) {
   try {
     // 1. Auth gate — both Vercel Cron and manual triggers go through here.
     if (!process.env.CRON_SECRET) {
