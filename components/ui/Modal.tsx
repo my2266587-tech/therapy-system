@@ -1,5 +1,8 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
+import { useFeedback } from '@/components/ui/Feedback';
+
 interface ModalProps {
   open: boolean;
   onClose: () => void;
@@ -19,7 +22,27 @@ interface ModalProps {
 const maxWidths = { md: 480, lg: 640, xl: 860, '2xl': 980 };
 
 export default function Modal({ open, onClose, title, children, size = 'lg', chromeless }: ModalProps) {
+  const { confirm } = useFeedback();
+  // Set once the user types/changes anything inside the modal, so a stray
+  // click outside (or on ✕) doesn't silently throw away a half-written form.
+  const dirtyRef = useRef(false);
+  // A click only counts as "outside" if the press also started outside —
+  // otherwise selecting text in a textarea and releasing over the backdrop
+  // would close the modal.
+  const pressedOnBackdrop = useRef(false);
+
+  useEffect(() => { if (!open) dirtyRef.current = false; }, [open]);
+
   if (!open) return null;
+
+  const requestClose = async () => {
+    if (dirtyRef.current && !(await confirm({
+      title:        'לסגור בלי לשמור?',
+      message:      'יש כאן מידע שהוקלד ולא נשמר. אם תסגרו את החלון הוא יימחק.',
+      confirmLabel: 'סגירה בלי שמירה',
+    }))) return;
+    onClose();
+  };
 
   return (
     <div
@@ -34,9 +57,15 @@ export default function Modal({ open, onClose, title, children, size = 'lg', chr
         backgroundColor: 'rgba(15,23,42,0.5)',
         backdropFilter:  'blur(3px)',
       }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onMouseDown={e => { pressedOnBackdrop.current = e.target === e.currentTarget; }}
+      onClick={e => {
+        if (e.target === e.currentTarget && pressedOnBackdrop.current) void requestClose();
+        pressedOnBackdrop.current = false;
+      }}
     >
       <div
+        onInput={() => { dirtyRef.current = true; }}
+        onChange={() => { dirtyRef.current = true; }}
         style={{
           backgroundColor: chromeless ? 'transparent' : '#FFFFFF',
           borderRadius:    chromeless ? 20 : 16,
@@ -70,7 +99,7 @@ export default function Modal({ open, onClose, title, children, size = 'lg', chr
               {title}
             </h2>
             <button
-              onClick={onClose}
+              onClick={() => void requestClose()}
               style={{
                 width:           32,
                 height:          32,
