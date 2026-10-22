@@ -6,11 +6,15 @@
  *   in-memory buffer plus metadata. NOTHING is written to disk or to
  *   Supabase — the caller decides what to do with the bytes.
  *
- * Auth:
- *   The token is built from two env vars, NEVER logged:
- *     YEMOT_SYSTEM_NUMBER   — the system (login) number
- *     YEMOT_SYSTEM_PASSWORD — the management password
- *   Yemot accepts a direct "number:password" token, so no separate Login
+ * Auth (env vars, NEVER logged):
+ *     YEMOT_API_KEY         — preferred: a permanent API key created in the
+ *                             Yemot firewall / "גישה חיצונית ו-API" screen.
+ *                             Works even when the account has 2FA, which
+ *                             blocks plain number:password sessions
+ *                             (MFA_REQUIRED).
+ *     YEMOT_SYSTEM_NUMBER   — fallback: the system (login) number
+ *     YEMOT_SYSTEM_PASSWORD — fallback: the management password
+ *   Yemot accepts either value directly as `token`, so no separate Login
  *   round-trip / session management is needed.
  *
  * Response shape from Yemot:
@@ -84,12 +88,14 @@ function jsonErrorMessage(buf: Buffer): string {
   }
 }
 
-/** Builds the "number:password" token; throws if env is missing. */
+/** API key if set, else the "number:password" token; throws if env is missing. */
 function buildToken(): string {
+  const apiKey = process.env.YEMOT_API_KEY;
+  if (apiKey) return apiKey;
   const number = process.env.YEMOT_SYSTEM_NUMBER;
   const password = process.env.YEMOT_SYSTEM_PASSWORD;
   if (!number || !password) {
-    throw new Error('YEMOT_SYSTEM_NUMBER / YEMOT_SYSTEM_PASSWORD not configured');
+    throw new Error('YEMOT_API_KEY or YEMOT_SYSTEM_NUMBER / YEMOT_SYSTEM_PASSWORD not configured');
   }
   return `${number}:${password}`;
 }
