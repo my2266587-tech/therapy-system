@@ -30,6 +30,7 @@ const FILES = [
   'intake-forms.sql',
   'session-reminders.sql',
   'shirel-summary-payment.sql',
+  'session-completed-on-summary.sql',
   'rls-policies.sql',
 ];
 

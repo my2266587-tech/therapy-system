@@ -15,7 +15,8 @@ by hand. Every file is therefore **idempotent** — safe to run again at any tim
 | 6 | `intake-forms.sql` | Patient intake forms (public link) |
 | 7 | `session-reminders.sql` | `sessions.reminder_sent_at` |
 | 8 | `shirel-summary-payment.sql` | Auto-payment trigger on new summary |
-| 9 | `rls-policies.sql` | **Always last** — access rules for every table |
+| 9 | `session-completed-on-summary.sql` | Session with a summary → status "התקיימה" (backfill + trigger) |
+| 10 | `rls-policies.sql` | **Always last** — access rules for every table |
 
 For an existing database, run only the new/changed file, then `rls-policies.sql`
 if a table was added.
