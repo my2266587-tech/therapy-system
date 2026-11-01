@@ -294,7 +294,7 @@ function MonthView({ anchor, byDate, onDayClick, onTask, onDelete, loading, dnd 
   return (
     <div>
       {/* Day labels */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: `1px solid ${C.border}`, backgroundColor: '#F8FAFC' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', borderBottom: `1px solid ${C.border}`, backgroundColor: '#F8FAFC' }}>
         {DAY_LABELS.map(d => (
           <div key={d} style={{
             padding: '10px 0', textAlign: 'center',
@@ -303,7 +303,7 @@ function MonthView({ anchor, byDate, onDayClick, onTask, onDelete, loading, dnd 
         ))}
       </div>
       {/* Cells */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
         {cells.map((d, i) => {
           const inMonth   = d.getMonth() === m;
           const isToday   = sameDay(d, today);
@@ -399,7 +399,7 @@ function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, onDelete, 
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: `1px solid ${C.border}`, backgroundColor: '#F8FAFC' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', borderBottom: `1px solid ${C.border}`, backgroundColor: '#F8FAFC' }}>
         {days.map((d, i) => {
           const isToday   = sameDay(d, today);
           const isShabbat = d.getDay() === 6;
@@ -436,7 +436,7 @@ function WeekView({ anchor, byDate, onDayClick, onTask, onToggleDone, onDelete, 
           );
         })}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', minHeight: 540 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', minHeight: 540 }}>
         {days.map((d, i) => {
           const tasks     = byDate.get(ymd(d)) ?? [];
           const isToday   = sameDay(d, today);
