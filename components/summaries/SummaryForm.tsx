@@ -7,7 +7,23 @@ import { Field, SelectField } from '@/components/ui/FormField';
 import DictatedTextarea from '@/components/ui/DictatedTextarea';
 import type { SessionSummary } from '@/types';
 type PatientOpt = { id: string; full_name: string };
-type SessionOpt = { id: string; date: string; start_time: string };
+type SessionOpt = { id: string; date: string; start_time: string; end_time: string; status: string };
+
+const hhmm = (t: string | null | undefined) => (t ?? '').slice(0, 5);
+
+/** The patient's session on that date, preferring one that took / will take place. */
+function findOnDate(list: SessionOpt[], date: string): SessionOpt | undefined {
+  const sameDay = list.filter(s => s.date === date);
+  return sameDay.find(s => s.status !== 'cancelled' && s.status !== 'no_show') ?? sameDay[0];
+}
+
+/** Link a calendar session: its date and hours fill the summary. */
+function withSession<T extends { session_id: string; date: string; start_time: string; end_time: string }>(
+  p: T, s: SessionOpt | undefined,
+): T {
+  if (!s) return p;
+  return { ...p, session_id: s.id, date: s.date, start_time: hhmm(s.start_time), end_time: hhmm(s.end_time) };
+}
 
 function calcDuration(start: string, end: string): number | null {
   if (!start || !end) return null;
@@ -38,6 +54,7 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
     attachment_path:   initial?.attachment_path    ?? '',
     attachment_name:   initial?.attachment_name    ?? '',
   });
+  const isEdit = !!initial?.id;
   const [patients,  setPatients]  = useState<PatientOpt[]>([]);
   const [sessions,  setSessions]  = useState<SessionOpt[]>([]);
   const [saving,    setSaving]    = useState(false);
@@ -56,11 +73,36 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
 
   useEffect(() => {
     if (!form.patient_id) return; // no patient → the list is hidden below
-    supabase.from('sessions').select('id, date, start_time').eq('patient_id', form.patient_id).order('date', { ascending: false })
-      .then(({ data }) => setSessions(data ?? []));
-  }, [form.patient_id]);
+    supabase.from('sessions').select('id, date, start_time, end_time, status').eq('patient_id', form.patient_id).order('date', { ascending: false })
+      .then(({ data }) => {
+        const list = (data ?? []) as SessionOpt[];
+        setSessions(list);
+        // New summary: link the calendar session on the chosen date and take
+        // its hours, so the summary matches what was scheduled.
+        if (!isEdit) setForm(p => p.session_id ? p : withSession(p, findOnDate(list, p.date)));
+      });
+  }, [form.patient_id, isEdit]);
 
   function set(f: string, v: string) { setForm(p => ({ ...p, [f]: v })); }
+
+  function pickPatient(id: string) {
+    setSessions([]);
+    setForm(p => ({ ...p, patient_id: id, session_id: '' }));
+  }
+
+  function pickSession(id: string) {
+    setForm(p => id ? withSession(p, sessions.find(s => s.id === id)) : { ...p, session_id: '' });
+  }
+
+  function pickDate(date: string) {
+    setForm(p => {
+      const match = findOnDate(sessions, date);
+      if (match) return withSession(p, match);
+      // The linked session is on another day — it no longer applies.
+      const linked = sessions.find(s => s.id === p.session_id);
+      return { ...p, date, session_id: linked ? '' : p.session_id };
+    });
+  }
 
   async function getToken(): Promise<string | null> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -171,7 +213,7 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
   }
 
   const patientOptions = patients.map(p => ({ value: p.id, label: p.full_name }));
-  const sessionOptions = (form.patient_id ? sessions : []).map(s => ({ value: s.id, label: `${s.date} ${s.start_time}` }));
+  const sessionOptions = (form.patient_id ? sessions : []).map(s => ({ value: s.id, label: `${s.date} ${hhmm(s.start_time)}–${hhmm(s.end_time)}` }));
 
   const attachmentSection = (
     <FormGroup title="קובץ מצורף">
@@ -230,9 +272,9 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
 
       <FormGroup title="פרטי הפגישה">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <SelectField label="מטופלת *" value={form.patient_id} onChange={v => set('patient_id', v)} options={patientOptions} placeholder="בחרי מטופלת..." required />
-          <SelectField label="פגישה מקושרת" value={form.session_id} onChange={v => set('session_id', v)} options={sessionOptions} placeholder="בחרי פגישה..." />
-          <Field label="תאריך *" type="date" value={form.date} onChange={v => set('date', v)} required />
+          <SelectField label="מטופלת *" value={form.patient_id} onChange={pickPatient} options={patientOptions} placeholder="בחרי מטופלת..." required />
+          <SelectField label="פגישה מקושרת" value={form.session_id} onChange={pickSession} options={sessionOptions} placeholder="בחרי פגישה..." />
+          <Field label="תאריך *" type="date" value={form.date} onChange={pickDate} required />
           <div className="grid grid-cols-2 gap-2">
             <Field label="משעה" type="time" value={form.start_time} onChange={v => set('start_time', v)} />
             <Field label="עד שעה" type="time" value={form.end_time} onChange={v => set('end_time', v)} />

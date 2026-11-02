@@ -21,6 +21,12 @@ by hand. Every file is therefore **idempotent** — safe to run again at any tim
 For an existing database, run only the new/changed file, then `rls-policies.sql`
 if a table was added.
 
+## Data scripts (not part of the run order)
+
+| File | What it does |
+|------|--------------|
+| `fixed-weekly-slots.sql` | Fixed weekly calendar slots (שרה צייטקין, אודליה, אבישג) for the next 26 weeks; re-run to extend |
+
 `npm run check:sql` builds all of the above on a throwaway local Postgres, twice,
 and verifies the access rules. Run it after any SQL change. When adding a file,
 add it to the table above **and** to `FILES` in `scripts/check-sql.mjs`.

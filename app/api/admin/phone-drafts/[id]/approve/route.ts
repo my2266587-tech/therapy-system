@@ -4,7 +4,8 @@
  *   Approves a draft. Atomically:
  *     1. Reads the draft.
  *     2. Inserts a new row into session_summaries with the draft's
- *        patient_id + the 8 content fields + call_date / times.
+ *        patient_id + the 8 content fields + call_date, linked to that
+ *        day's calendar session and using its hours (call times if none).
  *     3. Updates the draft → status='approved', approved_summary_id,
  *        approved_at, approved_by.
  *
@@ -78,14 +79,30 @@ export async function POST(
       );
     }
 
-    // 2. Insert into session_summaries.
+    // 2. Insert into session_summaries. The hours come from the calendar
+    //    session scheduled for that patient on that date (the call time is
+    //    only a fallback when nothing is scheduled).
+    const date = draft.call_date ?? new Date().toISOString().slice(0, 10);
+    const { data: sameDay, error: sErr } = await supabase
+      .from('sessions')
+      .select('id, start_time, end_time, status')
+      .eq('patient_id', draft.matched_patient_id)
+      .eq('date', date)
+      .order('start_time');
+    if (sErr) throw new Error(`fetch sessions: ${sErr.message}`);
+    const session = (sameDay ?? []).find(s => s.status !== 'cancelled' && s.status !== 'no_show')
+      ?? (sameDay ?? [])[0]
+      ?? null;
+    const startTime: string | null = session ? session.start_time.slice(0, 5) : (draft.call_start_time ?? null);
+    const endTime:   string | null = session ? session.end_time.slice(0, 5)   : (draft.call_end_time ?? null);
+
     const summaryRow = {
       patient_id:        draft.matched_patient_id,
-      session_id:        null,
-      date:              draft.call_date ?? new Date().toISOString().slice(0, 10),
-      start_time:        draft.call_start_time ?? null,
-      end_time:          draft.call_end_time ?? null,
-      duration_minutes:  calcDuration(draft.call_start_time, draft.call_end_time),
+      session_id:        session?.id ?? null,
+      date,
+      start_time:        startTime,
+      end_time:          endTime,
+      duration_minutes:  calcDuration(startTime, endTime),
       current_state:     draft.current_state,
       main_topics:       draft.main_topics,
       treatment_actions: draft.treatment_actions,
