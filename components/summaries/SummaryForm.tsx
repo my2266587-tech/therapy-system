@@ -17,6 +17,19 @@ function findOnDate(list: SessionOpt[], date: string): SessionOpt | undefined {
   return sameDay.find(s => s.status !== 'cancelled' && s.status !== 'no_show') ?? sameDay[0];
 }
 
+/**
+ * The patient's latest session that has already started (local time),
+ * preferring one that wasn't cancelled / no-show.
+ */
+function findLatestStarted(list: SessionOpt[], now: Date = new Date()): SessionOpt | undefined {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const nowKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const started = list
+    .filter(s => `${s.date} ${hhmm(s.start_time)}` <= nowKey)
+    .sort((a, b) => `${b.date} ${b.start_time}`.localeCompare(`${a.date} ${a.start_time}`));
+  return started.find(s => s.status !== 'cancelled' && s.status !== 'no_show') ?? started[0];
+}
+
 /** Link a calendar session: its date and hours fill the summary. */
 function withSession<T extends { session_id: string; date: string; start_time: string; end_time: string }>(
   p: T, s: SessionOpt | undefined,
@@ -77,9 +90,9 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
       .then(({ data }) => {
         const list = (data ?? []) as SessionOpt[];
         setSessions(list);
-        // New summary: link the calendar session on the chosen date and take
-        // its hours, so the summary matches what was scheduled.
-        if (!isEdit) setForm(p => p.session_id ? p : withSession(p, findOnDate(list, p.date)));
+        // New summary: link the patient's most recent session (up to now) and
+        // take its date and hours, so the summary matches the calendar.
+        if (!isEdit) setForm(p => p.session_id ? p : withSession(p, findLatestStarted(list)));
       });
   }, [form.patient_id, isEdit]);
 
