@@ -90,8 +90,16 @@ export async function POST(
       .eq('date', date)
       .order('start_time');
     if (sErr) throw new Error(`fetch sessions: ${sErr.message}`);
-    const session = (sameDay ?? []).find(s => s.status !== 'cancelled' && s.status !== 'no_show')
-      ?? (sameDay ?? [])[0]
+    // Skip sessions that already have a summary linked to them.
+    const sameDayIds = (sameDay ?? []).map(s => s.id);
+    const { data: linkedSums, error: lErr } = sameDayIds.length
+      ? await supabase.from('session_summaries').select('session_id').in('session_id', sameDayIds)
+      : { data: [], error: null };
+    if (lErr) throw new Error(`fetch linked summaries: ${lErr.message}`);
+    const summarized = new Set((linkedSums ?? []).map(s => s.session_id));
+    const open = (sameDay ?? []).filter(s => !summarized.has(s.id));
+    const session = open.find(s => s.status !== 'cancelled' && s.status !== 'no_show')
+      ?? open[0]
       ?? null;
     const startTime: string | null = session ? session.start_time.slice(0, 5) : (draft.call_start_time ?? null);
     const endTime:   string | null = session ? session.end_time.slice(0, 5)   : (draft.call_end_time ?? null);

@@ -7,27 +7,29 @@ import { Field, SelectField } from '@/components/ui/FormField';
 import DictatedTextarea from '@/components/ui/DictatedTextarea';
 import type { SessionSummary } from '@/types';
 type PatientOpt = { id: string; full_name: string };
-type SessionOpt = { id: string; date: string; start_time: string; end_time: string; status: string };
+type SessionOpt = { id: string; date: string; start_time: string; end_time: string; status: string; summarized?: boolean };
 
 const hhmm = (t: string | null | undefined) => (t ?? '').slice(0, 5);
 
-/** The patient's session on that date, preferring one that took / will take place. */
+const isHeld = (s: SessionOpt) => s.status !== 'cancelled' && s.status !== 'no_show';
+
+/** The patient's session on that date — preferably one without a summary yet that took / will take place. */
 function findOnDate(list: SessionOpt[], date: string): SessionOpt | undefined {
   const sameDay = list.filter(s => s.date === date);
-  return sameDay.find(s => s.status !== 'cancelled' && s.status !== 'no_show') ?? sameDay[0];
+  return sameDay.find(s => !s.summarized && isHeld(s)) ?? sameDay.find(s => !s.summarized) ?? sameDay[0];
 }
 
 /**
- * The patient's latest session that has already started (local time),
- * preferring one that wasn't cancelled / no-show.
+ * The patient's latest session that has already started (local time) and
+ * has no summary yet, preferring one that wasn't cancelled / no-show.
  */
 function findLatestStarted(list: SessionOpt[], now: Date = new Date()): SessionOpt | undefined {
   const pad = (n: number) => String(n).padStart(2, '0');
   const nowKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const started = list
-    .filter(s => `${s.date} ${hhmm(s.start_time)}` <= nowKey)
+    .filter(s => !s.summarized && `${s.date} ${hhmm(s.start_time)}` <= nowKey)
     .sort((a, b) => `${b.date} ${b.start_time}`.localeCompare(`${a.date} ${a.start_time}`));
-  return started.find(s => s.status !== 'cancelled' && s.status !== 'no_show') ?? started[0];
+  return started.find(isHeld) ?? started[0];
 }
 
 /** Link a calendar session: its date and hours fill the summary. */
@@ -86,15 +88,26 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
 
   useEffect(() => {
     if (!form.patient_id) return; // no patient → the list is hidden below
-    supabase.from('sessions').select('id, date, start_time, end_time, status').eq('patient_id', form.patient_id).order('date', { ascending: false })
-      .then(({ data }) => {
-        const list = (data ?? []) as SessionOpt[];
-        setSessions(list);
-        // New summary: link the patient's most recent session (up to now) and
-        // take its date and hours, so the summary matches the calendar.
-        if (!isEdit) setForm(p => p.session_id ? p : withSession(p, findLatestStarted(list)));
-      });
-  }, [form.patient_id, isEdit]);
+    const patientId = form.patient_id;
+    Promise.all([
+      supabase.from('sessions').select('id, date, start_time, end_time, status').eq('patient_id', patientId).order('date', { ascending: false }),
+      supabase.from('session_summaries').select('id, session_id, date').eq('patient_id', patientId),
+    ]).then(([sess, sums]) => {
+      // A session already has a summary if one links to it, or (like the
+      // DB trigger) an unlinked summary sits on the same date. The summary
+      // being edited doesn't count.
+      const others = (sums.data ?? []).filter(s => s.id !== initial?.id);
+      const linkedIds    = new Set(others.map(s => s.session_id).filter(Boolean));
+      const unlinkedDays = new Set(others.filter(s => !s.session_id).map(s => s.date));
+      const list = ((sess.data ?? []) as SessionOpt[]).map(s => ({
+        ...s, summarized: linkedIds.has(s.id) || unlinkedDays.has(s.date),
+      }));
+      setSessions(list);
+      // New summary: link the patient's most recent session (up to now) that
+      // has no summary yet, and take its date and hours from the calendar.
+      if (!isEdit) setForm(p => p.session_id ? p : withSession(p, findLatestStarted(list)));
+    });
+  }, [form.patient_id, isEdit, initial?.id]);
 
   function set(f: string, v: string) { setForm(p => ({ ...p, [f]: v })); }
 
@@ -226,7 +239,7 @@ export default function SummaryForm({ initial, onSave, onCancel }: Props) {
   }
 
   const patientOptions = patients.map(p => ({ value: p.id, label: p.full_name }));
-  const sessionOptions = (form.patient_id ? sessions : []).map(s => ({ value: s.id, label: `${s.date} ${hhmm(s.start_time)}–${hhmm(s.end_time)}` }));
+  const sessionOptions = (form.patient_id ? sessions : []).map(s => ({ value: s.id, label: `${s.date} ${hhmm(s.start_time)}–${hhmm(s.end_time)}${s.summarized ? ' · יש סיכום' : ''}` }));
 
   const attachmentSection = (
     <FormGroup title="קובץ מצורף">
