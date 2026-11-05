@@ -37,8 +37,8 @@ export default function TasksPage() {
   const [addCategory, setAddCategory] = useState<string | undefined>(undefined);
   // Which groups have their "completed" section expanded.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  // Board (list) or personal calendar view.
-  const [mode, setMode] = useState<'board' | 'calendar'>('board');
+  // Calendar (default: calendar + task list side by side) or full-width list.
+  const [mode, setMode] = useState<'board' | 'calendar'>('calendar');
   // Personal-plan modal (calendar view): task being edited / pre-filled date.
   const [planOpen, setPlanOpen] = useState(false);
   const [planEditing, setPlanEditing] = useState<Task | null>(null);
@@ -135,6 +135,42 @@ export default function TasksPage() {
 
   const hasAny = records.length > 0;
 
+  // Search + grouped task list — full width in list mode, side column in calendar mode.
+  const listContent = (
+    <>
+      {!loading && hasAny && (
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="חיפוש חופשי — כותרת, קטגוריה, אחראי/ת, מטופלת..."
+        />
+      )}
+      {loading ? (
+        <GroupSkeleton />
+      ) : !hasAny ? (
+        <EmptyState onAdd={() => openAdd()} />
+      ) : groups.length === 0 ? (
+        <SearchEmpty query={search} onClear={() => setSearch('')} />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {groups.map(g => (
+            <GroupCard
+              key={g.name}
+              group={g}
+              searching={q !== ''}
+              expanded={q !== '' ? true : !!expanded[g.name]}
+              onToggleExpand={() => setExpanded(s => ({ ...s, [g.name]: !s[g.name] }))}
+              onAdd={() => openAdd(g.name === DEFAULT_GROUP ? undefined : g.name)}
+              onToggleDone={toggleDone}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
       {/* Calendar uses the full page width; the list view stays narrow for readability. */}
@@ -192,49 +228,26 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Free-text search (board view only) */}
-        {mode === 'board' && !loading && hasAny && (
-          <SearchBar
-            value={search}
-            onChange={setSearch}
-            placeholder="חיפוש חופשי — כותרת, קטגוריה, אחראי/ת, מטופלת..."
-          />
-        )}
-
-        {/* Content */}
         {mode === 'calendar' ? (
-          <TasksCalendar
-            records={records}
-            loading={loading}
-            onAdd={openPlanAdd}
-            onEdit={openPlanEdit}
-            onToggleDone={toggleDone}
-            onDelete={handleDelete}
-            onMove={moveTask}
-          />
-        ) : loading ? (
-          <GroupSkeleton />
-        ) : !hasAny ? (
-          <EmptyState onAdd={() => openAdd()} />
-        ) : groups.length === 0 ? (
-          <SearchEmpty query={search} onClear={() => setSearch('')} />
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {groups.map(g => (
-              <GroupCard
-                key={g.name}
-                group={g}
-                searching={q !== ''}
-                expanded={q !== '' ? true : !!expanded[g.name]}
-                onToggleExpand={() => setExpanded(s => ({ ...s, [g.name]: !s[g.name] }))}
-                onAdd={() => openAdd(g.name === DEFAULT_GROUP ? undefined : g.name)}
-                onToggleDone={toggleDone}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-              />
-            ))}
+          /* Calendar + the task list beside it (stacks under it on narrow screens). */
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
+            <TasksCalendar
+              records={records}
+              loading={loading}
+              onAdd={openPlanAdd}
+              onEdit={openPlanEdit}
+              onToggleDone={toggleDone}
+              onDelete={handleDelete}
+              onMove={moveTask}
+            />
+            <aside className="xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-y-auto">
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '4px 2px 12px' }}>
+                משימות
+              </h2>
+              {listContent}
+            </aside>
           </div>
-        )}
+        ) : listContent}
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'עריכת משימה' : 'משימה חדשה'}>
