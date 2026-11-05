@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { IconBtn, PencilIcon, TrashIcon } from '@/components/ui/Icons';
 import { formatGregorian, formatHebrew, hebrewDay, hebrewLong, PRESETS } from '@/lib/dateUtils';
 import { getHolidaysInRange, type HolidayInfo, type HolidayTier } from '@/lib/hebcalHolidays';
@@ -33,7 +33,7 @@ const HOLIDAY_STYLE: Record<HolidayTier, { bg: string; fg: string; border: strin
 };
 const SHABBAT_BG = '#FBF8F1';
 
-type View = 'month' | 'week' | 'day';
+export type View = 'month' | 'week' | 'day';
 
 /* ── date helpers ── */
 function ymd(d: Date) {
@@ -69,9 +69,14 @@ interface Props {
   onDelete: (id: string) => void;
   /** Move a task to a new day — persists due_date. */
   onMove: (id: string, newDate: string) => void;
+  /** Reports the period currently on screen (whole month / week / day) so a
+   *  side panel can list exactly what the calendar shows. */
+  onRangeChange?: (range: CalendarRange) => void;
 }
 
-export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggleDone, onDelete, onMove }: Props) {
+export interface CalendarRange { from: string; to: string; label: string; view: View; }
+
+export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggleDone, onDelete, onMove, onRangeChange }: Props) {
   const [view,   setView]   = useState<View>('month');
   const [anchor, setAnchor] = useState(new Date());
 
@@ -119,6 +124,15 @@ export default function TasksCalendar({ records, loading, onAdd, onEdit, onToggl
       hebrew: hebrewLong(anchor),
     };
   }, [view, anchor]);
+
+  /* Keep the side panel in sync with what's on screen. */
+  const rangeFrom = view === 'month' ? ymd(new Date(anchor.getFullYear(), anchor.getMonth(), 1))
+    : view === 'week' ? ymd(startOfWeek(anchor)) : ymd(anchor);
+  const rangeTo = view === 'month' ? ymd(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0))
+    : view === 'week' ? ymd(addDays(startOfWeek(anchor), 6)) : ymd(anchor);
+  useEffect(() => {
+    onRangeChange?.({ from: rangeFrom, to: rangeTo, label: headerLabel.greg, view });
+  }, [rangeFrom, rangeTo, headerLabel.greg, view, onRangeChange]);
 
   function nav(dir: 1 | -1 | 0) {
     if (dir === 0) { setAnchor(new Date()); return; }

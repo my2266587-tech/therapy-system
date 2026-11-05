@@ -7,7 +7,8 @@ import { fetchAll } from '@/lib/fetchAll';
 import Modal from '@/components/ui/Modal';
 import TaskForm from '@/components/tasks/TaskForm';
 import PersonalPlanForm from '@/components/tasks/PersonalPlanForm';
-import TasksCalendar from '@/components/tasks/TasksCalendar';
+import TasksCalendar, { type CalendarRange } from '@/components/tasks/TasksCalendar';
+import PlanPanel from '@/components/tasks/PlanPanel';
 import { IconBtn, TrashIcon } from '@/components/ui/Icons';
 import SearchBar, { SearchEmpty } from '@/components/ui/SearchBar';
 import { hebrewDay } from '@/lib/dateUtils';
@@ -43,6 +44,9 @@ export default function TasksPage() {
   const [planOpen, setPlanOpen] = useState(false);
   const [planEditing, setPlanEditing] = useState<Task | null>(null);
   const [planDate, setPlanDate] = useState<string | undefined>(undefined);
+  // Period currently shown on the calendar + whether the side plan is visible.
+  const [range, setRange] = useState<CalendarRange | null>(null);
+  const [panelOpen, setPanelOpen] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -229,23 +233,45 @@ export default function TasksPage() {
         </div>
 
         {mode === 'calendar' ? (
-          /* Calendar + the task list beside it (stacks under it on narrow screens). */
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
-            <TasksCalendar
-              records={records}
-              loading={loading}
-              onAdd={openPlanAdd}
-              onEdit={openPlanEdit}
-              onToggleDone={toggleDone}
-              onDelete={handleDelete}
-              onMove={moveTask}
-            />
-            <aside className="xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-y-auto">
-              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '4px 2px 12px' }}>
-                משימות
-              </h2>
-              {listContent}
-            </aside>
+          /* Wide calendar + a slim, synced "plan" list beside it (stacks under it on narrow screens). */
+          <div className={`grid grid-cols-1 gap-4 items-start ${panelOpen ? 'xl:grid-cols-[minmax(0,1fr)_290px]' : ''}`}>
+            <div style={{ minWidth: 0 }}>
+              {!panelOpen && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <button
+                    onClick={() => setPanelOpen(true)}
+                    style={{
+                      border: `1px solid ${C.accentRim}`, backgroundColor: C.accentSub, color: C.accent,
+                      borderRadius: 8, padding: '5px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    הצג את רשימת התוכנית
+                  </button>
+                </div>
+              )}
+              <TasksCalendar
+                records={records}
+                loading={loading}
+                onAdd={openPlanAdd}
+                onEdit={openPlanEdit}
+                onToggleDone={toggleDone}
+                onDelete={handleDelete}
+                onMove={moveTask}
+                onRangeChange={setRange}
+              />
+            </div>
+            {panelOpen && (
+              <aside className="xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-y-auto">
+                <PlanPanel
+                  records={records}
+                  range={range}
+                  onEdit={openPlanEdit}
+                  onToggleDone={toggleDone}
+                  onHide={() => setPanelOpen(false)}
+                  onShowAll={() => setMode('board')}
+                />
+              </aside>
+            )}
           </div>
         ) : listContent}
       </div>
