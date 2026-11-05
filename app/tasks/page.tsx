@@ -44,7 +44,7 @@ export default function TasksPage() {
   const [planOpen, setPlanOpen] = useState(false);
   const [planEditing, setPlanEditing] = useState<Task | null>(null);
   const [planDate, setPlanDate] = useState<string | undefined>(undefined);
-  // Period currently shown on the calendar + whether the side plan is visible.
+  // Period currently shown on the calendar + whether the plan bar is expanded.
   const [range, setRange] = useState<CalendarRange | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
 
@@ -233,46 +233,28 @@ export default function TasksPage() {
         </div>
 
         {mode === 'calendar' ? (
-          /* Wide calendar + a slim, synced "plan" list beside it (stacks under it on narrow screens). */
-          <div className={`grid grid-cols-1 gap-4 items-start ${panelOpen ? 'xl:grid-cols-[minmax(0,1fr)_290px]' : ''}`}>
-            <div style={{ minWidth: 0 }}>
-              {!panelOpen && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-                  <button
-                    onClick={() => setPanelOpen(true)}
-                    style={{
-                      border: `1px solid ${C.accentRim}`, backgroundColor: C.accentSub, color: C.accent,
-                      borderRadius: 8, padding: '5px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >
-                    הצג את רשימת התוכנית
-                  </button>
-                </div>
-              )}
-              <TasksCalendar
-                records={records}
-                loading={loading}
-                onAdd={openPlanAdd}
-                onEdit={openPlanEdit}
-                onToggleDone={toggleDone}
-                onDelete={handleDelete}
-                onMove={moveTask}
-                onRangeChange={setRange}
-              />
-            </div>
-            {panelOpen && (
-              <aside className="xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-y-auto">
-                <PlanPanel
-                  records={records}
-                  range={range}
-                  onEdit={openPlanEdit}
-                  onToggleDone={toggleDone}
-                  onHide={() => setPanelOpen(false)}
-                  onShowAll={() => setMode('board')}
-                />
-              </aside>
-            )}
-          </div>
+          /* Plan bar (synced to the month/week/day on screen) above a full-width calendar. */
+          <>
+            <PlanPanel
+              records={records}
+              range={range}
+              onEdit={openPlanEdit}
+              onToggleDone={toggleDone}
+              expanded={panelOpen}
+              onToggleExpanded={() => setPanelOpen(v => !v)}
+              onShowAll={() => setMode('board')}
+            />
+            <TasksCalendar
+              records={records}
+              loading={loading}
+              onAdd={openPlanAdd}
+              onEdit={openPlanEdit}
+              onToggleDone={toggleDone}
+              onDelete={handleDelete}
+              onMove={moveTask}
+              onRangeChange={setRange}
+            />
+          </>
         ) : listContent}
       </div>
 
