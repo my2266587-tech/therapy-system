@@ -137,7 +137,8 @@ export default function TasksPage() {
 
   return (
     <div style={{ backgroundColor: C.bg, minHeight: '100vh', padding: '36px 40px', direction: 'rtl' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {/* Calendar uses the full page width; the list view stays narrow for readability. */}
+      <div style={{ maxWidth: mode === 'calendar' ? 'none' : 900, margin: '0 auto' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
