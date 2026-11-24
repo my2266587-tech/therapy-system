@@ -240,7 +240,9 @@ export default function AssistantDrawer() {
             width: 52, height: 52, borderRadius: '50%', border: 'none',
             backgroundColor: C.accent, color: '#FFFFFF',
             boxShadow: '0 8px 24px rgba(13,148,136,0.35)',
-            cursor: 'pointer', zIndex: 60,
+            // Below Modal (50) so an open form's save/cancel buttons are never
+            // covered by the launcher on mobile; the drawer itself stays at 70.
+            cursor: 'pointer', zIndex: 45,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'transform 0.12s, box-shadow 0.12s',
           }}
