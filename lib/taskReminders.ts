@@ -25,13 +25,17 @@ export function unlockAudio(): void {
   if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => {});
 }
 
-/** Three short two-tone beeps (~1.5s). Silent if the browser blocks audio. */
-export function playReminderBeep(): void {
+/**
+ * `count` short two-tone beeps, half a second apart — more beeps the closer
+ * the item is (1 = in 15 min, 2 = in 5 min, 3 = now). Silent if the browser
+ * blocks audio.
+ */
+export function playReminderBeep(count = 3): void {
   const ctx = getCtx();
   if (!ctx) return;
   if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
   const start = ctx.currentTime + 0.05;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < count; i++) {
     for (const [offset, freq] of [[0, 880], [0.16, 1175]] as const) {
       const t = start + i * 0.5 + offset;
       const osc  = ctx.createOscillator();
