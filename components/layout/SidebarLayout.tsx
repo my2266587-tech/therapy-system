@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Logo from '@/components/ui/Logo';
 import { supabase } from '@/lib/supabase';
 import AssistantDrawer from '@/components/ui/AssistantDrawer';
+import TaskReminderWatcher from '@/components/tasks/TaskReminderWatcher';
 
 /* ── Icon paths (24×24 viewBox, stroke) ── */
 const iconPaths: Record<string, string> = {
@@ -384,6 +385,9 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       {/* Floating Assistant — only mounted on authenticated pages,
           since this layout already returns early on /login and /auth/*. */}
       <AssistantDrawer />
+
+      {/* Automatic beep + pop-up when a timed calendar item comes due. */}
+      <TaskReminderWatcher />
     </div>
   );
 }
